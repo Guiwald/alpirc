@@ -135,10 +135,20 @@ fn column(lang: Lang) -> usize {
     }
 }
 
+/// Une table de textes : (clé, [en, fr, es, de, it, va, ga]).
+pub type Table = &'static [(&'static str, [&'static str; 7])];
+
+/// Toutes les tables : celle-ci, puis celles des modules (boîtes de dialogue, DCC, téléphone).
+pub(crate) const TABLES: &[Table] = &[TABLE, crate::dialogs::TR, crate::dcc::TR, crate::mobile::TR];
+
+fn find(key: &str) -> Option<&'static [&'static str; 7]> {
+    TABLES.iter().flat_map(|t| t.iter()).find(|(k, _)| *k == key).map(|(_, v)| v)
+}
+
 /// Texte d'une clé dans une langue (anglais si absent ; la clé elle-même si inconnue).
 pub fn t(lang: Lang, key: &str) -> String {
-    match TABLE.iter().find(|(k, _)| *k == key) {
-        Some((_, v)) => {
+    match find(key) {
+        Some(v) => {
             let s = v[column(lang)];
             if s.is_empty() { v[0].to_string() } else { s.to_string() }
         }
@@ -178,12 +188,12 @@ mod tests {
 
     #[test]
     fn keys_unique_and_complete() {
-        let mut keys: Vec<&str> = TABLE.iter().map(|(k, _)| *k).collect();
+        let mut keys: Vec<&str> = TABLES.iter().flat_map(|t| t.iter()).map(|(k, _)| *k).collect();
         keys.sort();
         let n = keys.len();
         keys.dedup();
         assert_eq!(n, keys.len(), "clés en double");
-        for (k, v) in TABLE {
+        for (k, v) in TABLES.iter().flat_map(|t| t.iter()) {
             assert!(!v[0].is_empty() && !v[1].is_empty(), "{k} : anglais et français obligatoires");
         }
     }

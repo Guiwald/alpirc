@@ -7,6 +7,7 @@
 //! système, les événements et quelques services ([`ShellPlatform`]).
 
 pub mod assets;
+pub mod dcc;
 pub mod dialogs;
 mod layout;
 pub mod menus;
@@ -53,6 +54,15 @@ pub trait ShellPlatform: Platform {
     }
     /// Le contenu des menus a changé (pour une barre de menus native).
     fn menus_changed(&mut self) {}
+    /// Demande à l'utilisateur de choisir un fichier (envoi DCC, chargement d'un script…) ; la plateforme
+    /// répond plus tard par [`Shell::file_picked`] avec le même `request`. Par défaut : aucun choix.
+    fn pick_file(&mut self, request: u64, save: bool, suggested_name: Option<&str>) {
+        let _ = (request, save, suggested_name);
+    }
+    /// Dossier des fichiers reçus (DCC). Par défaut : `Téléchargements/AlpIRC` s'il existe, sinon aucun.
+    fn downloads_dir(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// Disposition générale.
@@ -920,6 +930,15 @@ impl Shell {
             }
         }
         self.refresh_dialogs(p);
+    }
+
+    // -----------------------------------------------------------------------------------------------------------
+    // Fichiers choisis.
+
+    /// Réponse de la plateforme à [`ShellPlatform::pick_file`].
+    pub fn file_picked(&mut self, request: u64, path: Option<PathBuf>, p: &mut dyn ShellPlatform) {
+        let _ = (request, path);
+        self.after(p);
     }
 
     // -----------------------------------------------------------------------------------------------------------

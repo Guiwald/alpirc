@@ -8,6 +8,9 @@
 
 pub mod script;
 
+/// Textes des boîtes de dialogue (voir [`crate::tr`]).
+pub const TR: crate::tr::Table = &[];
+
 /// Construit la boîte de l'interface demandée, si elle existe déjà dans cette version.
 pub fn build(d: UiDialog, client: &Client) -> Option<Box<dyn DialogCtl>> {
     let _ = (d, client);

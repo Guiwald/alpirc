@@ -10,6 +10,9 @@ use alpirc_ui::{Canvas, Input, Rect, TextStyle};
 use crate::layout::paint_window;
 use crate::{Shell, ShellPlatform};
 
+/// Textes propres au téléphone (voir [`crate::tr`]).
+pub const TR: crate::tr::Table = &[];
+
 /// Hauteur de la barre du haut (pixels logiques).
 pub const TOP_BAR_H: i32 = 28;
 
