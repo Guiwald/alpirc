@@ -7,6 +7,7 @@ members = [
     "crates/script",
     "crates/ui",
     "crates/relay",
+    "crates/shell",
     "app/desktop",
     "app/android",
     "xtask",
@@ -28,6 +29,7 @@ alpirc-net = { path = "crates/net" }
 alpirc-script = { path = "crates/script" }
 alpirc-ui = { path = "crates/ui" }
 alpirc-relay = { path = "crates/relay" }
+alpirc-shell = { path = "crates/shell" }
 
 thiserror = "2"
 log = "0.4"

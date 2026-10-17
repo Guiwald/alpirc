@@ -1,0 +1,18 @@
+[package]
+name = "alpirc-shell"
+version.workspace = true
+description = "L'application AlpIRC sans plateforme : fenêtres, menus, boîtes de dialogue, réseau ; partagée par le bureau et Android"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+alpirc-proto.workspace = true
+alpirc-core.workspace = true
+alpirc-net.workspace = true
+alpirc-script.workspace = true
+alpirc-ui.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+png.workspace = true

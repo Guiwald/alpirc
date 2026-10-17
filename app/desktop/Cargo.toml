@@ -1,8 +1,33 @@
 [package]
 name = "alpirc"
 version.workspace = true
+description = "AlpIRC — le client IRC des années 2000, refait en Rust"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "alpirc"
+path = "src/main.rs"
+
 [dependencies]
+alpirc-core.workspace = true
+alpirc-net.workspace = true
+alpirc-shell.workspace = true
+alpirc-ui.workspace = true
+log.workspace = true
+env_logger.workspace = true
+png.workspace = true
+winit = "0.30"
+softbuffer = "0.4"
+directories = "6"
+sys-locale = "0.3"
+arboard = { version = "3", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = "0.21"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSGraphics"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+notify-rust = { version = "4", default-features = false, features = ["z"] }
