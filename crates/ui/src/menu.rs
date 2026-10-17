@@ -341,11 +341,10 @@ impl Menu {
                 }
                 None
             }
-            Input::MouseUp { pos, button, .. } => {
+            Input::MouseUp { pos, .. } => {
                 if !self.moved && *pos == self.opened_at {
                     return None;
                 }
-                let _ = button == &MouseButton::Left;
                 let (li, idx) = self.hit(*pos, res)?;
                 let i = idx?;
                 if self.levels[li].items[i].is_submenu() {

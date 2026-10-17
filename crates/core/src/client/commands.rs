@@ -25,6 +25,21 @@ pub const BUILTINS: &[&str] = &[
     "whois", "whowas", "window",
 ];
 
+/// `PRIVMSG cible :texte` : le texte toujours en dernier paramètre, comme le font les clients IRC.
+pub(crate) fn text_line(cmd: &str, target: &str, text: &str) -> String {
+    let target: String = target.chars().filter(|c| !c.is_whitespace()).collect();
+    format!("{cmd} {target} :{text}")
+}
+
+/// `KICK #canal pseudo [:raison]`.
+pub(crate) fn kick_msg(chan: &str, nick: &str, reason: &str) -> Message {
+    if reason.is_empty() {
+        Message::new("KICK", [chan, nick])
+    } else {
+        Message::new("KICK", [chan, nick, reason])
+    }
+}
+
 /// Sorte de ligne d'après un nom de couleur d'événement (`/echo -c info …`).
 fn kind_from_name(n: &str) -> Option<LineKind> {
     Some(match n.to_ascii_lowercase().as_str() {
@@ -118,7 +133,7 @@ impl State {
                     continue;
                 }
                 let body = if action { ctcp::encode("ACTION", &chunk) } else { chunk };
-                self.send_msg(conn, Message::new(cmd, [target.to_string(), body.clone()]));
+                self.send_line(conn, &text_line(cmd, target, &body));
                 if !echo && !quiet {
                     let kind = if notice { MsgKind::Notice } else { MsgKind::Privmsg };
                     for l in self.own_lines(conn, kind, target, &body, now) {
@@ -326,7 +341,7 @@ impl State {
                 let cmd = cmd.to_ascii_uppercase();
                 let params = if cmd == "PING" && params.is_empty() { self.now.to_string() } else { params.to_string() };
                 let body = ctcp::encode(&cmd, &params);
-                self.send_msg(c, Message::new("PRIVMSG", [target.to_string(), body.clone()]));
+                self.send_line(c, &text_line("PRIVMSG", target, &body));
                 let echo = self.conns[&c].session.cap("echo-message");
                 if !echo && !quiet {
                     for l in self.own_lines(c, MsgKind::Privmsg, target, &body, self.now) {
@@ -341,7 +356,7 @@ impl State {
                     return Err(self.insufficient(&name));
                 }
                 let c = self.need_conn(conn)?;
-                self.send_msg(c, Message::new("NOTICE", [target.to_string(), ctcp::encode(&cmd.to_ascii_uppercase(), params)]));
+                self.send_line(c, &text_line("NOTICE", target, &ctcp::encode(&cmd.to_ascii_uppercase(), params)));
             }
             "query" => {
                 let (nick, text) = split_word(args);
@@ -450,6 +465,8 @@ impl State {
             }
             "server" => self.cmd_server(conn, win, args)?,
             "exit" => {
+                let ev = alpirc_script::EventInfo { kind: Some(EventKind::Exit), ..alpirc_script::EventInfo::default() };
+                self.push_pres(Pres::new().event(Ctx::default(), ev));
                 let reason = self.settings.identity.quit_message.clone();
                 let ids: Vec<ConnId> = self.conns.keys().copied().collect();
                 for id in ids {
@@ -745,7 +762,7 @@ impl State {
             _ => {
                 // Commande inconnue : envoyée au serveur telle quelle, comme dans mIRC.
                 let line = if args.is_empty() { name.to_ascii_uppercase() } else { format!("{} {args}", name.to_ascii_uppercase()) };
-                self.raw_to_server(conn, &line).map_err(|_| format!("/{name}: unknown command"))?;
+                self.raw_to_server(conn, &line).map_err(|_| self.t(Key::UnknownCommand, &[("cmd", &name)]))?;
             }
         }
         Ok(())
@@ -856,7 +873,7 @@ impl State {
             self.send_now(conn, &Message::new("QUIT", [reason]).to_line());
             self.flush_sends();
         }
-        self.effects.push(Effect::Close { conn });
+        self.close_effect(conn);
         if let Some(c) = self.conns.get_mut(&conn) {
             c.user_quit = true;
         }
@@ -880,7 +897,7 @@ impl State {
         };
         let c = self.need_conn(conn)?;
         let remove = sw.contains('r');
-        let kick = sw.contains('k').then(|| if reason.is_empty() { who.to_string() } else { reason.to_string() });
+        let kick = sw.contains('k').then(|| reason.to_string());
         let unban = switch_num(&sw, 'u').filter(|n| *n > 0);
         let sign = if remove { '-' } else { '+' };
         let is_mask = who.contains(['!', '@', '*']);
@@ -901,7 +918,7 @@ impl State {
                 if let Some(r) = kick
                     && !is_mask
                 {
-                    self.send_msg(c, Message::new("KICK", [chan.clone(), who.to_string(), r]));
+                    self.send_msg(c, kick_msg(&chan, who, &r));
                 }
                 if let Some(s) = unban
                     && !remove

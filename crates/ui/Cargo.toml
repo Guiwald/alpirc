@@ -16,3 +16,4 @@ swash = { version = "0.2", default-features = false, features = ["scale", "rende
 unicode-segmentation = "1"
 
 [dev-dependencies]
+toml.workspace = true

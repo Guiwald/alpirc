@@ -178,7 +178,7 @@ pub fn format_time(ms: i64, offset_secs: i32, fmt: &str) -> String {
             }
             'h' => {
                 let n = run(i, 'h');
-                let h12 = if c.hour % 12 == 0 { 12 } else { c.hour % 12 };
+                let h12 = if c.hour.is_multiple_of(12) { 12 } else { c.hour % 12 };
                 if n >= 2 {
                     out.push_str(&format!("{h12:02}"));
                 } else {

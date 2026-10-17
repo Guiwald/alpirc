@@ -255,12 +255,8 @@ pub fn parse_mnemonic(text: &str) -> (String, Option<usize>) {
                     chars.next();
                     out.push('&');
                 }
-                Some(_) => {
-                    if mark.is_none() {
-                        mark = Some(out.len());
-                    }
-                }
-                None => {}
+                Some(_) if mark.is_none() => mark = Some(out.len()),
+                _ => {}
             }
         } else {
             out.push(c);

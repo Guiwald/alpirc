@@ -160,6 +160,7 @@ keys! {
     ListEmpty => "* The list is empty", "* La liste est vide";
     // --- commandes ---
     InsufficientParams => "/{cmd}: insufficient parameters", "/{cmd} : paramètres insuffisants";
+    UnknownCommand => "/{cmd}: unknown command", "/{cmd} : commande inconnue";
     NoSuchWindow => "/{cmd}: no such window '{name}'", "/{cmd} : pas de fenêtre « {name} »";
     RunDisabled => "* /run is disabled in AlpIRC", "* /run est désactivé dans AlpIRC";
     DnsUnsupported => "* /dns is not supported by AlpIRC", "* /dns n'est pas pris en charge par AlpIRC";

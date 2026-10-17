@@ -126,6 +126,36 @@ icon("app/alpirc-16", [
     "kk..............",  # 15
 ], APP_PALETTE)
 
+# Icône de la barre d'état d'Android : silhouette blanche sur fond transparent
+# (Android n'en garde que la couche alpha). Dessinée en 24×24, zone utile de
+# 22×22 avec une marge de 1 px ; exportée ×4 en 96×96 (alpirc-notification.png).
+NOTIFICATION = [
+    "........................",
+    "........................",
+    "............w...........",
+    "...........www..........",
+    "..........wwwww.........",
+    ".........wwwwwww........",
+    "........wwwwwwwww.......",
+    ".......wwwwwwwwwww.w....",
+    "......wwwwwwwwwwwwwww...",
+    ".....wwwwwwwwwwwwwwwww..",
+    ".............wwwwwwwwww.",
+    "..wwwwwwwwww..wwwwwwwww.",
+    ".wwwwwwwwwwww.wwwwwwwww.",
+    ".wwwwwwwwwwww.wwwwwwwww.",
+    ".wwwwwwwwwwww.wwwwwwwww.",
+    ".w..ww..ww..w...........",
+    ".w..ww..ww..w...........",
+    ".wwwwwwwwwwww...........",
+    ".wwwwwwwwwwww...........",
+    "..wwwwwwwwww............",
+    "..www...................",
+    "..ww....................",
+    ".ww.....................",
+    "........................",
+]
+
 
 # ===========================================================================
 # 2. Barre d'outils (16×16, contour noir, lumière en haut à gauche)
@@ -150,22 +180,24 @@ icon("toolbar/connect", [
     "................",
 ])
 
+# La fiche, débranchée, pend plus bas que la prise : broches jaunes à nu,
+# trous noirs dans la prise.
 icon("toolbar/disconnect", [
     "................",
     "................",
     "...............k",
     "..............kd",
-    "..kkk.....kkkkdk",
-    ".kwwlk...kwwlkk.",
-    ".kwldkyy.kkldk..",
+    "..........kkkkdk",
+    ".........kwwlkk.",
+    "..kkk....kkldk..",
+    ".kwwlk...kkldk..",
+    ".kwldkyy.kwldk..",
     ".kwldkoo.kkldk..",
-    ".kwldk...kwldk..",
-    ".kwldkyy.kkldk..",
-    ".kdddkoo.kdddk..",
-    "dkkkk.....kkk...",
+    ".kwldk...kdddk..",
+    ".kwldkyy..kkk...",
+    ".kdddkoo........",
+    "dkkkk...........",
     "k...............",
-    "................",
-    "................",
     "................",
 ])
 
@@ -1199,6 +1231,7 @@ def save_all(images: dict[str, Image.Image]) -> None:
 # Facteurs des grandes versions de l'icône (calculés une fois, voir README).
 MACOS_SCALE = 26                 # 32 × 26 = 832 px, ~81 % du canevas 1024
 ANDROID_SAFE_DIAMETER = 1024 * 66 / 108   # zone sûre : disque de 66 dp sur 108 dp
+NOTIFICATION_SCALE = 4         # 24 × 4 = 96 px (xxxhdpi)
 TEAL = (0, 128, 128, 255)
 
 
@@ -1208,6 +1241,10 @@ def save_app_large(art32: Image.Image) -> dict[str, Image.Image]:
     k = max_scale_in_circle(art32, ANDROID_SAFE_DIAMETER)
     out["app/alpirc-1024-android-fg"] = place_centered(art32, k)
     out["app/alpirc-1024-android-bg"] = Image.new("RGBA", (1024, 1024), TEAL)
+    notif = grid_to_image(NOTIFICATION, PALETTE, "notification")
+    if notif.size != (24, 24):
+        raise ValueError(f"notification : taille {notif.size}, attendu 24×24")
+    out["app/alpirc-notification"] = scale(notif, NOTIFICATION_SCALE)
     for path, img in out.items():
         img.save(os.path.join(ICONS_DIR, path + ".png"), optimize=True)
     print(f"icône Android : facteur ×{k} ({32 * k} px dans 1024)")
@@ -1316,35 +1353,44 @@ def build_preview(images: dict[str, Image.Image]) -> Image.Image:
                     draw.text((12, y), data, font=bold, fill=NAVY)
                 y += 24
             elif kind == "app":
-                x = 12
-                a32 = images["app/alpirc-32"]
-                a16 = images["app/alpirc-16"]
-                items = [(scale(a32, 8), "alpirc-32 ×8"), (scale(a16, 8), "alpirc-16 ×8")]
-                # Aperçus des grandes versions, réduits à 256 px.
+                a32, a16 = images["app/alpirc-32"], images["app/alpirc-16"]
+                # 1re rangée : le dessin à ×8, puis les tailles réelles sur quatre fonds.
+                row1 = [(scale(a32, 8), "alpirc-32 ×8"), (scale(a16, 8), "alpirc-16 ×8")]
+                # 2e rangée : les grandes versions réduites à 256 px, et la notification.
                 mac = images["app/alpirc-1024"].resize((256, 256), Image.LANCZOS)
-                bg = images["app/alpirc-1024-android-bg"].copy()
+                android = images["app/alpirc-1024-android-bg"].copy()
                 fg = images["app/alpirc-1024-android-fg"]
-                bg.paste(fg, (0, 0), fg)
+                android.paste(fg, (0, 0), fg)
                 mask = Image.new("L", (1024, 1024), 0)
-                ImageDraw.Draw(mask).ellipse([171, 171, 853, 853], fill=255)
-                android = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
-                android.paste(bg.crop((0, 0, 1024, 1024)), (0, 0), mask)
+                ImageDraw.Draw(mask).ellipse([171, 171, 852, 852], fill=255)  # 72 dp sur 108
+                android.putalpha(mask)
                 android = android.crop((171, 171, 853, 853)).resize((256, 256), Image.LANCZOS)
-                items += [(mac, "1024 (macOS) réduite"), (android, "Android, masque rond")]
-                for im, label in items:
-                    if canvas:
-                        canvas.paste(im, (x, y), im)
-                        draw.text((x, y + im.height + 4), label, font=font, fill=BLACK)
-                    x += max(im.width, int(meas.textlength(label, font=font))) + 28
-                # petites tailles réelles
-                if canvas:
-                    for i, (im, bgc) in enumerate(((a32, GRAY), (a16, GRAY), (a32, NAVY),
-                                                    (a16, NAVY), (a32, TEAL), (a16, TEAL),
-                                                    (a32, WHITE), (a16, WHITE))):
-                        cx, cy = x + (i % 2) * 44, y + (i // 2) * 44
-                        draw.rectangle([cx, cy, cx + 39, cy + 39], fill=bgc)
-                        canvas.paste(im, (cx + (40 - im.width) // 2, cy + (40 - im.height) // 2), im)
-                y += 256 + 32
+                notif = images["app/alpirc-notification"]
+                panel = Image.new("RGBA", (256, 256), (40, 40, 40, 255))
+                panel.paste(notif, (80, 40), notif)
+                small = notif.resize((24, 24), Image.BOX)  # 24 dp en mdpi
+                status = Image.new("RGBA", (256, 32), (25, 90, 160, 255))
+                status.paste(small, (8, 4), small)
+                panel.paste(status, (0, 200))
+                row2 = [(mac, "alpirc-1024 (macOS), réduite"),
+                        (android, "Android : fg sur bg, masque rond"),
+                        (panel, "notification 96 px, et 24 px")]
+                for row in (row1, row2):
+                    x = 12
+                    for im, label in row:
+                        if canvas:
+                            canvas.paste(im, (x, y), im)
+                            draw.text((x, y + im.height + 4), label, font=font, fill=BLACK)
+                        x += max(im.width, int(meas.textlength(label, font=font))) + 28
+                    if row is row1 and canvas:
+                        # tailles réelles sur fonds gris, marine, sarcelle et blanc
+                        for i, bgc in enumerate((GRAY, NAVY, TEAL, WHITE)):
+                            for j, im in enumerate((a32, a16)):
+                                cx, cy = x + j * 44, y + i * 44
+                                draw.rectangle([cx, cy, cx + 39, cy + 39], fill=bgc)
+                                canvas.paste(im, (cx + (40 - im.width) // 2,
+                                                  cy + (40 - im.height) // 2), im)
+                    y += max(im.height for im, _ in row) + 40
             elif kind == "grid":
                 x, row_h = 12, 0
                 for n in data:

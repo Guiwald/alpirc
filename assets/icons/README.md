@@ -49,16 +49,21 @@ les codes couleur d'IRC. Collines sarcelle au pied des montagnes.
 | `alpirc-1024.png` | macOS : le 32×32 agrandi ×26 au plus proche voisin (832 px, ~81 % du canevas), centré sur fond transparent |
 | `alpirc-1024-android-fg.png` | Android, avant-plan de l'icône adaptative : agrandi ×14 (448 px), tout le dessin tient dans la zone sûre (disque de 66 dp sur 108 dp), même avec un masque rond |
 | `alpirc-1024-android-bg.png` | Android, arrière-plan : sarcelle `008080` uni, le bureau de Windows 98 |
+| `alpirc-notification.png` | Android, barre d'état : silhouette blanche sur fond transparent (montagne et bulle à trois points évidés), dessinée en 24×24 avec 1 px de marge, exportée ×4 en 96×96 |
 
 Les grandes versions sont centrées sur la boîte englobante du dessin (centrage optique), pas sur le
 canevas 32×32.
+
+`cargo xtask icons` prend la plus grande `alpirc-<n>.png` (donc `alpirc-1024.png`) comme source des
+autres tailles et reprend telles quelles les tailles dessinées à la main (16 et 32).
+`alpirc-notification.png` sert à l'icône de la barre d'état d'Android.
 
 ## Barre d'outils (`toolbar/`, 16×16)
 
 | Nom | Dessin |
 |---|---|
 | `connect` | prise et fiche emboîtées, avec leurs cordons |
-| `disconnect` | fiche débranchée, broches jaunes visibles |
+| `disconnect` | fiche débranchée qui pend, broches jaunes à nu |
 | `options` | marteau et clé plate croisés |
 | `abook` | carnet d'adresses à spirale, onglets de couleur, silhouette |
 | `favorites` | dossier jaune marqué d'un `#` (dossier de canaux) |
@@ -112,7 +117,7 @@ glyphe exact du bouton.
 ## Planche de contrôle
 
 `preview.png` montre toutes les icônes à ×1 et ×3 sur fond gris `C0C0C0`, l'icône de l'application à
-×8 avec ses aperçus macOS et Android, une barre d'outils façon Windows 98 (×1 et ×2), les icônes de
+×8 avec ses aperçus macOS, Android et notification, une barre d'outils façon Windows 98 (×1 et ×2), les icônes de
 fenêtre sur des barres de titre active et inactive, et les boutons de légende. Les étiquettes
 utilisent la police Pixel Operator de `assets/fonts/` (licence dans ce dossier).
 

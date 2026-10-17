@@ -43,7 +43,7 @@ impl State {
             self.send_now(conn, &alpirc_proto::Message::new("QUIT", [reason]).to_line());
             self.flush_sends();
         }
-        self.effects.push(Effect::Close { conn });
+        self.close_effect(conn);
         if let Some(c) = self.conns.get_mut(&conn) {
             c.user_quit = true;
         }
@@ -332,7 +332,7 @@ impl State {
             self.send_now(conn, &alpirc_proto::Message::new("QUIT", [reason]).to_line());
             self.flush_sends();
         }
-        self.effects.push(Effect::Close { conn });
+        self.close_effect(conn);
         self.conn_closed(conn, None);
     }
 
@@ -355,7 +355,7 @@ impl State {
                 let st = c.status;
                 let t = self.t(Key::PingTimeout, &[("secs", &co.ping_timeout_secs.to_string())]);
                 self.print(st, LineKind::Error, t);
-                self.effects.push(Effect::Close { conn: id });
+                self.close_effect(id);
                 self.conn_closed(id, Some("Ping timeout"));
                 continue;
             }

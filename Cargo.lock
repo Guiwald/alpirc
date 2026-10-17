@@ -99,6 +99,7 @@ dependencies = [
  "png",
  "serde",
  "swash",
+ "toml",
  "unicode-segmentation",
 ]
 

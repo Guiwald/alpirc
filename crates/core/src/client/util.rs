@@ -15,8 +15,7 @@ pub fn find_urls(text: &str) -> Vec<String> {
         }
         let mut url = w.to_string();
         // Ponctuation finale, et parenthèse fermante sans ouvrante.
-        loop {
-            let Some(last) = url.chars().last() else { break };
+        while let Some(last) = url.chars().last() {
             let trim = match last {
                 '.' | ',' | ';' | ':' | '!' | '?' | '>' | '"' | '\'' | ']' | '}' => true,
                 ')' => url.matches('(').count() < url.matches(')').count(),

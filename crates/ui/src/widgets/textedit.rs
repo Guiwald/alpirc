@@ -5,7 +5,7 @@
 use crate::canvas::{Bevel, Canvas};
 use crate::geom::Rect;
 use crate::input::{Cursor, Input, Key, MouseButton, Platform};
-use crate::text::{FontKind, TextStyle};
+use crate::text::TextStyle;
 use crate::Res;
 
 use super::edit::{EditCore, EditResult};
@@ -150,7 +150,7 @@ impl TextEdit {
     }
 
     /// Index dans le texte réel d'un index de la vue (sans composition).
-    fn from_view(&self, d: usize) -> usize {
+    fn text_index_of_view(&self, d: usize) -> usize {
         if self.password {
             self.core.text().char_indices().nth(d).map_or(self.core.text().len(), |(i, _)| i)
         } else {
@@ -158,21 +158,17 @@ impl TextEdit {
         }
     }
 
-    fn text_style_for_codes(&self) -> TextStyle {
-        self.style
-    }
-
     pub fn paint(&self, canvas: &mut Canvas, res: &Res, rect: Rect) {
         let t = &res.theme;
         let (bg, fg) = self.colors.unwrap_or((t.window, t.window_text));
-        let bg = if self.enabled && !self.core.read_only { bg } else if self.colors.is_some() { bg } else { t.face };
+        let bg = if (self.enabled && !self.core.read_only) || self.colors.is_some() { bg } else { t.face };
         canvas.fill(rect, bg);
         if self.border {
             canvas.bevel(rect, Bevel::Field, t);
         }
         let tr = self.text_rect(rect);
         let v = self.view();
-        let style = self.text_style_for_codes();
+        let style = self.style;
         let shaped = res.fonts.shape(&v.text, style);
         let lh = res.fonts.line_height(style.kind);
         let top = tr.y + (tr.h - lh) / 2;
@@ -268,7 +264,7 @@ impl TextEdit {
         };
         let shaped = res.fonts.shape(&disp, self.style);
         let d = shaped.index_at((x - tr.x + self.scroll_x) as f32);
-        self.from_view(d)
+        self.text_index_of_view(d)
     }
 
     pub fn event(&mut self, input: &Input, rect: Rect, res: &Res, platform: &mut dyn Platform) -> Option<TextEditMsg> {
@@ -316,12 +312,9 @@ impl TextEdit {
                     EditResult::Changed => msg = Some(TextEditMsg::Changed),
                     EditResult::Moved => {}
                     EditResult::Ignored => {
-                        if let Some(s) = text.as_deref().filter(|s| !s.is_empty() && !mods.command()) {
-                            if !s.chars().any(|c| c.is_control()) && self.core.insert(s) {
-                                msg = Some(TextEditMsg::Changed);
-                            }
-                        } else {
-                            return None;
+                        let s = text.as_deref().filter(|s| !s.is_empty() && !mods.command())?;
+                        if !s.chars().any(|c| c.is_control()) && self.core.insert(s) {
+                            msg = Some(TextEditMsg::Changed);
                         }
                     }
                 }
@@ -364,7 +357,6 @@ impl TextEdit {
             }
             _ => {}
         }
-        let _ = FontKind::Ui;
         msg
     }
 }

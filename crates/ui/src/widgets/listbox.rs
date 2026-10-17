@@ -407,6 +407,7 @@ impl ListBox {
         }
     }
 
+    /// Recherche en tapant : préfixe du texte (sans les préfixes de mode `@+%&~`), remis à zéro après 1 s.
     fn type_to_find(&mut self, c: char, now: i64) -> Option<usize> {
         if now - self.find_at > 1000 {
             self.find.clear();
@@ -418,7 +419,9 @@ impl ListBox {
             return None;
         }
         let start = if self.find.chars().count() == 1 { self.sel.cursor + 1 } else { self.sel.cursor };
-        (0..n).map(|k| (start + k) % n).find(|&i| self.items[i].text.to_lowercase().starts_with(&self.find))
+        (0..n)
+            .map(|k| (start + k) % n)
+            .find(|&i| self.items[i].text.trim_start_matches(['@', '+', '%', '&', '~', '!']).to_lowercase().starts_with(&self.find))
     }
 
     pub fn event(&mut self, input: &Input, rect: Rect, res: &Res, platform: &mut dyn Platform) -> Option<ListMsg> {

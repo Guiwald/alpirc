@@ -77,7 +77,9 @@ pub enum Effect {
     /// encodée selon [`Client::conn_encoding`].
     Send { conn: ConnId, line: String },
     /// Fermer la connexion après avoir envoyé les lignes qui précèdent. Le moteur la tient déjà pour fermée :
-    /// l'hôte n'appelle pas [`Client::on_closed`] pour elle.
+    /// l'hôte signale sa fin comme d'habitude ([`Client::on_closed`] ou [`Client::on_connect_failed`], comme le
+    /// fait `alpirc-net` pour toute tentative) et le moteur l'ignore, ainsi que les lignes de l'ancienne
+    /// connexion qui arriveraient encore.
     Close { conn: ConnId },
     /// Notification du système (mot surligné, privé), seulement si les réglages le permettent.
     Notify { win: WinId, title: String, body: String },
@@ -205,6 +207,8 @@ impl Client {
             log_off: Default::default(),
             last_input: now_ms,
             cur_halted: false,
+            capture: None,
+            scripts_fp: 0,
             scram_nonce: None,
         };
         let mut c = Client { st, engine };
@@ -218,6 +222,7 @@ impl Client {
             engine.fire(st, &Ctx::default(), &ev);
         }
         c.st.dialogs_version = c.engine.dialogs_version();
+        c.st.scripts_fp = c.scripts_fingerprint();
         c.pump();
         c
     }
@@ -306,11 +311,13 @@ impl Client {
             match d {
                 Deferred::Pres(p) => {
                     let mut halted = false;
-                    if scripts {
+                    if scripts && !p.events.is_empty() {
+                        st.capture = Some(Vec::new());
                         for (ctx, ev) in &p.events {
                             halted |= engine.fire(st, ctx, ev).haltdef;
                         }
                     }
+                    let captured = st.capture.take().unwrap_or_default();
                     if !halted {
                         for o in p.outs {
                             match o {
@@ -319,6 +326,9 @@ impl Client {
                                 state::Out::Send(c, l) => st.send_line(c, &l),
                             }
                         }
+                    }
+                    for l in captured {
+                        st.add_line(l);
                     }
                 }
                 Deferred::Script(ctx, line) => {
@@ -340,6 +350,39 @@ impl Client {
     fn finish(&mut self) {
         self.pump();
         self.st.flush_sends();
+        if self.st.settings.scripts.enabled {
+            let fp = self.scripts_fingerprint();
+            if fp != self.st.scripts_fp {
+                self.st.scripts_fp = fp;
+                if !self.st.effects.contains(&Effect::SaveScripts) {
+                    self.st.effects.push(Effect::SaveScripts);
+                }
+            }
+        }
+    }
+
+    /// Empreinte de ce que [`Client::save_scripts`] enregistre (noms et tailles des scripts, variables,
+    /// utilisateurs).
+    fn scripts_fingerprint(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for s in self.engine.scripts() {
+            s.name.hash(&mut h);
+            self.engine.script_text(&s.name).map(str::len).hash(&mut h);
+        }
+        self.engine.vars_text().hash(&mut h);
+        self.engine.users_text().hash(&mut h);
+        h.finish()
+    }
+
+    /// Exécute les `on LOAD`/`on START` en attente d'un script chargé par `engine_mut().load_file(…)`, après
+    /// l'avertissement de l'interface (`settings.scripts.warn_on_load`, ADR 0007) ; sinon
+    /// `engine_mut().discard_pending()`.
+    pub fn run_pending_scripts(&mut self, now_ms: i64) {
+        self.st.now = now_ms;
+        let Client { st, engine } = self;
+        engine.flush_pending(st);
+        self.finish();
     }
 
     /// Ce que l'hôte doit faire, dans l'ordre.
@@ -354,6 +397,10 @@ impl Client {
     /// La connexion `conn` est ouverte.
     pub fn on_connected(&mut self, conn: ConnId, now_ms: i64) {
         self.st.now = now_ms;
+        if let Some(c) = self.st.conns.get_mut(&conn) {
+            // Une nouvelle connexion : les fins des anciennes sont toutes arrivées (ou ne viendront pas).
+            c.stale_events = 0;
+        }
         self.st.conn_connected(conn);
         self.finish();
     }
@@ -361,6 +408,9 @@ impl Client {
     /// L'ouverture de `conn` a échoué : message, puis nouvel essai (serveur suivant) si les réglages le veulent.
     pub fn on_connect_failed(&mut self, conn: ConnId, error: &str, now_ms: i64) {
         self.st.now = now_ms;
+        if self.consume_stale(conn) {
+            return;
+        }
         self.st.conn_failed(conn, error);
         self.finish();
     }
@@ -369,7 +419,7 @@ impl Client {
     pub fn on_line(&mut self, conn: ConnId, bytes: &[u8], now_ms: i64) {
         self.st.now = now_ms;
         let Some(c) = self.st.conns.get_mut(&conn) else { return };
-        if c.state == ConnState::Disconnected {
+        if c.state == ConnState::Disconnected || c.stale_events > 0 {
             return;
         }
         c.last_rx = now_ms;
@@ -398,8 +448,22 @@ impl Client {
     /// La connexion est fermée par le serveur ou le réseau (`error` : la raison, s'il y en a une).
     pub fn on_closed(&mut self, conn: ConnId, error: Option<&str>, now_ms: i64) {
         self.st.now = now_ms;
+        if self.consume_stale(conn) {
+            return;
+        }
         self.st.conn_closed(conn, error);
         self.finish();
+    }
+
+    /// Fin signalée d'une connexion que le moteur a fermée lui-même : à ignorer.
+    fn consume_stale(&mut self, conn: ConnId) -> bool {
+        match self.st.conns.get_mut(&conn) {
+            Some(c) if c.stale_events > 0 => {
+                c.stale_events -= 1;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Minuteries : file anti-flood, PING de latence (60 s), délai de ping (240 s), reconnexion, ISON (30 s),

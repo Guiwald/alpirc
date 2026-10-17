@@ -54,7 +54,7 @@ impl super::state::State {
     /// Lit une ligne du serveur.
     pub(crate) fn handle_message(&mut self, conn: ConnId, msg: &Message, raw_halted: bool) {
         let now = self.now;
-        let time = msg.tags.get("time").and_then(timeutil::parse_iso8601).unwrap_or(now);
+        let time = crate::session::message_time(msg, now);
         let events = match self.conns.get_mut(&conn) {
             Some(c) => c.session.handle(msg, now),
             None => return,
@@ -849,7 +849,7 @@ impl super::state::State {
                     let m = mask::address_mask(nick, user, host, b.mask_type);
                     lines.push(format!("MODE {} +b {m}", b.chan));
                     if let Some(r) = &b.kick {
-                        lines.push(Message::new("KICK", [b.chan.clone(), nick.clone(), r.clone()]).to_line());
+                        lines.push(super::commands::kick_msg(&b.chan, nick, r).to_line());
                     }
                     if let Some(s) = b.unban_secs {
                         c.timed_unbans.push((now + s as i64 * 1000, b.chan.clone(), m));
@@ -946,7 +946,7 @@ impl super::state::State {
             for l in &n.perform {
                 let l = l.trim().trim_start_matches('/');
                 if !l.is_empty() {
-                    self.deferred.push_back(super::state::Deferred::Script(ctx.clone(), format!("//{l}")));
+                    self.deferred.push_back(super::state::Deferred::Script(Box::new(ctx.clone()), format!("//{l}")));
                 }
             }
         }
@@ -991,7 +991,11 @@ impl super::state::State {
             self.print(st, LineKind::Info, t);
             if let Some(c) = self.conns.get_mut(&conn) {
                 c.sts_upgrade = Some(p);
+                c.state = ConnState::Disconnected;
+                c.ready = false;
             }
+            self.close_effect(conn);
+            self.do_connect(conn);
         } else if let Some(d) = info.duration_secs {
             let expires = self.now + d as i64 * 1000;
             let mut first = false;
@@ -1129,7 +1133,6 @@ impl super::state::State {
         let body = if is_action { ctcp.as_ref().map(|c| c.params.to_string()).unwrap_or_default() } else { text.clone() };
         let shown = if self.settings.irc.strip_codes || ign == Ignored::StripCodes { format::strip(&body) } else { body.clone() };
         let hit = self.highlight(conn, &body);
-        let window_name;
         let mut p = Pres::new();
         let ev_kind = match (kind, is_action) {
             (MsgKind::Notice, _) => EventKind::Notice,
@@ -1176,6 +1179,7 @@ impl super::state::State {
                     oev.target = Some(from.clone());
                     oev.text = body.clone();
                     self.push_pres(Pres::new().event(self.ctx(Some(conn), Some(w)), oev));
+                    self.request_history(conn, &from, None);
                     win = Some(w);
                 }
                 match win {
@@ -1191,7 +1195,7 @@ impl super::state::State {
                 }
             }
         };
-        window_name = self.win(win).map(|w| w.name.clone()).unwrap_or_default();
+        let window_name = self.win(win).map(|w| w.name.clone()).unwrap_or_default();
         p = p.event(self.ctx(Some(conn), Some(win)), ev);
         let mut l = self.line_at(win, lkind, text_line, time);
         l.nick = Some(from.clone());
@@ -1325,7 +1329,7 @@ impl super::state::State {
         if let Some(reply) = self.ctcp_reply_text(cmd, params)
             && self.ctcp_allowed(conn)
         {
-            let line = Message::new("NOTICE", [from.to_string(), ctcp::encode(cmd, &reply)]).to_line();
+            let line = super::commands::text_line("NOTICE", from, &ctcp::encode(cmd, &reply));
             p = p.send(conn, line);
         }
         self.push_pres(p);
@@ -1394,7 +1398,7 @@ impl super::state::State {
         let Some(win) = self.find_win(Some(conn), target) else { return };
         let me = self.me(conn);
         for m in messages {
-            let time = m.tags.get("time").and_then(timeutil::parse_iso8601).unwrap_or(self.now);
+            let time = crate::session::message_time(m, self.now);
             let nick = m.nick().to_string();
             let addr = m.source.as_ref().and_then(|s| s.address()).unwrap_or_default();
             let (kind, text) = match m.command.as_str() {

@@ -441,13 +441,11 @@ impl TextArea {
                     platform.set_cursor(Cursor::Text);
                 }
                 if self.dragging {
-                    let lh = self.line_h(res);
                     if pos.y < body.y && self.top_line > 0 {
                         self.top_line -= 1;
                     } else if pos.y >= body.bottom() {
                         self.top_line = (self.top_line + 1).min(self.vbar.max_pos().max(0) as usize);
                     }
-                    let _ = lh;
                     let b = self.pos_at(res, rect, *pos);
                     self.core.set_caret(b, true);
                     self.preferred_x = None;

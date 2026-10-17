@@ -198,13 +198,16 @@ impl Theme {
             menu_text: 0xE0E0E0,
             menu_highlight: 0x2F5FA8,
             menu_highlight_text: 0xFFFFFF,
+            // Comme les thèmes sombres de mIRC : le blanc (0) et le noir (1) sont échangés, si bien que les numéros
+            // par défaut (fond 0, texte 1) et le texte « noir » restent lisibles ; les couleurs foncées sont
+            // éclaircies.
             palette: [
-                0xE8E8E8, // 0 blanc → texte clair
-                0x181818, // 1 noir → fond
+                0x1C1C1C, // 0 blanc → fond sombre
+                0xE0E0E0, // 1 noir → texte clair
                 0x6C8CFF, // 2 bleu marine → bleu lisible
                 0x4CC24C, // 3 vert
                 0xFF5C5C, // 4 rouge
-                0xC8764E, // 5 marron
+                0xD08A5C, // 5 marron
                 0xC77DE0, // 6 violet
                 0xFFA040, // 7 orange
                 0xFFE65C, // 8 jaune
@@ -214,14 +217,14 @@ impl Theme {
                 0x7C9CFF, // 12 bleu
                 0xFF7CFF, // 13 rose
                 0x9A9A9A, // 14 gris
-                0x5C5C5C, // 15 gris clair → gris moyen
+                0x3C3C3C, // 15 gris clair → gris foncé
             ],
-            chat_bg: 1,
-            chat_fg: 0,
-            nicklist_bg: 1,
-            nicklist_fg: 0,
-            editbox_bg: 1,
-            editbox_fg: 0,
+            chat_bg: 0,
+            chat_fg: 1,
+            nicklist_bg: 0,
+            nicklist_fg: 1,
+            editbox_bg: 0,
+            editbox_fg: 1,
             nicklist_away: 14,
             activity_event: 3,
             activity_message: 4,
@@ -252,7 +255,7 @@ impl Theme {
         self.color(self.chat_fg)
     }
 
-    /// Lit un thème TOML/JSON déjà désérialisé : rien de spécial, mais garantit les valeurs par défaut.
+    /// Thème intégré par son nom (`classic`/`classique`, `dark`/`sombre`).
     pub fn named(name: &str) -> Option<Theme> {
         match name {
             "classic" | "classique" => Some(Theme::classic()),
@@ -285,7 +288,18 @@ mod tests {
         assert_eq!(t.chat_background(), 0xFFFFFF);
         let d = Theme::dark();
         assert_ne!(d.chat_background(), d.chat_foreground());
+        // Mêmes numéros par défaut que le thème classique : le texte « noir » (1) reste lisible.
+        assert_eq!((d.chat_bg, d.chat_fg), (t.chat_bg, t.chat_fg));
+        let lum = |c: u32| ((c >> 16) & 0xFF) + ((c >> 8) & 0xFF) + (c & 0xFF);
+        assert!(lum(d.color(1)) > lum(d.chat_background()) + 300);
         assert_eq!(mix(0x000000, 0xFFFFFF, 255), 0xFFFFFF);
+        // Thème utilisateur : TOML partiel, le reste vient des valeurs par défaut.
+        let s = toml::to_string(&d).unwrap();
+        let back: Theme = toml::from_str(&s).unwrap();
+        assert_eq!(back, d);
+        let partial: Theme = toml::from_str("name = \"Perso\"\nchat_bg = 1\nchat_fg = 0\n").unwrap();
+        assert_eq!(partial.face, Theme::classic().face);
+        assert_eq!(partial.chat_background(), 0x000000);
         assert_eq!(mix(0x000000, 0xFFFFFF, 0), 0x000000);
     }
 }

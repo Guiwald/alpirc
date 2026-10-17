@@ -32,12 +32,9 @@ impl FloodQueue {
         }
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty() && self.ready.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.queue.len() + self.ready.len()
     }
 
     /// Lignes à envoyer maintenant. `enabled` faux : tout part.

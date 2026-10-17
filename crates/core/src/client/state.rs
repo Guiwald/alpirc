@@ -22,7 +22,7 @@ pub(crate) enum Deferred {
     /// Événements à déclencher, puis sorties à appliquer si aucun n'a fait `/haltdef`.
     Pres(Pres),
     /// Ligne à exécuter par le moteur (perform, `/timer`…).
-    Script(Ctx, String),
+    Script(Box<Ctx>, String),
     /// Rejoindre les canaux (après le perform).
     AutoJoin(ConnId),
 }
@@ -154,6 +154,9 @@ pub(crate) struct Conn {
     pub ready: bool,
     /// Pseudo choisi par `/nick` hors connexion.
     pub nick_override: Option<String>,
+    /// Fins de connexion encore à venir pour des connexions que nous avons fermées nous-mêmes : l'hôte les
+    /// signale (ou des lignes de l'ancienne connexion arrivent encore) ; on les ignore.
+    pub stale_events: u32,
 }
 
 impl Conn {
@@ -202,6 +205,7 @@ impl Conn {
             sts_upgrade: None,
             ready: false,
             nick_override: None,
+            stale_events: 0,
         }
     }
 
@@ -236,6 +240,11 @@ pub(crate) struct State {
     pub last_input: i64,
     /// Sorties de la ligne en cours supprimées (`raw` avec `/haltdef`).
     pub cur_halted: bool,
+    /// Lignes écrites par les scripts pendant un événement : ajoutées après l'affichage par défaut de
+    /// l'événement (comme les gestionnaires sans `^` de mIRC, qui s'exécutent après l'affichage).
+    pub capture: Option<Vec<PendingLine>>,
+    /// Empreinte des scripts, variables et utilisateurs déjà enregistrés (pour `Effect::SaveScripts`).
+    pub scripts_fp: u64,
     /// Nonce SCRAM imposé (tests).
     pub scram_nonce: Option<String>,
 }
@@ -295,10 +304,10 @@ impl State {
         if name.starts_with('@') {
             return self.windows.iter().find(|w| w.kind == WinKind::Custom && w.name.eq_ignore_ascii_case(name)).map(|w| w.id);
         }
-        if name.eq_ignore_ascii_case("status window") || name.eq_ignore_ascii_case("status") {
-            if let Some(c) = conn.and_then(|c| self.conns.get(&c)) {
-                return Some(c.status);
-            }
+        if (name.eq_ignore_ascii_case("status window") || name.eq_ignore_ascii_case("status"))
+            && let Some(c) = conn.and_then(|c| self.conns.get(&c))
+        {
+            return Some(c.status);
         }
         self.windows
             .iter()
@@ -421,6 +430,10 @@ impl State {
     }
 
     pub fn add_line(&mut self, pl: PendingLine) {
+        if let Some(c) = self.capture.as_mut() {
+            c.push(pl);
+            return;
+        }
         let ts = if self.settings.irc.timestamps && !pl.no_stamp { format!("{} ", self.stamp(pl.time_ms)) } else { String::new() };
         let max = self.settings.irc.max_lines.max(10);
         let seq = self.next_seq;
@@ -586,6 +599,14 @@ impl State {
             let l = m.to_line();
             let bypass = !registered || is_priority(&l);
             c.flood.push(l, bypass);
+        }
+    }
+
+    /// Demande à l'hôte de fermer la connexion (sa fin, quand elle sera signalée, sera ignorée).
+    pub fn close_effect(&mut self, conn: ConnId) {
+        self.effects.push(Effect::Close { conn });
+        if let Some(c) = self.conns.get_mut(&conn) {
+            c.stale_events += 1;
         }
     }
 

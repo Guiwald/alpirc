@@ -1000,19 +1000,25 @@ impl Session {
 
     // --- pseudos de secours ---
 
+    /// Pseudos essayés pendant l'enregistrement : le pseudo, le pseudo de secours, `pseudo_`, puis `pseudo1`,
+    /// `pseudo2`… (raccourcis à `NICKLEN`).
     fn nick_candidate(&self, attempt: usize) -> String {
         let base = &self.cfg.nick;
-        match attempt {
-            0 => base.clone(),
-            1 if !self.cfg.alt_nick.is_empty() && self.cfg.alt_nick != *base => self.cfg.alt_nick.clone(),
-            1 | 2 => format!("{base}_"),
-            n => {
-                let suffix = (n - 2).to_string();
-                let max = self.isupport.nicklen.max(suffix.len() + 1);
-                let keep: String = base.chars().take(max.saturating_sub(suffix.len())).collect();
-                format!("{keep}{suffix}")
-            }
+        let mut list = vec![base.clone()];
+        if !self.cfg.alt_nick.is_empty() && self.cfg.alt_nick != *base {
+            list.push(self.cfg.alt_nick.clone());
         }
+        let under = format!("{base}_");
+        if !list.contains(&under) {
+            list.push(under);
+        }
+        if attempt < list.len() {
+            return list[attempt].clone();
+        }
+        let suffix = (attempt - list.len() + 1).to_string();
+        let max = self.isupport.nicklen.max(suffix.len() + 1);
+        let keep: String = base.chars().take(max.saturating_sub(suffix.len())).collect();
+        format!("{keep}{suffix}")
     }
 
     // --- enregistrement et numériques ---
@@ -1368,7 +1374,7 @@ impl Session {
 
     fn who_is_auto(&self, target: &str) -> bool {
         let k = self.fold(target);
-        self.auto_who.iter().any(|m| *m == k)
+        self.auto_who.contains(&k)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1417,11 +1423,11 @@ impl Session {
                 m.modes = modes;
             }
         }
-        if self.eq(nick, &self.nick.clone()) {
-            if let Some(u) = self.users.get(&key) {
-                self.user = u.user.clone().or(self.user.take());
-                self.host = u.host.clone().or(self.host.take());
-            }
+        if self.eq(nick, &self.nick.clone())
+            && let Some(u) = self.users.get(&key)
+        {
+            self.user = u.user.clone().or(self.user.take());
+            self.host = u.host.clone().or(self.host.take());
         }
     }
 
@@ -1742,7 +1748,7 @@ impl Session {
         let own = !server && self.is_me(&from);
         if !server {
             if let Some(src) = &msg.source
-                && self.users.contains_key(&self.fold(&from))
+                && (channel.is_none() || self.users.contains_key(&self.fold(&from)))
             {
                 let (u, h) = (src.user().map(str::to_string), src.host().map(str::to_string));
                 self.ial_touch(&from, u.as_deref(), h.as_deref());
@@ -1767,6 +1773,11 @@ impl Session {
         }
         ev.push(SessionEvent::Message { kind, from, address, target, text, channel, statusmsg, own, server });
     }
+}
+
+/// Heure d'un message : l'étiquette `time` (server-time) si elle est lisible, sinon `now_ms`.
+pub fn message_time(msg: &Message, now_ms: i64) -> i64 {
+    msg.tags.get("time").and_then(crate::timeutil::parse_iso8601).unwrap_or(now_ms)
 }
 
 /// Attributs d'un réseau du bouncer (`name=Libera;state=connected`), valeurs déséchappées comme les étiquettes.
@@ -1829,9 +1840,12 @@ mod tests {
     fn nick_candidates() {
         let mut s = Session::new(SessionConfig::default());
         assert_eq!(s.nick_candidate(1), "Guiwald_");
-        assert_eq!(s.nick_candidate(3), "Guiwald1");
+        assert_eq!(s.nick_candidate(2), "Guiwald1");
+        assert_eq!(s.nick_candidate(3), "Guiwald2");
         s.cfg.alt_nick = String::new();
         assert_eq!(s.nick_candidate(1), "Guiwald_");
+        s.cfg.alt_nick = "Gui".into();
+        assert_eq!(s.nick_candidate(2), "Guiwald_");
         s.cfg.nick = "VeryLongNick".into();
         assert_eq!(s.nick_candidate(4), "VeryLong2");
     }

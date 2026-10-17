@@ -231,7 +231,8 @@ impl TreeView {
         let body = self.body(res, rect, rows.len());
         let rh = self.row_height(res);
         let lh = res.fonts.line_height(self.style.kind);
-        let line_c = t.shadow;
+        // Gris des traits (le même que l'ombre en classique, plus visible en sombre).
+        let line_c = t.disabled_text;
         canvas.with_clip(body, |canvas| {
             let dotted_v = |canvas: &mut Canvas, x: i32, y0: i32, y1: i32| {
                 let mut y = y0;
@@ -418,10 +419,8 @@ impl TreeView {
                         if rows[c].expanded && rows[c].has_children {
                             return self.toggle(rows[c].id, platform);
                         }
-                        match rows[c].parent {
-                            Some(p) => rows.iter().position(|r| r.id == p)?,
-                            None => return None,
-                        }
+                        let p = rows[c].parent?;
+                        rows.iter().position(|r| r.id == p)?
                     }
                     Key::Right => {
                         let c = cur?;

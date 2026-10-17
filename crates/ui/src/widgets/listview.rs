@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use crate::canvas::{Bevel, Canvas};
 use crate::geom::{Point, Rect};
 use crate::icons::IconId;
-use crate::input::{Cursor, Input, Key, Mods, MouseButton, Platform};
+use crate::input::{Cursor, Input, Key, MouseButton, Platform};
 use crate::text::{Align, TextStyle};
 use crate::Res;
 
@@ -476,7 +476,6 @@ impl ListView {
             Input::FocusOut => self.focused = false,
             _ => {}
         }
-        let _ = (body, Mods::NONE);
         None
     }
 

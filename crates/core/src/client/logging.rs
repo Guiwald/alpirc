@@ -1,5 +1,6 @@
 //! Journaux des fenêtres : `<dossier>/<réseau>/<#canal ou pseudo>.log`, avec les marques `Session Start:` et
-//! `Session Close:` de mIRC. Toutes les écritures passent par [`LogSink`] : les tests peuvent en donner un autre.
+//! `Session Close:` de mIRC (en anglais quelle que soit la langue, pour que les outils qui lisent les journaux
+//! de mIRC les comprennent). Toutes les écritures passent par [`LogSink`] : les tests peuvent en donner un autre.
 
 use std::collections::HashSet;
 use std::io::Write;
@@ -80,10 +81,6 @@ impl Logger {
         if self.open.remove(path) {
             let _ = self.sink.append(path, &format!("Session Close: {date}\n"));
         }
-    }
-
-    pub fn is_open(&self, path: &Path) -> bool {
-        self.open.contains(path)
     }
 }
 

@@ -80,7 +80,9 @@ impl Tabs {
             let tr = if sel { tr.offset(0, -1) } else { tr };
             res.fonts.draw_label(canvas, tr, &self.labels[i], TextStyle::UI, t.text, Align::Center, true, if self.enabled { None } else { Some(t) });
             if sel && self.focused {
-                canvas.focus_rect(tr.inset_xy(-3, 0), t.text);
+                let lw = res.fonts.measure(&parse_mnemonic(&self.labels[i]).0, TextStyle::UI);
+                let lh = res.ui_line();
+                canvas.focus_rect(Rect::new(tr.x + (tr.w - lw) / 2 - 2, tr.y + (tr.h - lh) / 2 - 1, lw + 4, lh + 2), t.text);
             }
         }
     }
