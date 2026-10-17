@@ -7,8 +7,43 @@
 //! de flux, timers, tables de hachage, fichiers du bac à sable, niveaux d'utilisateurs et dialogues personnalisés.
 //!
 //! Bac à sable : pas de `/run`, pas de `$dll`/`$com`, fichiers limités au dossier racine donné à [`Engine::new`].
+//!
+//! Organisation :
+//! - `source` lit les fichiers (remotes, alias, popups, `.ini` de mIRC) ; `ast` découpe les corps en instructions ;
+//! - `eval` évalue le texte (identifiants, variables, `[ ]`, `$+`) ; `cond` les conditions ; `exec` exécute
+//!   (alias, aiguillage des commandes, garde-fous) ; `idents` porte les identifiants du moteur, aidé de `strings`,
+//!   `calc`, `timefmt`, `regexid` et `wild` (jokers) ;
+//! - `vars`, `hash`, `timers`, `files` (bac à sable), `users`, `events`, `popups`, `dialogs` et `scripts`
+//!   (chargement, groupes) portent chacun leur part de l'état et leurs commandes.
+//!
+//! Le client crée un [`Engine`], charge les scripts ([`Engine::load_file`], [`Engine::restore_file`]…), lui passe
+//! les lignes tapées ([`Engine::run_line`]), les événements ([`Engine::fire`]), les menus ([`Engine::popup`]), les
+//! actions dans les dialogues ([`Engine::dialog_event`]) et l'appelle régulièrement ([`Engine::tick`]).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+mod ast;
+mod calc;
+mod cond;
+mod dialogs;
+mod eval;
+mod events;
+mod exec;
+mod files;
+mod hash;
+mod idents;
+mod popups;
+mod regexid;
+mod scripts;
+mod source;
+mod strings;
+mod timefmt;
+mod timers;
+mod users;
+mod vars;
+mod wild;
 
 /// Erreur d'un script (lecture ou exécution). Le texte est affiché à l'utilisateur, en anglais comme mIRC
 /// (`* /msg: insufficient parameters`), le client le traduit si besoin.
@@ -283,20 +318,95 @@ pub trait Host {
 
     /// Heure actuelle en millisecondes depuis 1970 (sert à `$ctime`, `$ticks`, aux timers ; les tests la fixent).
     fn now_ms(&self) -> i64;
+
+    /// Variante silencieuse d'une commande (préfixe `.` : `/.msg`, `/.notice`…) : le client n'affiche pas l'écho
+    /// habituel. Par défaut, identique à [`Host::command`].
+    fn command_quiet(&mut self, ctx: &Ctx, name: &str, args: &str) -> Result<(), String> {
+        self.command(ctx, name, args)
+    }
+
+    /// Décalage de l'heure locale sur UTC, en secondes, à l'instant donné (secondes depuis 1970) : sert à
+    /// `$asctime`, `$time`, `$date`, `$ctime(texte)`, `$timezone`. Par défaut celui du système (0 s'il est
+    /// inconnu) ; les tests le fixent.
+    fn utc_offset(&self, unix_secs: i64) -> i32 {
+        time::OffsetDateTime::from_unix_timestamp(unix_secs)
+            .ok()
+            .and_then(|t| time::UtcOffset::local_offset_at(t).ok())
+            .map(|o| o.whole_seconds())
+            .unwrap_or(0)
+    }
 }
 
 /// Le moteur : scripts chargés, variables, tables, timers, dialogues.
+///
+/// Toutes les méthodes qui exécutent du code prennent l'hôte ([`Host`]) et le contexte ([`Ctx`]) ; les erreurs
+/// d'exécution des appels sans valeur de retour ([`Engine::fire`], [`Engine::tick`], [`Engine::dialog_event`]…)
+/// sont signalées par [`Host::script_error`], celles de [`Engine::run_line`], [`Engine::command`] et
+/// [`Engine::popup_run`] sont rendues à l'appelant.
 pub struct Engine {
     root: PathBuf,
+    pub(crate) scripts: Vec<scripts::Script>,
+    pub(crate) loaded: Vec<LoadedScript>,
+    /// Alias créés par `/alias nom commandes`.
+    pub(crate) dyn_aliases: Vec<Arc<source::Alias>>,
+    /// Nom d'alias → indices (dans `scripts`) des scripts qui le définissent, dans l'ordre de chargement.
+    pub(crate) alias_index: HashMap<String, Vec<usize>>,
+    pub(crate) vars: vars::Vars,
+    pub(crate) tables: hash::Tables,
+    pub(crate) timers: timers::Timers,
+    pub(crate) users: users::Users,
+    pub(crate) dialogs: Vec<Dialog>,
+    pub(crate) dmeta: Vec<dialogs::Meta>,
+    pub(crate) dialogs_version: u64,
+    pub(crate) popup_actions: Vec<popups::Action>,
+    pub(crate) pending: Vec<events::Pending>,
+    pub(crate) rt: exec::Runtime,
 }
 
 impl Engine {
     /// `root` : dossier des scripts ; toute lecture ou écriture de fichier y est confinée.
     pub fn new(root: PathBuf) -> Engine {
-        Engine { root }
+        Engine {
+            root,
+            scripts: Vec::new(),
+            loaded: Vec::new(),
+            dyn_aliases: Vec::new(),
+            alias_index: HashMap::new(),
+            vars: vars::Vars::default(),
+            tables: hash::Tables::default(),
+            timers: timers::Timers::default(),
+            users: users::Users::default(),
+            dialogs: Vec::new(),
+            dmeta: Vec::new(),
+            dialogs_version: 0,
+            popup_actions: Vec::new(),
+            pending: Vec::new(),
+            rt: exec::Runtime::default(),
+        }
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Limites de sûreté : nombre total de tours de boucle (`while`, `goto`) par exécution, et profondeur d'appels
+    /// d'alias. Au-delà, le script s'arrête avec `* Error: script too deep / infinite loop`.
+    /// Par défaut : 1 000 000 et 100.
+    pub fn set_limits(&mut self, max_iterations: u64, max_depth: usize) {
+        self.rt.max_iterations = max_iterations;
+        self.rt.max_depth = max_depth.max(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Le client doit pouvoir confier le moteur à un autre fil.
+    #[test]
+    fn engine_is_send() {
+        fn send<T: Send>() {}
+        send::<Engine>();
+        send::<ScriptError>();
     }
 }

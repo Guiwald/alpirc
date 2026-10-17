@@ -9,13 +9,14 @@ pub fn wildcard_match(pattern: &str, text: &str, cm: CaseMapping) -> bool {
     let (mut pi, mut ti) = (0usize, 0usize);
     let (mut star, mut mark) = (None::<usize>, 0usize);
     while ti < t.len() {
-        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == '*' {
+        // L'étoile d'abord : un `*` dans le texte ne doit pas être pris pour un caractère ordinaire du motif.
+        if pi < p.len() && p[pi] == '*' {
             star = Some(pi);
             mark = ti;
             pi += 1;
+        } else if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
         } else if let Some(s) = star {
             pi = s + 1;
             mark += 1;
@@ -80,6 +81,8 @@ mod tests {
         assert!(wildcard_match("g?i", "gui", cm));
         assert!(!wildcard_match("*.fr", "host.com", cm));
         assert!(wildcard_match("*", "", cm));
+        assert!(wildcard_match("*", "*!*@host", cm));
+        assert!(wildcard_match("*!*@*", "*!*@host", cm));
     }
 
     #[test]
