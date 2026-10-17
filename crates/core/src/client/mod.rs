@@ -13,6 +13,7 @@
 
 mod commands;
 mod conn;
+mod dcc;
 mod defaults;
 mod flood;
 mod host;
@@ -29,6 +30,7 @@ use alpirc_proto::encoding::Encoding;
 use alpirc_script::{Ctx, DialogEvent, Engine, EventInfo, EventKind, MenuItem, PopupKind, ScriptKind};
 
 pub use self::commands::BUILTINS;
+pub use self::dcc::{DccAnswer, DccId, DccPrompt, DccType, DccUi, Transfer, TransferState, state_label as dcc_state_label};
 pub use self::irc::{HOMEPAGE, VERSION, version_reply};
 pub use self::logging::{FileSink, LogSink};
 pub use self::util::{contains_word, find_urls};
@@ -100,6 +102,26 @@ pub enum Effect {
     Exit,
     /// Les dialogues des scripts ont changé : l'interface les redessine.
     ScriptDialogsChanged,
+    /// DCC : écouter pour `id` (port pris dans `ports`, `(0, 0)` : choisi par le système), puis ouvrir le flux
+    /// `io` avec le premier pair qui se connecte (dans `timeout_secs`). L'hôte rend le port par
+    /// [`Client::on_dcc_listening`], ou l'échec par [`Client::on_dcc_ended`].
+    DccListen { id: DccId, conn: ConnId, ports: (u16, u16), io: crate::dcc::DccIo, timeout_secs: u64 },
+    /// DCC : se connecter à `ip:port` puis ouvrir le flux `io` ; l'hôte répond par [`Client::on_dcc_connected`]
+    /// ou [`Client::on_dcc_ended`].
+    DccConnect { id: DccId, ip: std::net::IpAddr, port: u16, io: crate::dcc::DccIo, timeout_secs: u64 },
+    /// DCC : envoi en écoute, pas encore connecté : le reprendre à `offset` (DCC RESUME accepté).
+    DccResume { id: DccId, offset: u64 },
+    /// DCC CHAT : envoyer une ligne (UTF-8, sans fin de ligne).
+    DccChatSend { id: DccId, line: String },
+    /// DCC : fermer (annuler) la connexion directe ou l'écoute `id` ; sa fin, signalée ensuite, est ignorée.
+    DccClose { id: DccId },
+    /// DCC : demander à l'utilisateur s'il accepte une offre reçue ; réponse par [`Client::dcc_accept`] ou
+    /// [`Client::dcc_reject`].
+    DccPrompt(DccPrompt),
+    /// DCC : faire choisir un fichier à envoyer à `nick` ; réponse par [`Client::dcc_send_file`].
+    DccPickFile { conn: ConnId, nick: String },
+    /// DCC : ouvrir une fenêtre de l'interface (boîte d'envoi, de discussion, transferts).
+    DccWindow(DccUi),
 }
 
 /// État d'une connexion.
@@ -210,6 +232,7 @@ impl Client {
             capture: None,
             scripts_fp: 0,
             scram_nonce: None,
+            dcc: Default::default(),
         };
         let mut c = Client { st, engine };
         c.st.apply_language();
@@ -324,6 +347,7 @@ impl Client {
                                 state::Out::Line(l) => st.add_line(l),
                                 state::Out::Effect(e) => st.effects.push(e),
                                 state::Out::Send(c, l) => st.send_line(c, &l),
+                                state::Out::Dcc(d) => st.dcc_incoming(*d),
                             }
                         }
                     }
@@ -471,13 +495,14 @@ impl Client {
     pub fn tick(&mut self, now_ms: i64) -> Option<i64> {
         self.st.now = now_ms;
         self.st.tick_conns();
+        self.st.dcc_tick();
         if self.st.settings.scripts.enabled {
             let Client { st, engine } = self;
             engine.tick(st, now_ms);
         }
         self.finish();
         let engine_next = if self.st.settings.scripts.enabled { self.engine.next_timer_due() } else { None };
-        [self.st.next_wake(), engine_next].into_iter().flatten().min()
+        [self.st.next_wake(), engine_next, self.st.dcc_next_wake()].into_iter().flatten().min()
     }
 
     /// Se connecte aux réseaux à ouvrir au démarrage (`connect_on_startup` et `auto_connect`).
@@ -533,7 +558,10 @@ impl Client {
                 }
             }
             if line.starts_with('/') {
+                // Commande de l'utilisateur (pas d'un script) : elle peut accepter un DCC.
+                self.st.dcc.user = true;
                 self.run_line(win, &ctx, line);
+                self.st.dcc.user = false;
             } else {
                 self.st.send_plain(win, line);
             }
@@ -563,7 +591,9 @@ impl Client {
         let line = if line.starts_with('/') { line.to_string() } else { format!("/{line}") };
         let conn = self.st.win(win).and_then(|w| w.conn);
         let ctx = self.st.ctx(conn, Some(win));
+        self.st.dcc.user = true;
         self.run_line(win, &ctx, &line);
+        self.st.dcc.user = false;
         self.finish();
     }
 
@@ -818,9 +848,11 @@ impl Client {
         };
         let ctx = self.popup_ctx(kind, win, selected);
         let Client { st, engine } = self;
+        st.dcc.user = true;
         if let Err(e) = engine.popup_run(st, &ctx, action) {
             st.print(win, LineKind::Error, e.to_string());
         }
+        st.dcc.user = false;
         self.finish();
     }
 

@@ -5,8 +5,11 @@
 //!
 //! Le manifeste suit les classes Java présentes : `AlpircActivity.java` → activité `fr.guiwald.alpirc.AlpircActivity`
 //! (sinon la `android.app.NativeActivity` d'origine) ; `ConnectionService.java` → service au premier plan
-//! `specialUse` (connexions gardées en arrière-plan) ; sans aucune classe, `android:hasCode="false"`. Une nouvelle
-//! classe qui doit figurer dans le manifeste (récepteur, autre activité) s'ajoute dans [`manifest`].
+//! `specialUse` (connexions gardées en arrière-plan) ; `RestartActivity.java` → activité de relance dans un processus
+//! à part (`:relance`, quand Android recrée l'activité dans un processus qui a déjà servi) ; `FilesProvider.java` →
+//! fournisseur de fichiers en lecture seule (ouvrir un fichier reçu dans une autre appli) ; sans aucune classe,
+//! `android:hasCode="false"`. Une nouvelle classe qui doit figurer dans le manifeste (récepteur, autre activité)
+//! s'ajoute dans [`manifest`].
 //!
 //! Emplacements lus dans l'environnement :
 //! - SDK : `ANDROID_HOME`, sinon `ANDROID_SDK_ROOT`, sinon les emplacements d'Android Studio
@@ -54,6 +57,10 @@ pub struct JavaParts {
     pub activity: bool,
     /// `fr/guiwald/alpirc/ConnectionService.java` existe.
     pub service: bool,
+    /// `fr/guiwald/alpirc/RestartActivity.java` existe.
+    pub restart: bool,
+    /// `fr/guiwald/alpirc/FilesProvider.java` existe.
+    pub provider: bool,
 }
 
 impl JavaParts {
@@ -62,7 +69,13 @@ impl JavaParts {
         collect_ext(dir, "java", &mut sources);
         sources.sort();
         let pkg = dir.join("fr/guiwald/alpirc");
-        JavaParts { activity: pkg.join("AlpircActivity.java").is_file(), service: pkg.join("ConnectionService.java").is_file(), sources }
+        JavaParts {
+            activity: pkg.join("AlpircActivity.java").is_file(),
+            service: pkg.join("ConnectionService.java").is_file(),
+            restart: pkg.join("RestartActivity.java").is_file(),
+            provider: pkg.join("FilesProvider.java").is_file(),
+            sources,
+        }
     }
 
     pub fn has_code(&self) -> bool {
@@ -85,6 +98,30 @@ pub fn manifest(v: &str, code: u32, java: &JavaParts) -> String {
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps IRC connections open while the app is in background" />
         </service>"#
+    } else {
+        ""
+    };
+    let restart = if java.restart {
+        r#"
+        <!-- Relance d'AlpIRC dans un processus neuf (la boucle de Rust ne se recrée pas dans le même processus). -->
+        <activity
+            android:name="fr.guiwald.alpirc.RestartActivity"
+            android:exported="false"
+            android:process=":relance"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />"#
+    } else {
+        ""
+    };
+    let provider = if java.provider {
+        r#"
+        <!-- Fichiers reçus (DCC) ouverts dans une autre appli, en lecture seule, le temps de l'ouverture. -->
+        <provider
+            android:name="fr.guiwald.alpirc.FilesProvider"
+            android:authorities="fr.guiwald.alpirc.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />"#
     } else {
         ""
     };
@@ -131,7 +168,7 @@ pub fn manifest(v: &str, code: u32, java: &JavaParts) -> String {
                 <data android:scheme="irc" />
                 <data android:scheme="ircs" />
             </intent-filter>
-        </activity>{service}
+        </activity>{restart}{service}{provider}
     </application>
 </manifest>
 "#,
@@ -266,7 +303,7 @@ fn build_lib(root: &Path, sdk: &Sdk, abi: &Abi) -> Result<PathBuf> {
     let env_target = abi.triple.replace('-', "_");
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let st = Command::new(&cargo)
-        .args(["build", "--release", "-p", CARGO_PACKAGE, "--target", abi.triple])
+        .args(["build", "--release", "-p", CARGO_PACKAGE, "--lib", "--target", abi.triple])
         .current_dir(root)
         .env(format!("CARGO_TARGET_{}_LINKER", env_target.to_uppercase()), &clang)
         .env(format!("CC_{env_target}"), &clang)
@@ -410,7 +447,7 @@ mod tests {
         if service {
             sources.push(PathBuf::from("ConnectionService.java"));
         }
-        JavaParts { sources, activity, service }
+        JavaParts { sources, activity, service, restart: false, provider: false }
     }
 
     #[test]
@@ -422,6 +459,7 @@ mod tests {
         assert!(m.contains("android:hasCode=\"false\""));
         assert!(m.contains("android:name=\"android.app.NativeActivity\""));
         assert!(!m.contains("<service"));
+        assert!(!m.contains("RestartActivity"));
         assert!(m.contains("<meta-data android:name=\"android.app.lib_name\" android:value=\"alpirc\" />"));
         assert!(m.contains("<uses-sdk android:minSdkVersion=\"26\" android:targetSdkVersion=\"35\" />"));
     }
@@ -436,6 +474,18 @@ mod tests {
         assert!(m.contains("android:name=\"android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE\""));
         assert!(m.contains("android:value=\"Keeps IRC connections open while the app is in background\""));
         // Une classe seule (le service) : du code, mais l'activité d'origine.
+        // L'activité de relance, dans son propre processus.
+        let mut all = parts(true, true);
+        all.restart = true;
+        all.provider = true;
+        let m2 = manifest("1.2.3", 10_203, &all);
+        assert!(m2.contains("android:name=\"fr.guiwald.alpirc.FilesProvider\""));
+        assert!(m2.contains("android:grantUriPermissions=\"true\""));
+        assert!(!m.contains("<provider"));
+        assert!(m2.contains("android:name=\"fr.guiwald.alpirc.RestartActivity\""));
+        assert!(m2.contains("android:process=\":relance\""));
+        assert_eq!(m2.matches("<activity").count(), 2);
+        assert_eq!(m2.matches("android.intent.action.MAIN").count(), 1, "une seule entrée de lanceur");
         let m = manifest("1.2.3", 10_203, &parts(false, true));
         assert!(m.contains("android:hasCode=\"true\""));
         assert!(m.contains("android:name=\"android.app.NativeActivity\""));
@@ -469,7 +519,7 @@ mod tests {
         std::fs::write(pkg.join("ConnectionService.java"), "class X {}").unwrap();
         std::fs::write(pkg.join("Notes.txt"), "").unwrap();
         let j = JavaParts::scan(&dir);
-        assert!(j.has_code() && j.service && !j.activity);
+        assert!(j.has_code() && j.service && !j.activity && !j.restart);
         assert_eq!(j.sources.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -27,7 +27,7 @@ jobs:
     name: Étiquette et VERSION
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
       - name: L'étiquette correspond au fichier VERSION
@@ -44,7 +44,7 @@ jobs:
     needs: [verification]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
@@ -69,7 +69,7 @@ jobs:
     needs: [verification]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
@@ -101,7 +101,7 @@ jobs:
     # Fedora 36+, Mint 21+ (bibliothèque C du système).
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
       - uses: dtolnay/rust-toolchain@stable
@@ -147,7 +147,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4
@@ -184,7 +184,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v4

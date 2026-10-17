@@ -60,6 +60,8 @@ pub(crate) enum Out {
     Line(PendingLine),
     Effect(Effect),
     Send(ConnId, String),
+    /// CTCP DCC reçu, traité si aucun script ne l'a arrêté (voir `dcc.rs`).
+    Dcc(Box<super::dcc::DccIncoming>),
 }
 
 /// Une ligne à ajouter à une fenêtre.
@@ -247,6 +249,8 @@ pub(crate) struct State {
     pub scripts_fp: u64,
     /// Nonce SCRAM imposé (tests).
     pub scram_nonce: Option<String>,
+    /// Transferts et discussions DCC (voir `dcc.rs`).
+    pub dcc: super::dcc::DccState,
 }
 
 impl State {
@@ -376,6 +380,9 @@ impl State {
             self.logger.close(&p, &date);
         }
         let w = self.windows.remove(i);
+        if w.kind == WinKind::DccChat {
+            self.dcc_window_removed(win);
+        }
         self.chanlists.remove(&win);
         self.log_off.remove(&win);
         for c in self.conns.values_mut() {

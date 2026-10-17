@@ -143,6 +143,10 @@ impl App {
     }
 
     fn after_events(&mut self, el: &ActiveEventLoop) {
+        // Fichiers choisis dans la boîte du système.
+        for (request, path) in std::mem::take(&mut self.plat.picked) {
+            self.shell.file_picked(request, path, &mut self.plat);
+        }
         #[cfg(target_os = "macos")]
         {
             let ids: Vec<u32> = self.menus.as_ref().map(|m| m.poll()).unwrap_or_default();
@@ -286,7 +290,8 @@ impl ApplicationHandler<UserEvent> for App {
                 Ime::Commit(text) => self.send(Input::Text(text)),
                 Ime::Enabled | Ime::Disabled => {}
             },
-            WindowEvent::DroppedFile(_) => {}
+            // Fichier lâché : envoyé par DCC au pseudo du privé actif (sinon boîte « Envoyer un fichier »).
+            WindowEvent::DroppedFile(path) => self.shell.file_dropped(path, &mut self.plat),
             _ => {}
         }
         self.after_events(el);

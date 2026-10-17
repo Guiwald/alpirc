@@ -9,7 +9,8 @@ description = "Couche réseau d'AlpIRC : connexions TCP et TLS (client et serveu
 [dependencies]
 log.workspace = true
 base64.workspace = true
-tokio.workspace = true
+# `fs` : fichiers des transferts DCC.
+tokio = { workspace = true, features = ["fs"] }
 # rustls avec la cryptographie graviola (Rust et assembleur vérifié, sans C ; ADR 0003).
 rustls.workspace = true
 rustls-graviola.workspace = true

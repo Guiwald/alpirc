@@ -19,6 +19,7 @@
 
 mod cert;
 mod conn;
+mod dcc;
 mod tls;
 
 use std::collections::HashMap;
@@ -32,6 +33,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
 pub use cert::generate_self_signed;
+pub use dcc::DccJob;
 pub use tls::fingerprint;
 
 /// Longueur maximale d'une ligne reçue (sans CR/LF) ; au-delà, la ligne est tronquée.
@@ -136,6 +138,16 @@ pub enum NetEvent {
     Accepted { listener: u32, conn: u32, peer: SocketAddr, tls: bool },
     /// Côté serveur : l'écoute s'est arrêtée, sur erreur (`Some`) ou par [`Net::stop_listener`] (`None`).
     ListenerClosed { listener: u32, error: Option<String> },
+    /// DCC : la connexion directe `id` est établie (sortante, ou pair accepté par [`Net::dcc_listen`]).
+    DccConnected { id: u32, peer: SocketAddr },
+    /// DCC CHAT : une ligne reçue, sans CR/LF (octets bruts).
+    DccLine { id: u32, bytes: Vec<u8> },
+    /// DCC SEND/GET : position atteinte (accusée par le destinataire, ou reçue et écrite), départ compris ;
+    /// 5 fois par seconde au plus.
+    DccProgress { id: u32, bytes: u64 },
+    /// DCC : fin, toujours exactement une par identifiant : `error` vaut `None` pour un transfert complet ou
+    /// une discussion terminée normalement ; `bytes` : position finale.
+    DccEnded { id: u32, bytes: u64, error: Option<String> },
 }
 
 impl NetEvent {
@@ -148,6 +160,8 @@ impl NetEvent {
             | NetEvent::Failed { conn, .. }
             | NetEvent::Accepted { conn, .. } => Some(*conn),
             NetEvent::ListenerClosed { .. } => None,
+            // Les identifiants DCC sont à part (voir `Net::dcc_listen`).
+            NetEvent::DccConnected { .. } | NetEvent::DccLine { .. } | NetEvent::DccProgress { .. } | NetEvent::DccEnded { .. } => None,
         }
     }
 }
@@ -224,6 +238,8 @@ pub(crate) struct Inner {
     notify: Notify,
     pub(crate) conns: Mutex<HashMap<u32, ConnEntry>>,
     listeners: Mutex<HashMap<u32, ListenerEntry>>,
+    /// Connexions DCC (identifiants à part).
+    pub(crate) dcc: Mutex<HashMap<u32, dcc::DccEntry>>,
     next_accepted: AtomicU32,
     next_generation: AtomicU64,
     /// Arrêt commencé : plus de nouvelle connexion ni d'écoute.
@@ -324,6 +340,7 @@ impl Net {
             notify,
             conns: Mutex::new(HashMap::new()),
             listeners: Mutex::new(HashMap::new()),
+            dcc: Mutex::new(HashMap::new()),
             next_accepted: AtomicU32::new(FIRST_ACCEPTED_ID),
             next_generation: AtomicU64::new(1),
             stopping: AtomicBool::new(false),
@@ -434,13 +451,14 @@ impl Net {
         for l in &listeners {
             l.stop.send_replace(true);
         }
-        let tasks: Vec<JoinHandle<()>> = lock(&inner.conns)
+        let mut tasks: Vec<JoinHandle<()>> = lock(&inner.conns)
             .values_mut()
             .filter_map(|e| {
                 e.request_close();
                 e.task.take()
             })
             .collect();
+        tasks.extend(dcc::cancel_all(inner));
         let (tx, rx) = std::sync::mpsc::channel();
         inner.handle.spawn(async move {
             for t in tasks {

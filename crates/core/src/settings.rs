@@ -35,6 +35,7 @@ pub struct Settings {
     pub notifications: NotificationOptions,
     pub scripts: ScriptOptions,
     pub address_book: AddressBook,
+    pub dcc: DccOptions,
 }
 
 impl Default for Settings {
@@ -66,6 +67,7 @@ impl Default for Settings {
             notifications: NotificationOptions::default(),
             scripts: ScriptOptions::default(),
             address_book: AddressBook::default(),
+            dcc: DccOptions::default(),
         }
     }
 }
@@ -765,6 +767,87 @@ pub struct AddressBook {
     pub notify: Vec<NotifyEntry>,
     pub ignore: Vec<IgnoreEntry>,
     pub control: Vec<ControlEntry>,
+}
+
+/// Que faire d'une offre d'envoi de fichier (DCC SEND) reçue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum DccSendAction {
+    /// Demander (par défaut).
+    #[default]
+    Ask,
+    /// Accepter tout seul, sauf les fichiers dangereux (exécutables, scripts…), toujours demandés.
+    AutoGet,
+    /// Ignorer sans rien demander.
+    Ignore,
+}
+
+/// Que faire d'une demande de discussion (DCC CHAT) reçue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum DccChatAction {
+    #[default]
+    Ask,
+    AutoAccept,
+    Ignore,
+}
+
+/// Que faire quand le fichier reçu existe déjà.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum DccExists {
+    /// Demander (reprendre, écraser ou renommer).
+    #[default]
+    Ask,
+    /// Reprendre là où le fichier s'arrête (DCC RESUME).
+    Resume,
+    Overwrite,
+    /// Garder les deux : `nom (1).ext`.
+    Rename,
+}
+
+/// DCC : envois et réceptions de fichiers, discussions directes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DccOptions {
+    pub on_send: DccSendAction,
+    pub on_chat: DccChatAction,
+    /// Dossier des fichiers reçus ; `None` : `Téléchargements/AlpIRC` (selon le système), sinon
+    /// `<données>/downloads`.
+    pub folder: Option<PathBuf>,
+    /// Nos envois en DCC passif (c'est l'autre qui écoute) : marche derrière une box.
+    pub passive: bool,
+    /// Nos demandes de discussion en DCC passif (moins de clients savent y répondre).
+    pub passive_chat: bool,
+    /// Ports d'écoute (0 et 0 : choisi par le système).
+    pub port_min: u16,
+    pub port_max: u16,
+    /// Taille des blocs envoyés (octets).
+    pub packet_size: u32,
+    pub on_exists: DccExists,
+    /// Délai d'attente d'une réponse, d'une connexion, ou de données pendant un transfert (secondes).
+    pub timeout_secs: u64,
+    /// Adresse IP annoncée dans nos offres (adresse publique derrière une box) ; `None` : celle vue par le
+    /// serveur si elle est publique, sinon l'adresse locale de la connexion.
+    pub own_ip: Option<String>,
+}
+
+impl Default for DccOptions {
+    fn default() -> DccOptions {
+        DccOptions {
+            on_send: DccSendAction::Ask,
+            on_chat: DccChatAction::Ask,
+            folder: None,
+            passive: true,
+            passive_chat: false,
+            port_min: 0,
+            port_max: 0,
+            packet_size: 16 * 1024,
+            on_exists: DccExists::Ask,
+            timeout_secs: 120,
+            own_ip: None,
+        }
+    }
 }
 
 /// Erreur d'écriture des réglages.

@@ -1,8 +1,33 @@
 [package]
 name = "alpirc-relay"
 version.workspace = true
+description = "Relais (bouncer) IRC d'AlpIRC : connexions permanentes aux réseaux, historique, plusieurs appareils sur la même session"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "alpirc-relay"
+path = "src/main.rs"
+
 [dependencies]
+alpirc-proto.workspace = true
+alpirc-core.workspace = true
+alpirc-net.workspace = true
+log.workspace = true
+env_logger.workspace = true
+serde.workspace = true
+toml.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+# Édition du fichier de réglages en gardant ses commentaires (`--add-user`, `--passwd`).
+toml_edit = "0.25"
+# Historique (une ligne JSON par message) et état des réseaux.
+serde_json = "1"
+# Empreintes des mots de passe (argon2id), Rust pur (RustCrypto).
+argon2 = { version = "0.5", default-features = false, features = ["alloc", "password-hash"] }
+# Signaux SIGTERM/SIGINT pour un arrêt propre (le reste du réseau passe par alpirc-net).
+tokio = { workspace = true, features = ["signal"] }

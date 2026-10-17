@@ -154,6 +154,12 @@ impl Canvas {
         self.scale
     }
 
+    /// Change l'échelle sans toucher aux pixels, pour dessiner une couche à une autre échelle (boîtes de
+    /// dialogue réduites à la largeur d'un téléphone) ; les découpes en cours, physiques, restent valables.
+    pub fn set_scale(&mut self, scale: f32) {
+        self.scale = scale.max(0.25);
+    }
+
     /// Taille logique (pixels physiques divisés par l'échelle).
     pub fn logical_size(&self) -> Size {
         Size::new((self.width as f32 / self.scale).floor() as i32, (self.height as f32 / self.scale).floor() as i32)

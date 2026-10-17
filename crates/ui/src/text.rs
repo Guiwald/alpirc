@@ -492,6 +492,16 @@ impl Fonts {
         inner.refresh_families();
     }
 
+    /// Ajoute des fichiers de polices comme polices de repli, lus à la demande (pas gardés en mémoire) : pour
+    /// les systèmes que [`Fonts::load_system_fallbacks`] ne connaît pas (Android : `/system/fonts`). Renvoie le
+    /// nombre de fichiers lus.
+    pub fn load_font_files(&self, paths: &[std::path::PathBuf]) -> usize {
+        let mut inner = self.inner.borrow_mut();
+        let n = paths.iter().filter(|p| inner.fs.db_mut().load_font_file(p).is_ok()).count();
+        inner.refresh_families();
+        n
+    }
+
     /// Ajoute une police (fichier TTF/OTF en mémoire), utilisable par son nom de famille dans
     /// [`Fonts::set_spec`] ou comme repli. Renvoie son nom de famille.
     pub fn load_font_data(&self, data: Vec<u8>) -> Option<String> {

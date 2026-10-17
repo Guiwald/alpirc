@@ -1,9 +1,36 @@
 [package]
 name = "alpirc-android"
 version.workspace = true
+description = "AlpIRC pour Android (Pixel 8) : la disposition du téléphone au toucher, et son simulateur sur ordinateur"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 publish = false
 
+# `libalpirc.so` pour l'APK (cargo xtask apk) ; `rlib` pour le simulateur de téléphone.
+[lib]
+name = "alpirc"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "phone-sim"
+path = "src/bin/phone_sim.rs"
+
 [dependencies]
+alpirc-core.workspace = true
+alpirc-net.workspace = true
+alpirc-shell.workspace = true
+alpirc-ui.workspace = true
+log.workspace = true
+winit = "0.30"
+softbuffer = "0.4"
+
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { version = "0.30", features = ["android-native-activity"] }
+android_logger = "0.15"
+jni = "0.21"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+env_logger.workspace = true
+sys-locale = "0.3"

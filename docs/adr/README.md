@@ -19,3 +19,4 @@ grilling par lots du 17/10/2026.
 | [0011](0011-depot-ci-environnement.md) | Dépôt public, CI, publication et environnement de travail | acceptée |
 | [0012](0012-langues-et-encodages.md) | Langues de l'interface et encodages | acceptée |
 | [0013](0013-nom-alpirc.md) | Le client s'appelle AlpIRC | acceptée |
+| [0014](0014-relais-realisation.md) | Réalisation du relais (`alpirc-relay`) | acceptée |

@@ -322,7 +322,7 @@ fn refused_and_unavailable_commands() {
     h.input(w, "/run calc.exe");
     assert!(h.last(w).starts_with("* /run"), "{}", h.last(w));
     h.input(w, "/dcc send Bob x.txt");
-    assert_eq!(h.last(w), "* DCC is not available yet");
+    assert_eq!(h.last(w), "* /dcc send: no such file: x.txt");
     h.input(w, "/dns example.org");
     assert_eq!(h.last(w), "* /dns is not supported by AlpIRC");
     assert!(h.sends().is_empty());

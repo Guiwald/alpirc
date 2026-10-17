@@ -48,6 +48,8 @@ pub enum ControlKind {
     ListView,
     Tree,
     Progress,
+    /// Pastille de couleur cliquable (texte : la couleur, `#RRGGBB`) ; « cochée » = choisie.
+    Swatch,
 }
 
 /// Description d'un contrôle.
@@ -189,6 +191,7 @@ pub enum Widget {
     ListView(ListView),
     Tree(TreeView),
     Progress(ProgressBar),
+    Swatch(Swatch),
 }
 
 /// Un contrôle de la boîte.
@@ -359,6 +362,7 @@ impl DialogView {
                 ControlKind::Progress => {
                     Widget::Progress(ProgressBar { smooth: cs.has("smooth"), ..ProgressBar::default() })
                 }
+                ControlKind::Swatch => Widget::Swatch(Swatch::new(Swatch::parse_hex(&cs.text).unwrap_or(0))),
                 ControlKind::TextArea => unreachable!(),
             };
             // Liste déroulante : comme en mSL, la hauteur donnée comprend la liste ouverte.
@@ -548,6 +552,7 @@ impl DialogView {
                 Widget::TextArea(x) => x.focused = on,
                 Widget::ListView(x) => x.focused = on,
                 Widget::Tree(x) => x.focused = on,
+                Widget::Swatch(x) => x.focused = on,
                 _ => {}
             }
         }
@@ -612,6 +617,7 @@ impl DialogView {
             Widget::Combo(x) => x.text(),
             Widget::Link(x) => x.text.clone(),
             Widget::TextArea(x) => x.text().to_string(),
+            Widget::Swatch(x) => Swatch::hex(x.color),
             Widget::TabPage => {
                 let s = self.strip.as_ref()?;
                 let k = s.pages.iter().position(|&p| p == id)?;
@@ -634,6 +640,11 @@ impl DialogView {
             Widget::Combo(x) => x.edit.set_text(text),
             Widget::Link(x) => x.text = text.to_string(),
             Widget::TextArea(x) => x.set_text(text),
+            Widget::Swatch(x) => {
+                if let Some(c) = Swatch::parse_hex(text) {
+                    x.color = c;
+                }
+            }
             Widget::TabPage => {
                 if let Some(s) = self.strip.as_mut() {
                     if let Some(k) = s.pages.iter().position(|&p| p == id) {
@@ -739,6 +750,7 @@ impl DialogView {
             Widget::Check(c) => c.checked,
             Widget::Radio(r) => r.checked,
             Widget::Button(b) => b.toggled,
+            Widget::Swatch(s) => s.selected,
             _ => false,
         })
     }
@@ -758,6 +770,7 @@ impl DialogView {
             Widget::Check(c) => c.checked = on,
             Widget::Radio(r) => r.checked = on,
             Widget::Button(b) => b.toggled = on,
+            Widget::Swatch(s) => s.selected = on,
             _ => {}
         }
     }
@@ -813,6 +826,41 @@ impl DialogView {
     pub fn widget_mut(&mut self, id: u32) -> Option<&mut Widget> {
         let i = self.index(id)?;
         Some(&mut self.controls[i].widget)
+    }
+
+    /// Accès en lecture au widget.
+    pub fn widget(&self, id: u32) -> Option<&Widget> {
+        let i = self.index(id)?;
+        Some(&self.controls[i].widget)
+    }
+
+    /// Remplace les colonnes d'une liste à colonnes : (titre, largeur en pixels).
+    pub fn set_columns<S: AsRef<str>>(&mut self, id: u32, cols: &[(S, i32)]) {
+        if let Some(Widget::ListView(lv)) = self.widget_mut(id) {
+            lv.columns = cols.iter().map(|(t, w)| Column::new(t.as_ref(), *w)).collect();
+        }
+    }
+
+    /// Remplace les nœuds d'un arbre (avec leurs enfants).
+    pub fn set_tree(&mut self, id: u32, roots: Vec<TreeNode>) {
+        if let Some(Widget::Tree(t)) = self.widget_mut(id) {
+            t.roots = roots;
+        }
+    }
+
+    /// Ligne et colonne du curseur d'une zone de texte (à partir de 0).
+    pub fn caret_line_col(&self, id: u32) -> Option<(usize, usize)> {
+        match self.widget(id)? {
+            Widget::TextArea(t) => Some(t.caret_line_col()),
+            _ => None,
+        }
+    }
+
+    /// Déplace ou redimensionne un contrôle (pixels, relatif à la zone cliente).
+    pub fn set_rect(&mut self, id: u32, r: Rect) {
+        if let Some(i) = self.index(id) {
+            self.controls[i].rect = r;
+        }
     }
 
     // --- Dessin ---
@@ -916,6 +964,11 @@ impl DialogView {
                         w.paint(canvas, res, r)
                     }
                     Widget::Progress(w) => w.paint(canvas, res, r),
+                    Widget::Swatch(w) => {
+                        let mut w = w.clone();
+                        w.enabled = c.enabled;
+                        w.paint(canvas, res, r)
+                    }
                 }
             }
         });
@@ -978,8 +1031,14 @@ impl DialogView {
                 Some(DialogMsg::Changed(id))
             }
             Widget::TextArea(w) => {
-                w.event(input, r, res, platform)?;
-                Some(DialogMsg::Changed(id))
+                // Texte modifié : `Changed` ; curseur ou sélection déplacés seulement : `SelectionChanged`
+                // (pour afficher la ligne et la colonne).
+                let before = (w.core.caret(), w.core.anchor());
+                match w.event(input, r, res, platform) {
+                    Some(_) => Some(DialogMsg::Changed(id)),
+                    None if (w.core.caret(), w.core.anchor()) != before => Some(DialogMsg::SelectionChanged(id)),
+                    None => None,
+                }
             }
             Widget::ListView(w) => match w.event(input, r, res, platform)? {
                 ListViewMsg::SelectionChanged => Some(DialogMsg::SelectionChanged(id)),
@@ -991,6 +1050,10 @@ impl DialogView {
                 TreeViewMsg::Selected(_) => Some(DialogMsg::SelectionChanged(id)),
                 TreeViewMsg::Activated(_) => Some(DialogMsg::DoubleClicked(id)),
                 _ => None,
+            },
+            Widget::Swatch(w) => match w.event(input, r, res, platform)? {
+                SwatchMsg::Clicked => Some(DialogMsg::Clicked(id)),
+                SwatchMsg::DoubleClicked => Some(DialogMsg::DoubleClicked(id)),
             },
             _ => None,
         }
@@ -1459,5 +1522,42 @@ mod tests {
         assert_eq!(stack.event(&Input::key(Key::Escape, Mods::NONE), &res, &mut p, b), Some((2, DialogMsg::Cancel)));
         stack.pop();
         assert!(stack.dialogs[0].1.active);
+    }
+
+    #[test]
+    fn swatch_columns_and_caret() {
+        use ControlKind::*;
+        let res = crate::test_res();
+        let mut p = TestPlatform::new();
+        let spec = DialogSpec {
+            title: "Couleurs".into(),
+            width: 300,
+            height: 200,
+            units: DialogUnits::Px,
+            controls: vec![
+                ControlSpec::new(1, Swatch, (8, 8, 24, 24), "#FF0000"),
+                ControlSpec::new(2, ListView, (40, 8, 200, 80), "A\tB"),
+                ControlSpec::new(3, TextArea, (8, 100, 280, 80), "ab\ncd"),
+            ],
+        };
+        let mut d = DialogView::new(&spec, &res);
+        let b = Rect::new(0, 0, 800, 600);
+        d.center_in(b);
+        assert_eq!(d.text(1).as_deref(), Some("#FF0000"));
+        d.set_text(1, "#00FF00");
+        d.set_checked(1, true);
+        assert!(d.checked(1));
+        let r = d.control_rect(1).unwrap();
+        assert_eq!(d.event(&Input::click(r.x + 5, r.y + 5), &res, &mut p, b), Some(DialogMsg::Clicked(1)));
+        d.set_columns(2, &[("Masque", 120), ("Date", 60)]);
+        match d.widget(2) {
+            Some(Widget::ListView(lv)) => assert_eq!(lv.columns[0].width, 120),
+            _ => panic!(),
+        }
+        // Déplacer le curseur sans changer le texte : SelectionChanged.
+        d.set_focus(3);
+        assert_eq!(d.event(&Input::key(Key::Down, Mods::NONE), &res, &mut p, b), Some(DialogMsg::SelectionChanged(3)));
+        assert_eq!(d.caret_line_col(3), Some((1, 0)));
+        assert_eq!(d.event(&Input::key(Key::Char('x'), Mods::NONE), &res, &mut p, b), Some(DialogMsg::Changed(3)));
     }
 }

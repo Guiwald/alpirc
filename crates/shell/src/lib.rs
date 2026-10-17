@@ -63,6 +63,20 @@ pub trait ShellPlatform: Platform {
     fn downloads_dir(&self) -> Option<PathBuf> {
         None
     }
+    /// Ouvre un dossier ou un fichier local dans le gestionnaire de fichiers du système (fenêtre des
+    /// transferts DCC). Par défaut : rien.
+    fn open_path(&mut self, path: &Path) {
+        let _ = path;
+    }
+    /// Téléphone : taille de l'interface (pixels physiques par pixel logique), si la plateforme permet de la
+    /// changer ; le menu ⋮ propose alors « Taille de l'affichage ». Par défaut : non.
+    fn ui_scale(&self) -> Option<f32> {
+        None
+    }
+    /// Téléphone : nouvelle taille de l'interface choisie dans le menu (la plateforme l'enregistre).
+    fn set_ui_scale(&mut self, scale: f32) {
+        let _ = scale;
+    }
 }
 
 /// Disposition générale.
@@ -128,6 +142,8 @@ pub struct Shell {
     commands_tree: Vec<alpirc_script::MenuItem>,
     /// Canaux à rejoindre dès qu'une connexion est prête (liens `irc://`).
     pending_joins: Vec<(alpirc_core::ConnId, Vec<String>)>,
+    /// DCC : adresses locales, fichiers demandés à la plateforme (voir `dcc.rs`).
+    pub(crate) dcc: dcc::DccShell,
 }
 
 /// Paramètres de démarrage.
@@ -184,6 +200,7 @@ impl Shell {
             theme_name: String::new(),
             pending_joins: Vec::new(),
             commands_tree: Vec::new(),
+            dcc: Default::default(),
         };
         shell.apply_settings();
         shell.build_toolbar();
@@ -194,6 +211,7 @@ impl Shell {
     pub fn start(&mut self, p: &mut dyn ShellPlatform) {
         self.native_menus = p.native_menubar();
         let now = p.now_ms();
+        self.client.set_downloads_dir(p.downloads_dir());
         self.client.run_pending_scripts(now);
         self.client.connect_startup(now);
         self.after(p);
@@ -228,10 +246,17 @@ impl Shell {
         let name = s.display.theme.clone();
         if name != self.theme_name {
             self.theme_name = name.clone();
-            self.res.theme = Theme::named(&name).unwrap_or_else(Theme::classic);
         }
-        if self.res.theme.name == "classic" {
-            self.res.theme.palette = s.display.palette;
+        self.res.theme = Theme::named(&name).unwrap_or_else(Theme::classic);
+        // Palette et couleurs des réglages (boîte Couleurs) : toujours en classique ; avec le thème sombre,
+        // seulement si elles ont été changées (sinon la palette inversée du thème sombre).
+        let custom = s.display.palette != alpirc_core::settings::MIRC_PALETTE || s.display.colors != alpirc_core::settings::EventColors::default();
+        if name != "dark" || custom {
+            let (c, th) = (&s.display.colors, &mut self.res.theme);
+            th.palette = s.display.palette;
+            (th.chat_bg, th.chat_fg) = (c.background, c.normal);
+            (th.nicklist_bg, th.nicklist_fg) = (c.listbox_bg, c.listbox_text);
+            (th.editbox_bg, th.editbox_fg) = (c.editbox_bg, c.editbox_text);
         }
         let zoom = (s.display.chat_font_size / 16).clamp(1, 4);
         self.res.fonts.set_chat_zoom(zoom);
@@ -291,10 +316,17 @@ impl Shell {
     pub fn on_net(&mut self, ev: NetEvent, p: &mut dyn ShellPlatform) {
         let now = p.now_ms();
         match ev {
-            NetEvent::Connected { conn, .. } => self.client.on_connected(conn, now),
+            NetEvent::Connected { conn, local, .. } => {
+                self.dcc_conn_local(conn, local);
+                self.client.on_connected(conn, now)
+            }
             NetEvent::Line { conn, bytes } => self.client.on_line(conn, &bytes, now),
             NetEvent::Closed { conn, error } => self.client.on_closed(conn, error.as_deref(), now),
             NetEvent::Failed { conn, error, cert_sha256 } => {
+                // Certificat refusé : boîte « faire confiance » (avant que le moteur passe au serveur suivant).
+                if let Some(fp) = &cert_sha256 {
+                    self.cert_failed(conn, &error, fp, p);
+                }
                 let msg = match cert_sha256 {
                     Some(fp) => format!("{error} [SHA-256 {fp}]"),
                     None => error,
@@ -302,6 +334,9 @@ impl Shell {
                 self.client.on_connect_failed(conn, &msg, now)
             }
             NetEvent::Accepted { .. } | NetEvent::ListenerClosed { .. } => {}
+            ev @ (NetEvent::DccConnected { .. } | NetEvent::DccLine { .. } | NetEvent::DccProgress { .. } | NetEvent::DccEnded { .. }) => {
+                self.dcc_net(ev, now)
+            }
         }
         self.after(p);
     }
@@ -316,6 +351,7 @@ impl Shell {
 
     /// Après toute action : effets du moteur, fenêtres, boîtes, titre.
     fn after(&mut self, p: &mut dyn ShellPlatform) {
+        self.dcc_after(p);
         for _ in 0..8 {
             let effects = self.client.take_effects();
             if effects.is_empty() {
@@ -392,6 +428,14 @@ impl Shell {
             Effect::OpenDialog(d) => self.open_ui_dialog(d, p),
             Effect::Exit => self.exit_now(p),
             Effect::ScriptDialogsChanged => self.sync_script_dialogs(p),
+            e @ (Effect::DccListen { .. }
+            | Effect::DccConnect { .. }
+            | Effect::DccResume { .. }
+            | Effect::DccChatSend { .. }
+            | Effect::DccClose { .. }
+            | Effect::DccPrompt(_)
+            | Effect::DccPickFile { .. }
+            | Effect::DccWindow(_)) => self.dcc_effect(e, p),
         }
         self.menubar_dirty = true;
     }
@@ -711,10 +755,7 @@ impl Shell {
                     self.client.command(w, "/notify", now);
                 }
             }
-            ids::DCC_SEND | ids::DCC_CHAT | ids::TRANSFERS => {
-                let mb = dialogs::coming_soon(lang, "DCC");
-                self.open_dialog(Box::new(mb), p);
-            }
+            ids::DCC_SEND | ids::DCC_CHAT | ids::TRANSFERS => self.dcc_menu(id, p),
             ids::LOGS => {
                 let mb = dialogs::coming_soon(lang, &t(lang, "tools.logs"));
                 self.open_dialog(Box::new(mb), p);
@@ -889,6 +930,8 @@ impl Shell {
                 Action::SettingsChanged => self.settings_changed(p),
                 Action::OpenUrl(u) => p.open_url(&u),
                 Action::Exit => self.exit_now(p),
+                Action::JoinFavorite(f) => self.join_favorite(&f, now),
+                Action::PickFile { kind, save, suggested } => p.pick_file(dialogs::pick_request(&kind), save, suggested.as_deref()),
             }
         }
     }
@@ -937,7 +980,11 @@ impl Shell {
 
     /// Réponse de la plateforme à [`ShellPlatform::pick_file`].
     pub fn file_picked(&mut self, request: u64, path: Option<PathBuf>, p: &mut dyn ShellPlatform) {
-        let _ = (request, path);
+        if dcc::is_dcc_pick(request) {
+            self.dcc_file_picked(request, path, p);
+        } else if dialogs::is_pick_request(request) {
+            self.dialog_file_picked(request, path, p);
+        }
         self.after(p);
     }
 

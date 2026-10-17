@@ -1309,15 +1309,8 @@ impl super::state::State {
         ev.text = params.to_string();
         let mut p = Pres::new().event(self.ctx(Some(conn), Some(win)), ev);
         if cmd == "DCC" {
-            let line = match crate::dcc::parse_offer(from, params) {
-                Some(crate::dcc::DccOffer { kind: crate::dcc::DccKind::Send { file, size }, .. }) => {
-                    let sz = size.map(crate::dcc::human_size).unwrap_or_else(|| "?".into());
-                    self.t(Key::DccSendOffer, &[("nick", from), ("file", &file), ("size", &sz)])
-                }
-                Some(crate::dcc::DccOffer { kind: crate::dcc::DccKind::Chat, .. }) => self.t(Key::DccChatOffer, &[("nick", from)]),
-                _ => format!("[{from} DCC {params}]"),
-            };
-            p = p.line(self.line_at(win, LineKind::Ctcp, line, time));
+            // Offres et réponses DCC : voir `dcc.rs` (traitées après les scripts, sauf `/halt`).
+            p = self.dcc_ctcp(conn, from, addr, params, win, time, p);
             self.push_pres(p);
             return;
         }

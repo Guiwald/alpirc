@@ -43,6 +43,10 @@ cargo xtask licenses > licences.md
 
 (Elle suit `Cargo.lock` : dépendances normales et de compilation, toutes plateformes confondues.)
 
+Une seule crate est sous licence à réciprocité par fichier : `option-ext` (MPL-2.0, tirée par `directories`),
+utilisée sans modification ; son code source est celui publié sur crates.io. Quelques crates proposent une licence
+GPL/LGPL **au choix** avec MIT ou Apache-2.0 (`r-efi`, `self_cell`) : AlpIRC les utilise sous MIT/Apache-2.0.
+
 ## Marques
 
 « mIRC » est une marque de mIRC Co. Ltd. AlpIRC n'est ni affilié à mIRC Co. Ltd., ni approuvé par elle ; mIRC est

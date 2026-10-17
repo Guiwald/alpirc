@@ -1,6 +1,7 @@
-//! Les services du système pour l'application : presse-papiers, pointeur, notifications, son, liens.
+//! Les services du système pour l'application : presse-papiers, pointeur, notifications, son, liens, choix de
+//! fichiers, dossier des téléchargements.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use alpirc_shell::ShellPlatform;
@@ -18,6 +19,8 @@ pub struct DesktopPlatform {
     pub ime_area: Option<Rect>,
     pub native_menus: bool,
     pub menus_changed: bool,
+    /// Fichiers choisis (`pick_file`), rendus au shell par la boucle d'événements (`Shell::file_picked`).
+    pub picked: Vec<(u64, Option<PathBuf>)>,
 }
 
 impl DesktopPlatform {
@@ -32,6 +35,7 @@ impl DesktopPlatform {
             ime_area: None,
             native_menus: cfg!(target_os = "macos"),
             menus_changed: true,
+            picked: Vec::new(),
         }
     }
 }
@@ -162,5 +166,44 @@ impl ShellPlatform for DesktopPlatform {
 
     fn menus_changed(&mut self) {
         self.menus_changed = true;
+    }
+
+    /// Boîte de choix du système (bloquante, dans le fil de l'interface) ; la réponse attend dans `picked`.
+    fn pick_file(&mut self, request: u64, save: bool, suggested_name: Option<&str>) {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let path = {
+            let mut d = rfd::FileDialog::new();
+            if let Some(w) = &self.window {
+                d = d.set_parent(w.as_ref());
+            }
+            if let Some(n) = suggested_name {
+                d = d.set_file_name(n);
+            }
+            if save { d.save_file() } else { d.pick_file() }
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let path = {
+            let _ = (save, suggested_name);
+            None
+        };
+        self.picked.push((request, path));
+        self.repaint = true;
+    }
+
+    /// `Téléchargements/AlpIRC` (créé à la première réception).
+    fn downloads_dir(&self) -> Option<PathBuf> {
+        let dirs = directories::UserDirs::new()?;
+        dirs.download_dir().map(|d| d.join("AlpIRC"))
+    }
+
+    /// Ouvre un dossier (ou un fichier) dans le Finder ou le gestionnaire de fichiers.
+    fn open_path(&mut self, path: &Path) {
+        if !path.exists() {
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        let _ = std::process::Command::new("open").arg(path).spawn();
+        #[cfg(target_os = "linux")]
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
     }
 }

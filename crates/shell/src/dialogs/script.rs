@@ -55,13 +55,7 @@ impl ScriptDialog {
             })
             .collect();
         let (w, h) = (d.rect.2.max(40), d.rect.3.max(30));
-        let spec = DialogSpec {
-            title: d.title.clone(),
-            width: w,
-            height: h,
-            units: if d.dbu { DialogUnits::Dbu } else { DialogUnits::Px },
-            controls,
-        };
+        let spec = DialogSpec { title: d.title.clone(), width: w, height: h, units: if d.dbu { DialogUnits::Dbu } else { DialogUnits::Px }, controls };
         Some(ScriptDialog { name: d.name.clone(), synced_version: engine.dialogs_version(), spec })
     }
 
@@ -179,6 +173,18 @@ impl DialogCtl for ScriptDialog {
                 DialogEvent::Edit(id)
             }
             DialogMsg::SelectionChanged(id) => {
+                // Un champ multiligne signale aussi les déplacements du curseur : pas d'événement mSL pour ça.
+                let is_edit = cx
+                    .client
+                    .engine()
+                    .dialogs()
+                    .iter()
+                    .find(|d| d.name.eq_ignore_ascii_case(&self.name))
+                    .and_then(|d| d.controls.iter().find(|c| c.id == id))
+                    .is_some_and(|c| c.kind == SK::Edit);
+                if is_edit {
+                    return Outcome::Keep;
+                }
                 self.push(id, view, cx.client.engine_mut());
                 DialogEvent::Select(id)
             }
@@ -188,7 +194,8 @@ impl DialogCtl for ScriptDialog {
             }
             DialogMsg::Ok(id) => {
                 // Les champs n'envoient pas toujours « Changed » : on recopie tout avant de valider.
-                let ids: Vec<u32> = cx.client.engine().dialogs().iter().find(|d| d.name == self.name).map(|d| d.controls.iter().map(|c| c.id).collect()).unwrap_or_default();
+                let ids: Vec<u32> =
+                    cx.client.engine().dialogs().iter().find(|d| d.name == self.name).map(|d| d.controls.iter().map(|c| c.id).collect()).unwrap_or_default();
                 for cid in ids {
                     self.push(cid, view, cx.client.engine_mut());
                 }

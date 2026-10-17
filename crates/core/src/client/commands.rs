@@ -157,10 +157,7 @@ impl State {
                 let t = self.t(Key::NotOnChannel, &[]);
                 self.print(win, LineKind::Error, t);
             }
-            WinKind::DccChat => {
-                let t = self.t(Key::DccUnavailable, &[]);
-                self.print(win, LineKind::Error, t);
-            }
+            WinKind::DccChat => self.dcc_chat_say(win, text),
             _ => {}
         }
     }
@@ -274,6 +271,10 @@ impl State {
                 if target.is_empty() || text.is_empty() {
                     return Err(self.insufficient(&name));
                 }
+                if target.starts_with('=') {
+                    // `/msg =pseudo texte` : discussion DCC.
+                    return self.dcc_msg(conn, target, text);
+                }
                 let c = self.need_conn(conn)?;
                 for t in target.split(',').filter(|t| !t.is_empty()) {
                     self.say(c, t, text, false, false, quiet);
@@ -299,6 +300,7 @@ impl State {
                         let c = self.need_conn(w.conn)?;
                         self.say(c, &w.name, args, false, true, quiet);
                     }
+                    Some(w) if w.kind == WinKind::DccChat => self.dcc_chat_say(w.id, &ctcp::encode("ACTION", args)),
                     _ => return Err(self.t(Key::NotOnChannel, &[])),
                 }
             }
@@ -698,7 +700,7 @@ impl State {
             }
             "run" => return Err(self.t(Key::RunDisabled, &[])),
             "dns" => return Err(self.t(Key::DnsUnsupported, &[])),
-            "dcc" => return Err(self.t(Key::DccUnavailable, &[])),
+            "dcc" => self.cmd_dcc(conn, win, args)?,
             "log" => {
                 let (onoff, rest) = split_word(args);
                 let target = if rest.is_empty() { win } else { self.find_win(conn, rest).unwrap_or(win) };

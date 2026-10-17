@@ -9,8 +9,8 @@
 //! Le moteur ne touche ni aux sockets, ni aux fils, ni à l'interface : l'hôte lui passe ce qui arrive et applique
 //! les [`Effect`] qu'il rend. Tout ce qui dépend de l'heure reçoit `now_ms` (ms depuis 1970).
 //!
-//! Autour : [`settings`] (réglages TOML), [`i18n`] (sept langues), [`timeutil`] (dates), [`dcc`] (point
-//! d'extension du DCC).
+//! Autour : [`settings`] (réglages TOML), [`i18n`] (sept langues), [`timeutil`] (dates), [`dcc`] (protocole
+//! DCC : offres, noms de fichiers sûrs).
 
 pub mod client;
 pub mod dcc;
@@ -20,7 +20,8 @@ pub mod settings;
 pub mod timeutil;
 
 pub use client::{
-    Activity, CaughtUrl, ChanEntry, ChanList, Client, ConnId, ConnInfo, ConnState, Effect, Line, LineKind, NickEntry,
-    NotifyStatus, TlsVerify, UiDialog, WinId, WinKind, Window,
+    Activity, CaughtUrl, ChanEntry, ChanList, Client, ConnId, ConnInfo, ConnState, DccAnswer, DccId, DccPrompt, DccType,
+    DccUi, Effect, Line, LineKind, NickEntry, NotifyStatus, TlsVerify, Transfer, TransferState, UiDialog, WinId, WinKind,
+    Window,
 };
 pub use settings::Settings;
