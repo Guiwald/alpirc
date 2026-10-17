@@ -1,0 +1,20 @@
+[package]
+name = "alpirc-script"
+version.workspace = true
+description = "Moteur de scripts mSL d'AlpIRC (alias, popups, remotes, identifiants, timers, tables, dialogues), en bac à sable"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+alpirc-proto.workspace = true
+thiserror.workspace = true
+log.workspace = true
+base64.workspace = true
+sha2.workspace = true
+fancy-regex = "0.14"
+md-5 = "0.10"
+sha1 = "0.10"
+crc32fast = "1"
+getrandom.workspace = true
+time.workspace = true

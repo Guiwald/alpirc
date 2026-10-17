@@ -1,0 +1,5 @@
+/target
+/dist
+*.p12
+*.keystore
+.DS_Store
