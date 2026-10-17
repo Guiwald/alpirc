@@ -1,8 +1,18 @@
 [package]
 name = "alpirc-ui"
 version.workspace = true
+description = "Boîte à outils graphique d'AlpIRC : widgets façon Windows 98, MDI, vue de discussion, dessinés dans un tampon de pixels"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+alpirc-proto.workspace = true
+log.workspace = true
+serde.workspace = true
+png.workspace = true
+cosmic-text = { version = "0.19", default-features = false, features = ["std", "swash"] }
+swash = { version = "0.2", default-features = false, features = ["scale", "render", "std"] }
+unicode-segmentation = "1"
+
+[dev-dependencies]

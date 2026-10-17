@@ -1,0 +1,10 @@
+# Réglages du relais d'AlpIRC (alpirc-relay, ADR 0009) — installé dans /etc/alpirc-relay/relay.toml.
+# AlpIRC relay settings — installed as /etc/alpirc-relay/relay.toml.
+#
+# Ce fichier est lu au démarrage du service. Après une modification :
+#   sudo systemctl restart alpirc-relay
+# Il peut contenir des mots de passe : il n'est lisible que par root et par le relais (groupe alpirc-relay).
+# Une version modifiée ici est gardée lors des mises à jour du paquet.
+#
+# Les options sont décrites dans la documentation du relais (crates/relay du dépôt
+# https://github.com/Guiwald/alpirc). Les données (historique, certificats) vont dans /var/lib/alpirc-relay.

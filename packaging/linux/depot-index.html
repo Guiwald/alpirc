@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlpIRC — dépôt APT</title>
+<style>
+  :root { color-scheme: light dark; --bg: #e4eeee; --card: #fff; --ink: #14181c; --muted: #55606a; --accent: #007373; --code: #e3e9e9; --title-a: #000080; --title-b: #1084d0; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d1718; --card: #152224; --ink: #e4eeee; --muted: #93a6a8; --accent: #4fd8cc; --code: #1d2e30; --title-a: #000060; --title-b: #0b5e98; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 32px; }
+  h2 { margin: 0 -20px 12px; padding: 4px 20px; font-size: 16px; color: #fff; background: linear-gradient(90deg, var(--title-a), var(--title-b)); }
+  p.sub { color: var(--muted); margin-top: 0; }
+  pre { background: var(--code); padding: 12px 14px; border-radius: 4px; overflow-x: auto; font-size: 14px; }
+  code { overflow-wrap: anywhere; }
+  a { color: var(--accent); }
+  section { background: var(--card); padding: 0 20px 12px; margin-top: 20px; overflow: hidden; border: 1px solid rgba(0,0,0,.15); }
+</style>
+</head>
+<body>
+<main>
+  <h1>AlpIRC</h1>
+  <p class="sub">Dépôt APT pour Debian, Ubuntu et Mint — version actuelle : {VERSION} · APT repository for Debian, Ubuntu and Mint — current version: {VERSION}</p>
+
+  <section>
+    <h2>Le plus simple · The easy way</h2>
+    <p>Téléchargez le paquet <code>.deb</code> sur la <a href="https://github.com/Guiwald/alpirc/releases/latest">page des versions</a> et ouvrez-le : il ajoute ce dépôt, et les versions suivantes arrivent avec les mises à jour du système.</p>
+    <p>Download the <code>.deb</code> package from the <a href="https://github.com/Guiwald/alpirc/releases/latest">releases page</a> and open it: it adds this repository, so new versions arrive with your system updates.</p>
+  </section>
+
+  <section>
+    <h2>Avec apt · With apt</h2>
+<pre>sudo wget -qO /usr/share/keyrings/alpirc-archive-keyring.gpg https://guiwald.github.io/alpirc/apt/alpirc-archive-keyring.gpg
+printf 'Types: deb\nURIs: https://guiwald.github.io/alpirc/apt\nSuites: stable\nComponents: main\nArchitectures: amd64\nSigned-By: /usr/share/keyrings/alpirc-archive-keyring.gpg\n' | sudo tee /etc/apt/sources.list.d/alpirc.sources
+sudo apt update
+sudo apt install alpirc</pre>
+    <p>Pour le retirer · To remove it: <code>sudo apt remove alpirc</code></p>
+  </section>
+
+  <section>
+    <h2>Le relais (serveur, facultatif) · The relay (server, optional)</h2>
+    <p>Sur un serveur allumé en permanence, après les deux premières lignes ci-dessus · On an always-on server, after the first two lines above:</p>
+<pre>sudo apt update
+sudo apt install alpirc-relay
+sudo nano /etc/alpirc-relay/relay.toml
+sudo systemctl enable --now alpirc-relay</pre>
+  </section>
+
+  <p class="sub">AlpIRC est un logiciel libre (licence MIT) · free software (MIT license) — <a href="https://github.com/Guiwald/alpirc">github.com/Guiwald/alpirc</a></p>
+</main>
+</body>
+</html>

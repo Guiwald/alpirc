@@ -1,0 +1,82 @@
+# Compilation et tests à chaque envoi (ADR 0011) : tests Linux, compilation macOS, Android (APK de débogage) et
+# Linux (paquets d'essai).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  tests:
+    name: Tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Le son (cpal) se lie à ALSA ; X11 et Wayland sont chargés à l'exécution (winit, softbuffer) : rien à
+      # installer pour compiler.
+      - name: Bibliothèques du système (son)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - name: Tests
+        run: cargo test --workspace
+
+  macos:
+    name: Compilation (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compilation
+        run: cargo build --release -p alpirc
+      - name: AlpIRC.app et .dmg (essai)
+        run: ALPIRC_DIST="$RUNNER_TEMP/dist" cargo xtask bundle-mac target/release/alpirc
+
+  android:
+    name: Compilation (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: APK (clé de débogage)
+        run: ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" cargo xtask apk
+      # Pour l'essayer dans l'émulateur ou sur un téléphone, sans attendre une version.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-debogage
+          path: dist/*.apk
+          retention-days: 14
+
+  linux:
+    name: Compilation (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Bibliothèques du système (son)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - name: Compilation
+        run: cargo build --release -p alpirc
+      - name: Paquets (essai)
+        run: |
+          cargo xtask dist-linux target/release/alpirc
+          cargo xtask deb target/release/alpirc
+          dpkg-deb --info dist/alpirc_*_amd64.deb
+          dpkg-deb --contents dist/alpirc_*_amd64.deb

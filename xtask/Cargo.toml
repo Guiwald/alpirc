@@ -5,5 +5,15 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 publish = false
+description = "Outillage d'AlpIRC (cargo xtask) : versions, icônes, paquets macOS, Android et Linux, licences"
 
+# Aucune dépendance vers les autres crates de l'espace de travail : l'outillage doit compiler même quand elles
+# sont en chantier. Rien que du Rust (pas de bibliothèque C).
 [dependencies]
+png.workspace = true
+# APK : copie des entrées produites par aapt2, ajout de classes.dex et des bibliothèques.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# Paquets Linux (.tar.gz, .deb), fabriqués en Rust : ni dpkg-deb ni tar à installer.
+tar = "0.4"
+flate2 = "1"
+md-5 = "0.10"

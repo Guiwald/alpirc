@@ -4,5 +4,23 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+description = "Couche réseau d'AlpIRC : connexions TCP et TLS (client et serveur), sans C"
 
 [dependencies]
+log.workspace = true
+base64.workspace = true
+tokio.workspace = true
+# rustls avec la cryptographie graviola (Rust et assembleur vérifié, sans C ; ADR 0003).
+rustls.workspace = true
+rustls-graviola.workspace = true
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
+# graviola directement (déjà tiré par rustls-graviola) : clés ECDSA P-256, signature et SHA-256 pour
+# les certificats autosignés et les empreintes, sans pile cryptographique supplémentaire.
+graviola = "0.4"
+# Options de socket (keepalive, SO_REUSEADDR).
+socket2 = { version = "0.6", features = ["all"] }
+
+# Certificats racines du système (hors Android ; sur Android, lus dans les dossiers du système).
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rustls-native-certs = "0.8"

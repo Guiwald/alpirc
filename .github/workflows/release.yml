@@ -1,0 +1,209 @@
+# Publication d'une version : envoyer l'étiquette vX.Y.Z (ou lancer à la main en donnant l'étiquette).
+# Fabrique le .dmg (Mac universel), l'.apk signé, le .tar.gz et le .deb Linux (et le .deb du relais quand son
+# programme existe), les met sur la page de la version, et publie le dépôt APT signé sur GitHub Pages.
+# Secrets : ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, APT_SIGNING_KEY, APT_SIGNING_PASSPHRASE
+# (scripts/creer-cles.sh les crée, scripts/publier-sur-github.sh les range).
+name: Publication
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Étiquette de la version à publier (ex. v0.2.0)"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  verification:
+    name: Étiquette et VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: L'étiquette correspond au fichier VERSION
+        run: |
+          V="$(cat VERSION)"
+          if [ "${TAG#v}" != "$V" ]; then
+            echo "::error::L'étiquette $TAG ne correspond pas au fichier VERSION ($V)."
+            exit 1
+          fi
+          bash scripts/notes-de-version.sh "$V" > /dev/null
+
+  macos:
+    name: macOS (universel)
+    needs: [verification]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Compilation (Apple et Intel)
+        run: |
+          cargo build --release -p alpirc --target aarch64-apple-darwin
+          cargo build --release -p alpirc --target x86_64-apple-darwin
+          mkdir -p target/universal
+          lipo -create -output target/universal/alpirc \
+            target/aarch64-apple-darwin/release/alpirc target/x86_64-apple-darwin/release/alpirc
+      - name: Paquet
+        run: cargo xtask bundle-mac target/universal/alpirc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*.dmg
+
+  android:
+    name: Android
+    needs: [verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Clé de signature
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Les secrets ANDROID_KEYSTORE_B64 et ANDROID_KEYSTORE_PASSWORD manquent : l'APK doit être signé avec la clé d'AlpIRC (scripts/creer-cles.sh la crée, scripts/publier-sur-github.sh la range)."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/alpirc.p12"
+      - name: APK
+        env:
+          ALPIRC_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: ALPIRC_KEYSTORE="$RUNNER_TEMP/alpirc.p12" ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" cargo xtask apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*.apk
+
+  linux:
+    name: Linux
+    needs: [verification]
+    # Construit sur la plus ancienne Ubuntu visée : le programme marche ensuite sur Ubuntu 22.04+, Debian 12+,
+    # Fedora 36+, Mint 21+ (bibliothèque C du système).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bibliothèques du système (son)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - name: Compilation
+        run: cargo build --release -p alpirc
+      - name: Paquets (.tar.gz, .deb)
+        run: |
+          cargo xtask dist-linux target/release/alpirc
+          cargo xtask deb target/release/alpirc
+      # Le relais n'est livré que si son programme existe (paquet alpirc-relay avec un binaire alpirc-relay).
+      - name: Relais présent ?
+        id: relais
+        run: |
+          if cargo metadata --no-deps --format-version 1 | jq -e '.packages[] | select(.name == "alpirc-relay") | .targets[] | select(.name == "alpirc-relay" and (.kind | index("bin")))' > /dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pas encore de programme alpirc-relay : pas de paquet du relais pour cette version."
+          fi
+      - name: Paquet du relais
+        if: steps.relais.outputs.present == 'true'
+        run: |
+          cargo build --release -p alpirc-relay
+          cargo xtask deb-relay target/release/alpirc-relay
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+
+  apt:
+    name: Dépôt APT (GitHub Pages)
+    needs: [linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: linux
+      - name: Clé du dépôt
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: |
+          if [ -z "$APT_SIGNING_KEY" ] || [ -z "$APT_SIGNING_PASSPHRASE" ]; then
+            echo "::error::Les secrets APT_SIGNING_KEY et APT_SIGNING_PASSPHRASE manquent : le dépôt APT doit être signé avec la clé d'AlpIRC (scripts/creer-cles.sh la crée, scripts/publier-sur-github.sh la range)."
+            exit 1
+          fi
+          echo "$APT_SIGNING_KEY" | gpg --batch --import
+      - name: Dépôt
+        env:
+          APT_SIGNING_PASSPHRASE: ${{ secrets.APT_SIGNING_PASSPHRASE }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y apt-utils
+          bash scripts/depot-apt.sh linux site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  publication:
+    name: Page de la version
+    needs: [macos, android, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Notes de version (CHANGELOG en français, puis en anglais, puis l'installation)
+        run: bash scripts/notes-de-version.sh "${TAG#v}" > notes.md
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # Une version publiée ne change jamais : seuls les fichiers qui manquent sont ajoutés.
+            PRESENTS="$(gh release view "$TAG" --json assets -q '.assets[].name')"
+            for f in artifacts/*/*; do
+              if ! printf '%s\n' "$PRESENTS" | grep -qxF "$(basename "$f")"; then
+                gh release upload "$TAG" "$f"
+              fi
+            done
+          else
+            gh release create "$TAG" artifacts/*/* --title "AlpIRC ${TAG#v}" --notes-file notes.md
+          fi
