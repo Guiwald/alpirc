@@ -7,9 +7,18 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.9.0] - 2026-10-18
+
+> Mise en service : première version publiée, à installer telle quelle. Mac : ouvrir le `.dmg`, glisser AlpIRC
+> dans Applications ; au premier lancement, Réglages Système › Confidentialité et sécurité › « Ouvrir quand même »
+> (l'appli n'est pas signée par Apple, voir le README). Android : installer l'`.apk` (autoriser l'installation
+> depuis le navigateur ou le gestionnaire de fichiers). Linux : `sudo apt install ./alpirc_0.9.0_amd64.deb`, qui
+> ajoute aussi le dépôt APT pour les mises à jour. Version d'essai : tout le périmètre de la 1.0 est là, la 1.0
+> sortira après les essais sur Mac et sur téléphone.
+
 ### Ajouté
 - Socle : l'espace de travail Rust (protocole, cœur, réseau, scripts, interface, relais, applis de bureau et
-  Android) et les 13 décisions de départ (`docs/adr`), dont le nom, AlpIRC, et le périmètre de la 1.0.
+  Android) et les décisions de départ (`docs/adr`), dont le nom, AlpIRC, et le périmètre de la 1.0.
 - Protocole : lecture et écriture des lignes IRC (RFC 1459, RFC 2812) avec les étiquettes IRCv3, `ISUPPORT`, les
   modes, les numériques, les masques, CTCP, les codes de couleur de mIRC, l'UTF-8 avec repli Windows-1252, et
   SASL (PLAIN, EXTERNAL, SCRAM-SHA-256).

@@ -7,9 +7,17 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-18
+
+> Rollout: first published version, install as is. Mac: open the `.dmg`, drag AlpIRC into Applications; on first
+> launch, System Settings › Privacy & Security › "Open Anyway" (the app isn't signed by Apple, see the README).
+> Android: install the `.apk` (allow installing from your browser or file manager). Linux:
+> `sudo apt install ./alpirc_0.9.0_amd64.deb`, which also adds the APT repository for updates. Trial version:
+> everything planned for 1.0 is there; 1.0 ships after the trials on a Mac and a phone.
+
 ### Added
 - Foundation: the Rust workspace (protocol, core, network, scripts, interface, relay, desktop and Android apps)
-  and the 13 founding decisions (`docs/adr`), including the name, AlpIRC, and the scope of 1.0.
+  and the founding decisions (`docs/adr`), including the name, AlpIRC, and the scope of 1.0.
 - Protocol: reading and writing IRC lines (RFC 1459, RFC 2812) with IRCv3 tags, `ISUPPORT`, modes, numerics,
   masks, CTCP, mIRC colour codes, UTF-8 with a Windows-1252 fallback, and SASL (PLAIN, EXTERNAL, SCRAM-SHA-256).
 - Scripts: the mSL engine (`alpirc-script`), sandboxed: aliases, popups, remotes (`on TEXT`, `ctcp`, `raw`…),
