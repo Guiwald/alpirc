@@ -7,6 +7,13 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.10.0] - 2026-10-18
+
+> Mise en service : rien à faire de particulier, installer par-dessus la 0.9.0 (réglages conservés). Mac : ouvrir
+> le `.dmg` et remplacer AlpIRC dans Applications. Android : installer l'`.apk` par-dessus. Linux :
+> `sudo apt update && sudo apt upgrade` (ou le nouveau `.deb`). C'est la version à essayer sur le Pixel 8 : les
+> défauts trouvés dans l'émulateur Android y sont corrigés.
+
 ### Ajouté
 - Interface : Affichage › Thème liste aussi tes thèmes ; Alt+lettre choisit un onglet dans les boîtes ; le nom
   complet d'une fenêtre s'affiche en info-bulle quand son bouton de la switchbar est réduit.

@@ -7,6 +7,12 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-18
+
+> Rollout: nothing special to do, install over 0.9.0 (settings are kept). Mac: open the `.dmg` and replace AlpIRC
+> in Applications. Android: install the `.apk` over the old one. Linux: `sudo apt update && sudo apt upgrade` (or
+> the new `.deb`). This is the version to try on the Pixel 8: the defects found in the Android emulator are fixed.
+
 ### Added
 - Interface: View › Theme also lists your own themes; Alt+letter picks a tab in dialogs; a window's full name
   shows in a tooltip when its switchbar button is shortened.
