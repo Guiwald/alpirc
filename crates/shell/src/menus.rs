@@ -46,6 +46,8 @@ pub mod ids {
     pub const ARRANGE: u32 = 53;
     pub const NEXT: u32 = 54;
     pub const CLOSE: u32 = 55;
+    /// Agrandir ou rétablir la fenêtre active (Alt+X, sans entrée de menu).
+    pub const TOGGLE_MAX: u32 = 56;
     pub const HELP: u32 = 60;
     pub const ABOUT: u32 = 61;
     /// Favoris : `FAV_BASE + index`.
@@ -168,7 +170,7 @@ pub fn menubar(client: &mut Client, active: Option<WinId>, st: &MenuState) -> (V
         MenuItem::separator(),
         m(CONNECT, "file.connect"),
         m(DISCONNECT, "file.disconnect"),
-        m(SELECT_SERVER, "file.select_server"),
+        m(SELECT_SERVER, "file.select_server").shortcut(&sc(mac, "Alt+E")),
         MenuItem::separator(),
         m(AWAY, "file.away").checked(st.away),
     ];
@@ -216,12 +218,12 @@ pub fn menubar(client: &mut Client, active: Option<WinId>, st: &MenuState) -> (V
         m(COLORS, "tools.colors").shortcut("Alt+K"),
         m(SCRIPTS, "tools.scripts").shortcut("Alt+R"),
         MenuItem::separator(),
-        m(CHANLIST, "tools.chanlist"),
-        m(URLS, "tools.urls"),
-        m(NOTIFY, "tools.notify"),
+        m(CHANLIST, "tools.chanlist").shortcut(&sc(mac, "Alt+L")),
+        m(URLS, "tools.urls").shortcut(&sc(mac, "Alt+U")),
+        m(NOTIFY, "tools.notify").shortcut(&sc(mac, "Alt+N")),
         MenuItem::separator(),
-        m(DCC_SEND, "tools.dcc_send"),
-        m(DCC_CHAT, "tools.dcc_chat"),
+        m(DCC_SEND, "tools.dcc_send").shortcut(&sc(mac, "Alt+S")),
+        m(DCC_CHAT, "tools.dcc_chat").shortcut(&sc(mac, "Alt+C")),
         m(TRANSFERS, "tools.transfers"),
         MenuItem::separator(),
         m(LOGS, "tools.logs"),

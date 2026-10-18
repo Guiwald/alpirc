@@ -866,6 +866,16 @@ impl Shell {
                 let r = self.mdi.next();
                 self.mdi_responses(r, p);
             }
+            ids::TOGGLE_MAX => {
+                if let Some(id) = self.mdi.active() {
+                    let r = if self.mdi.child(id).map(|c| c.state) == Some(alpirc_ui::WindowState::Maximized) {
+                        self.mdi.restore(id)
+                    } else {
+                        self.mdi.maximize(id)
+                    };
+                    self.mdi_responses(r, p);
+                }
+            }
             ids::CLOSE => {
                 if let Some(w) = active {
                     self.client.close_window(w, now);

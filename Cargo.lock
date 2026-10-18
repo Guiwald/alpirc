@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-core",
  "alpirc-net",
@@ -76,7 +76,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-android"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-core",
  "alpirc-net",
@@ -93,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-core"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-proto",
  "alpirc-script",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-net"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-proto",
  "base64",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-proto"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "base64",
  "encoding_rs",
@@ -137,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-relay"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-core",
  "alpirc-net",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-script"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-proto",
  "base64",
@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-shell"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-core",
  "alpirc-net",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "alpirc-ui"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "alpirc-proto",
  "cosmic-text",
@@ -4774,7 +4774,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "flate2",
  "md-5",

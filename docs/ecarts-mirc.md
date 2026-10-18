@@ -86,6 +86,19 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | `/dccserver`, `/fserve`, `/dll`, `/com…`, `/run`, `/dde`, `/tray`, `/showmirc`, `/setlayer`, `/tips`, `/background`, `/proxy`, `/sock…` | | hors périmètre |
 | `/nick` | change le pseudo **et** le pseudo des Options (`/tnick` pour un changement temporaire) | **différent** : temporaire dans AlpIRC → question 2 |
 
+## Clavier et souris
+
+| Élément | mIRC 6.x | AlpIRC avant la revue | État |
+|---|---|---|---|
+| Double-clic dans le texte (hors pseudo, canal, adresse) | Options › Mouse, par défaut : canal → `/channel` (Channel Central), Status → `/lusers`, privé → `/whois` | rien | **fait (0.15.0)** |
+| Double-clic sur un pseudo (liste ou texte), un canal, une adresse | privé, rejoindre, ouvrir | idem | présent |
+| Double-clic dans la fenêtre Notify | `/whois` (de mémoire) | privé | différent, laissé (question 6) |
+| Raccourcis des boîtes : Alt+A/J favoris, Alt+B carnet, Alt+C discussion DCC, Alt+E serveurs, Alt+K couleurs, Alt+L liste des canaux, Alt+N Notify, Alt+O options, Alt+R scripts, Alt+S envoi DCC, Alt+U URL | | Alt+O, B, J, K, R seulement ; Alt+O ouvrait le menu « Outils » en français | **fait (0.15.0)** : tous, et ils passent avant les lettres soulignées des menus, comme dans mIRC (Linux ; sur Mac, Option sert à taper des caractères) |
+| Alt+X (agrandir/rétablir), Alt+1…9 (Nième fenêtre) | | absents | **fait (0.15.0)** |
+| Alt+D, Alt+P (alias, popups), Alt+I (timer), Alt+Z (fermer, si l'option est cochée), Alt+Q (seconde ligne de saisie) | | absents | absents, peu utiles |
+| Ctrl+N (canal suivant), Ctrl+Q (privé suivant) | | Ctrl+N : nouvelle fenêtre de serveur (Cmd+N sur Mac) ; Cmd+Q quitte sur Mac | différent : conventions du Mac gardées |
+| Ctrl+Tab, Ctrl+F4, Ctrl+Entrée (envoyer sans interpréter `/`), Tab, ↑/↓ | | | présent |
+
 ## Options
 
 | Page de mIRC 6.x | AlpIRC | État |
@@ -164,6 +177,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
   `/clipboard`, `/savebuf`, `/dns`, `/debug`.
 - **0.14.0** : menus de la liste des canaux et du capteur d'URL, « Enregistrer le texte » dans le menu d'une
   fenêtre.
+- **0.15.0** : double-clic dans le texte comme mIRC (Channel Central dans un canal…), raccourcis Alt de mIRC.
 
 ## Questions pour Guillaume
 
@@ -183,8 +197,9 @@ Rien n'est bloqué : chaque question a une réponse par défaut, appliquée ou l
 5. **Scripts avancés** (fichiers binaires, `/fopen`, fenêtres d'images `/draw…`) : hors ADR 0007 pour la 1.0.
    Certains vieux scripts en ont besoin. Les prévoir en 1.1 ? *Par défaut : non.*
 6. **Options › Souris** (choisir la commande du double-clic dans Status, un canal, un privé, la liste des pseudos,
-   Notify) : à ajouter ? Utile surtout aux habitués qui avaient changé ces réglages. *Par défaut : non, les
-   double-clics de mIRC par défaut sont déjà ceux d'AlpIRC.*
+   Notify) : à ajouter ? Utile surtout aux habitués qui avaient changé ces réglages. Les valeurs par défaut de mIRC
+   sont appliquées depuis la 0.15.0, sauf dans la fenêtre Notify où le double-clic ouvre un privé (mIRC : whois,
+   de mémoire). *Par défaut : pas de page Souris ; Notify garde le privé.*
 7. **Couleurs des pseudos du carnet d'adresses** (choisir la couleur d'un pseudo, `/cnick`) : AlpIRC ne sait que
    colorer tous les pseudos automatiquement. À ajouter ? *Par défaut : non.*
 8. **Réglages par fenêtre** (horodatage, bip, clignotement, police propres à un canal) : AlpIRC n'a que des réglages

@@ -885,3 +885,47 @@ fn menus_des_listes_et_texte_enregistre() {
     assert!(s.client.window(a).unwrap().lines.back().unwrap().text.contains("a.txt"));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn double_clic_dans_le_texte_comme_mirc() {
+    use alpirc_ui::{Input, Mods, MouseButton, Point};
+    let d = dir("dblclic");
+    let mut p = P::default();
+    let mut s = shell(&d, &mut p);
+    s.client.settings_mut().connect.folder_on_connect = false;
+    let conn = connect(&mut s, &mut p);
+    up(&mut s, &mut p, conn);
+    feed(&mut s, &mut p, conn, ":Guiwald!u@h JOIN #a");
+    let a = s.client.find_window(Some(conn), "#a").unwrap();
+    s.activate(a, p.now);
+    s.after(&mut p);
+    let chat = s.window_rects(a).unwrap().chat;
+    // En bas à droite de la zone de texte, loin de tout mot.
+    let at = Point::new(chat.x + chat.w * 3 / 4, chat.y + chat.h / 2);
+    s.input(Input::MouseDown { pos: at, button: MouseButton::Left, mods: Mods::NONE, clicks: 1 }, &mut p);
+    s.input(Input::MouseUp { pos: at, button: MouseButton::Left, mods: Mods::NONE }, &mut p);
+    s.input(Input::MouseDown { pos: at, button: MouseButton::Left, mods: Mods::NONE, clicks: 2 }, &mut p);
+    s.input(Input::MouseUp { pos: at, button: MouseButton::Left, mods: Mods::NONE }, &mut p);
+    assert!(dialog(&s, &format!("central:{a}")).is_some(), "double-clic dans un canal : Channel Central");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn raccourcis_alt_de_mirc_avant_les_menus() {
+    use alpirc_ui::{Input, Key, Mods};
+    let d = dir("alt");
+    let mut p = P::default();
+    let mut s = shell(&d, &mut p);
+    s.client.settings_mut().language = Some("fr".into());
+    s.settings_changed(&mut p);
+    let alt = Mods { alt: true, ..Mods::NONE };
+    // « &Outils » a la lettre O en français : Alt+O ouvre quand même les Options, comme dans mIRC.
+    s.input(Input::key(Key::Char('o'), alt), &mut p);
+    assert!(dialog(&s, "options").is_some());
+    s.input(Input::key(Key::Escape, Mods::NONE), &mut p);
+    assert!(dialog(&s, "options").is_none());
+    // Alt+L : la liste des canaux ; Alt+N : la fenêtre Notify.
+    s.input(Input::key(Key::Char('l'), alt), &mut p);
+    assert!(s.ctls.values().any(|c| c.kind().is_some_and(|k| k.starts_with("chanlist") || k.starts_with("list"))), "{:?}", s.ctls.values().map(|c| c.kind()).collect::<Vec<_>>());
+    let _ = std::fs::remove_dir_all(&d);
+}

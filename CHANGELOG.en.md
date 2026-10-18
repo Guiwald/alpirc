@@ -7,6 +7,21 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-19
+
+> Rollout: nothing to do, install over 0.14.0 (settings are kept).
+
+### Added
+- Interface: mIRC's dialog keys: Alt+L channel list, Alt+N Notify, Alt+U URLs, Alt+S DCC send, Alt+C DCC chat,
+  Alt+E server choice, Alt+A favorites, Alt+X maximize or restore the window, Alt+1 to 9 to go to a window (Linux;
+  on the Mac, Option types characters).
+
+### Fixed
+- Interface: double-clicking in a channel's text opens Channel Central, as in mIRC; in Status it runs `/lusers`;
+  in a private window, `/whois`.
+- Interface: Alt+O opened the "Tools" menu instead of the Options when the language gives the letter O to a menu;
+  shortcuts now come before the menu bar's underlined letters, as in mIRC.
+
 ## [0.14.0] - 2026-10-19
 
 > Rollout: nothing to do, install over 0.13.0 (settings are kept).

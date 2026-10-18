@@ -936,7 +936,8 @@ impl ChatView {
                         if *clicks >= 2 {
                             self.press = None;
                             self.selecting = false;
-                            let (w, k, _, _) = self.word_at(res, rect, src, *pos)?;
+                            // Sur un mot : ce mot ; ailleurs : un mot vide (l'action du double-clic de la fenêtre).
+                            let (w, k) = self.word_at(res, rect, src, *pos).map(|(w, k, _, _)| (w, k)).unwrap_or((String::new(), WordKind::Word));
                             return Some(ChatMsg::DoubleClick(w, k));
                         }
                         let anchor = self.pos_at(res, rect, src, *pos);
@@ -1236,6 +1237,8 @@ mod tests {
         let dbl = |x| Input::MouseDown { pos: Point::new(x, y), button: MouseButton::Left, mods: Mods::NONE, clicks: 2 };
         assert_eq!(v.event(&dbl(at(3)), rect, &res, &mut p, &s), Some(ChatMsg::DoubleClick("Elisa".into(), WordKind::Nick)));
         assert_eq!(v.event(&dbl(at(10)), rect, &res, &mut p, &s), Some(ChatMsg::DoubleClick("voir".into(), WordKind::Word)));
+        // Hors des mots : un mot vide (l'action du double-clic de la fenêtre, comme dans mIRC).
+        assert_eq!(v.event(&dbl(at(70)), rect, &res, &mut p, &s), Some(ChatMsg::DoubleClick(String::new(), WordKind::Word)));
         v.event(&Input::release(at(10), y), rect, &res, &mut p, &s);
         v.event(&Input::moved(at(16), y), rect, &res, &mut p, &s);
         assert_eq!(p.cursor, Cursor::Hand);

@@ -159,7 +159,16 @@ impl Shell {
             return;
         }
         let l = self.layout();
-        // 3. Barre de menus (et boutons de la fenêtre agrandie).
+        // 3. Raccourcis globaux, avant les lettres soulignées de la barre de menus : comme dans mIRC, Alt+O ouvre les
+        // Options même quand un menu a la lettre O (« Outils » en français).
+        if let Input::Key { key, mods, .. } = &input
+            && !self.menubar.is_active()
+            && let Some(id) = self.shortcut(*key, *mods)
+        {
+            self.menu_action(id, p);
+            return;
+        }
+        // 4. Barre de menus (et boutons de la fenêtre agrandie).
         if let Some(mb) = l.menubar {
             let titles = self.menubar_titles_rect(mb);
             let was_active = self.menubar.is_active();
@@ -190,13 +199,6 @@ impl Shell {
                         }
                     }
                 }
-            }
-        }
-        // 4. Raccourcis globaux.
-        if let Input::Key { key, mods, .. } = &input {
-            if let Some(id) = self.shortcut(*key, *mods) {
-                self.menu_action(id, p);
-                return;
             }
         }
         // 5. Barre d'outils, switchbar, treebar.
@@ -284,12 +286,22 @@ impl Shell {
         use crate::menus::ids;
         let cmd = mods.command();
         match key {
+            // Les raccourcis des boîtes de mIRC (aide de mIRC, « Dialog keys » et « Window keys »).
             Key::Char(c) if mods.alt && !cmd => match c.to_ascii_lowercase() {
                 'o' => Some(ids::OPTIONS),
                 'r' => Some(ids::SCRIPTS),
                 'b' => Some(ids::ABOOK),
-                'j' => Some(ids::FAV_FOLDER),
+                'j' | 'a' => Some(ids::FAV_FOLDER),
                 'k' => Some(ids::COLORS),
+                'l' => Some(ids::CHANLIST),
+                'n' => Some(ids::NOTIFY),
+                'u' => Some(ids::URLS),
+                's' => Some(ids::DCC_SEND),
+                'c' => Some(ids::DCC_CHAT),
+                'e' => Some(ids::SELECT_SERVER),
+                'x' => Some(ids::TOGGLE_MAX),
+                // Alt+1…9 : la Nième fenêtre du menu Fenêtre.
+                d @ '1'..='9' => self.client.windows().get(d as usize - '1' as usize).map(|w| ids::WIN_BASE + w.id),
                 _ => None,
             },
             Key::Char(c) if cmd && !mods.alt => match c.to_ascii_lowercase() {
@@ -414,7 +426,16 @@ impl Shell {
                     WordKind::Url => p.open_url(&word),
                     WordKind::Channel => self.client.command(win, &format!("/join {word}"), now),
                     WordKind::Nick => self.client.command(win, &format!("/query {word}"), now),
-                    WordKind::Word => {}
+                    // Ailleurs dans le texte : l'action du double-clic de mIRC (Options › Mouse, par défaut).
+                    WordKind::Word => match kind {
+                        WinKind::Channel => self.client.command(win, "/channel", now),
+                        WinKind::Status => self.client.command(win, "/lusers", now),
+                        WinKind::Query => {
+                            let nick = self.client.window(win).map(|w| w.name.clone()).unwrap_or_default();
+                            self.client.command(win, &format!("/whois {nick}"), now);
+                        }
+                        _ => {}
+                    },
                 },
                 ChatMsg::OpenUrl(u) => p.open_url(&u),
                 ChatMsg::JoinChannel(c) => self.client.command(win, &format!("/join {c}"), now),

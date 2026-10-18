@@ -7,6 +7,21 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.15.0] - 2026-10-19
+
+> Mise en service : rien à faire, installer par-dessus la 0.14.0 (réglages conservés).
+
+### Ajouté
+- Interface : les raccourcis des boîtes de mIRC : Alt+L liste des canaux, Alt+N Notify, Alt+U URL, Alt+S envoi
+  DCC, Alt+C discussion DCC, Alt+E choix du serveur, Alt+A favoris, Alt+X agrandir ou rétablir la fenêtre, Alt+1 à
+  9 pour aller à une fenêtre (Linux ; sur Mac, Option sert à taper des caractères).
+
+### Corrigé
+- Interface : un double-clic dans le texte d'un canal ouvre Channel Central, comme dans mIRC ; dans Status, il
+  fait `/lusers` ; dans un privé, `/whois`.
+- Interface : Alt+O ouvrait le menu « Outils » au lieu des Options quand la langue donne la lettre O à un menu ;
+  les raccourcis passent maintenant avant les lettres soulignées de la barre de menus, comme dans mIRC.
+
 ## [0.14.0] - 2026-10-19
 
 > Mise en service : rien à faire, installer par-dessus la 0.13.0 (réglages conservés).
