@@ -30,7 +30,7 @@ livré et testé (ADR 0002). Le client, l'appli Android et le relais partagent l
    notes de chaque version sur GitHub donnent le français puis l'anglais (`scripts/notes-de-version.sh`).
 4. Android : `versionCode = MAJEUR×10000 + MINEUR×100 + CORRECTIF`. macOS : `CFBundleVersion` idem.
 5. Page des versions : artefact claude.ai privé généré depuis `CHANGELOG.md` par `cargo xtask changelog-page`,
-   republié à la même URL à chaque version : *Versions d'AlpIRC* — adresse à noter ici à la première version
+   republié à la même URL à chaque version : [Versions d'AlpIRC](https://claude.ai/artifact/53Hcg2gc7khbP5FaiVGvdC)
    (depuis une autre conversation, passer cette URL comme `url` à la publication).
 
 ## Sortir une version
