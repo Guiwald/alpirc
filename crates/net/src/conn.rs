@@ -17,7 +17,9 @@ use tokio::time::Instant;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::pki_types::ServerName;
 
-use crate::{CLOSE_FLUSH, CONNECTED, Cmd, ConnHandles, Inner, MAX_LINE, NetEvent, Target, TlsInfo, Verify, lock};
+use crate::{
+    CLOSE_FLUSH, CONNECTED, Cmd, ConnHandles, Inner, IoKind, MAX_LINE, NetError, NetEvent, Target, TlsInfo, Verify, lock,
+};
 
 /// Délai laissé à un client pour terminer la négociation TLS avec un serveur d'écoute.
 const ACCEPT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -28,13 +30,13 @@ const WRITE_BATCH: usize = 64 * 1024;
 
 /// Échec d'une tentative de connexion.
 struct Failure {
-    error: String,
+    error: NetError,
     cert_sha256: Option<String>,
 }
 
-impl Failure {
-    fn new(error: impl Into<String>) -> Failure {
-        Failure { error: error.into(), cert_sha256: None }
+impl From<NetError> for Failure {
+    fn from(error: NetError) -> Failure {
+        Failure { error, cert_sha256: None }
     }
 }
 
@@ -112,8 +114,8 @@ async fn establish(t: &Target) -> Result<(Stream, SocketAddr, SocketAddr, Option
             crate::tls::build_client_config(&verify, cc, Some(seen2))
         })
         .await
-        .map_err(|e| Failure::new(format!("TLS : {e}")))?
-        .map_err(Failure::new)?;
+        .map_err(|e| NetError::TlsSetup { detail: e.to_string() })?
+        .map_err(Failure::from)?;
         Some((cfg, seen, server_name(&host)?))
     } else {
         None
@@ -121,18 +123,18 @@ async fn establish(t: &Target) -> Result<(Stream, SocketAddr, SocketAddr, Option
 
     let tcp = match tokio::time::timeout_at(deadline, tcp_connect(&host, t.port, t.bind, deadline)).await {
         Ok(r) => r?,
-        Err(_) => return Err(Failure::new(format!("délai de connexion dépassé ({})", secs(t.connect_timeout)))),
+        Err(_) => return Err(NetError::ConnectTimeout { ms: millis(t.connect_timeout) }.into()),
     };
     configure_socket(&tcp);
-    let peer = tcp.peer_addr().map_err(|e| Failure::new(describe_io(&e)))?;
-    let local = tcp.local_addr().map_err(|e| Failure::new(describe_io(&e)))?;
+    let peer = tcp.peer_addr().map_err(|e| NetError::io(&e))?;
+    let local = tcp.local_addr().map_err(|e| NetError::io(&e))?;
 
     let Some((cfg, seen, name)) = tls else {
         return Ok((Stream::Plain(tcp), peer, local, None));
     };
     let connector = tokio_rustls::TlsConnector::from(cfg);
     match tokio::time::timeout_at(deadline, connector.connect(name, tcp)).await {
-        Err(_) => Err(Failure::new(format!("délai dépassé pendant la négociation TLS ({})", secs(t.connect_timeout)))),
+        Err(_) => Err(NetError::TlsTimeout { ms: millis(t.connect_timeout) }.into()),
         Ok(Err(e)) => {
             let rustls_error = e.get_ref().and_then(|i| i.downcast_ref::<rustls::Error>());
             let cert_sha256 = match rustls_error {
@@ -140,8 +142,8 @@ async fn establish(t: &Target) -> Result<(Stream, SocketAddr, SocketAddr, Option
                 _ => None,
             };
             let error = match rustls_error {
-                Some(r) => crate::tls::describe_tls_error(r, &host),
-                None => format!("négociation TLS : {}", describe_io(&e)),
+                Some(r) => crate::tls::tls_failure(r, &host),
+                None => NetError::TlsIo(IoKind::of(&e)),
             };
             Err(Failure { error, cert_sha256 })
         }
@@ -157,7 +159,7 @@ fn server_name(host: &str) -> Result<ServerName<'static>, Failure> {
     match host.parse::<IpAddr>() {
         Ok(ip) => Ok(ServerName::IpAddress(ip.into())),
         Err(_) => ServerName::try_from(host.to_string())
-            .map_err(|_| Failure::new(format!("nom d'hôte invalide pour TLS : « {host} »"))),
+            .map_err(|_| NetError::BadTlsName { host: host.to_string() }.into()),
     }
 }
 
@@ -165,22 +167,21 @@ fn server_name(host: &str) -> Result<ServerName<'static>, Failure> {
 async fn tcp_connect(host: &str, port: u16, bind: Option<IpAddr>, deadline: Instant) -> Result<TcpStream, Failure> {
     let mut addrs: Vec<SocketAddr> = match host.parse::<IpAddr>() {
         Ok(ip) => vec![SocketAddr::new(ip, port)],
-        Err(_) => tokio::net::lookup_host((host, port))
-            .await
-            .map_err(|e| Failure::new(format!("adresse introuvable pour « {host} » ({e})")))?
-            .collect(),
+        Err(_) => tokio::net::lookup_host((host, port)).await.map_err(|e| dns_failure(host, &e))?.collect(),
     };
     if let Some(b) = bind {
         addrs.retain(|a| a.is_ipv4() == b.is_ipv4());
     }
     if addrs.is_empty() {
-        return Err(Failure::new(match bind {
-            Some(b) => format!("aucune adresse de « {host} » de la même famille que l'adresse locale {b}"),
-            None => format!("aucune adresse pour « {host} »"),
-        }));
+        let host = host.to_string();
+        return Err(match bind {
+            Some(bind) => NetError::NoAddressForBind { host, bind },
+            None => NetError::NoAddress { host },
+        }
+        .into());
     }
     let n = addrs.len();
-    let mut last = String::new();
+    let mut last: Option<(SocketAddr, IoKind)> = None;
     for (i, addr) in addrs.iter().enumerate() {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
@@ -203,15 +204,26 @@ async fn tcp_connect(host: &str, port: u16, bind: Option<IpAddr>, deadline: Inst
             Ok(Ok(s)) => return Ok(s),
             Ok(Err(e)) => {
                 log::debug!("{addr} : {e}");
-                last = format!("{addr} : {}", describe_io(&e));
+                last = Some((*addr, IoKind::of(&e)));
             }
-            Err(_) => last = format!("{addr} : délai dépassé"),
+            Err(_) => last = Some((*addr, IoKind::TimedOut)),
         }
     }
-    if last.is_empty() {
-        last = "délai dépassé".into();
-    }
-    Err(Failure::new(format!("connexion impossible à {host}:{port} ({last})")))
+    let (addr, cause) = match last {
+        Some((a, c)) => (Some(a), c),
+        None => (None, IoKind::TimedOut),
+    };
+    Err(NetError::Unreachable { host: host.to_string(), port, addr, cause }.into())
+}
+
+/// Échec de la résolution : passager (pas de réseau, serveur DNS injoignable) ou nom inconnu. Le texte du
+/// système est gardé pour les journaux.
+fn dns_failure(host: &str, e: &io::Error) -> NetError {
+    let detail = e.to_string();
+    // getaddrinfo (EAI_AGAIN) : « Temporary failure in name resolution » sous Linux et Android, « temporary
+    // failure in name resolution » sous macOS.
+    let temporary = detail.to_ascii_lowercase().contains("temporary");
+    NetError::Dns { host: host.to_string(), temporary, detail }
 }
 
 /// TCP_NODELAY et keepalive (premier sondage après 60 s de silence).
@@ -274,7 +286,7 @@ pub(crate) async fn accept_loop(
                     errors += 1;
                     log::warn!("écoute {listener} : {e}");
                     if errors >= 50 {
-                        break Some(describe_io(&e));
+                        break Some(NetError::io(&e));
                     }
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
@@ -347,7 +359,7 @@ async fn run_io<S>(
     cmds: &mut mpsc::UnboundedReceiver<Cmd>,
     closing: &mut watch::Receiver<bool>,
     pending: &AtomicUsize,
-) -> Option<String>
+) -> Option<NetError>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {
@@ -365,7 +377,7 @@ where
                 return match r {
                     Ok(()) => None,
                     Err(_) if closing_seen => None,
-                    Err(e) => Some(describe_io(&e)),
+                    Err(e) => Some(NetError::io(&e)),
                 };
             }
             w = &mut writer, if !writer_done => match w {
@@ -377,7 +389,7 @@ where
                     }
                 }
                 Err(_) if closing_seen => return None,
-                Err(e) => return Some(describe_io(&e)),
+                Err(e) => return Some(NetError::io(&e)),
             },
             _ = wait_closing(closing), if !closing_seen => {
                 closing_seen = true;
@@ -479,7 +491,7 @@ fn push_crlf(out: &mut Vec<u8>, line: &[u8]) {
     out.extend_from_slice(b"\r\n");
 }
 
-/// Message clair pour une erreur d'entrée-sortie.
+/// Message clair pour une erreur d'entrée-sortie (journaux et erreurs du relais, côté serveur).
 pub(crate) fn describe_io(e: &io::Error) -> String {
     use io::ErrorKind::*;
     match e.kind() {
@@ -496,7 +508,7 @@ pub(crate) fn describe_io(e: &io::Error) -> String {
     }
 }
 
-/// Durée lisible : « 30 s », « 0,5 s ».
-fn secs(d: Duration) -> String {
-    format!("{} s", d.as_secs_f64()).replace('.', ",")
+/// Durée en millisecondes (pour [`NetError`]).
+pub(crate) fn millis(d: Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
 }

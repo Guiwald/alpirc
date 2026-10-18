@@ -269,7 +269,7 @@ impl DialogCtl for NetworkEditor {
         c.push(l(group(310, (x0, 186, x1 - x0, 104), &tr("net.x"))));
         c.push(l(field_label(311, lx, 206, 130, &tr("net.x.user"))));
         c.push(l(edit(XU, (fx, 206, 110, EDIT_H), "")));
-        c.push(l(field_label(313, fx + 120, 206, 90, &tr("net.password"))));
+        c.push(l(field_label(313, fx + 120, 206, 90, &tr("net.x.password"))));
         c.push(l(password(XP, (fx + 214, 206, x1 - 12 - fx - 214, EDIT_H), "")));
         c.push(l(check(XHIDE, (fx, 236, 330, CHECK_H), &tr("net.x.hide"))));
         c.push(l(check(XREQ, (fx, 258, 330, CHECK_H), &tr("net.x.require"))));

@@ -5,7 +5,7 @@
 use crate::exec::{R, split_word, switches};
 use crate::source::strip_n;
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host};
+use crate::{Ctx, Engine, Host, Msg};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct User {
@@ -166,7 +166,7 @@ impl Engine {
                 let (levels, rest) = split_word(rest);
                 let (who, rest) = split_word(rest);
                 if who.is_empty() {
-                    return Err(self.err(format!("/{name}: insufficient parameters")));
+                    return Err(self.err(Msg::InsufficientParams { cmd: name.to_string() }));
                 }
                 let (mask, info) = if name == "guser" {
                     let (ty, info) = match split_word(rest) {
@@ -177,7 +177,7 @@ impl Engine {
                     let addr = h.identifier(ctx, "address", &args, None).filter(|a| !a.is_empty());
                     match addr {
                         Some(a) => (a, info.to_string()),
-                        None => return Err(self.err(format!("/guser: unable to find address of {who}"))),
+                        None => return Err(self.err(Msg::NoAddress { cmd: "guser".into(), nick: who.to_string() })),
                     }
                 } else {
                     (who.to_string(), rest.to_string())
@@ -187,7 +187,7 @@ impl Engine {
             "ruser" => {
                 let w: Vec<&str> = rest.split_whitespace().collect();
                 match w.as_slice() {
-                    [] => return Err(self.err("/ruser: insufficient parameters")),
+                    [] => return Err(self.err(Msg::InsufficientParams { cmd: "ruser".into() })),
                     [who] => self.users.list.retain(|u| !u.mask.eq_ignore_ascii_case(who) && !nick_of(&u.mask).eq_ignore_ascii_case(who)),
                     [a, b, ..] => {
                         if b.parse::<u8>().is_ok() {

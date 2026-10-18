@@ -13,7 +13,7 @@ use crate::ast::{Block, matching_paren};
 use crate::exec::Frame;
 use crate::source::{PopupLine, parse_popup_lines};
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host, MenuItem, PopupKind, ScriptError};
+use crate::{Ctx, Engine, Host, MenuItem, Msg, PopupKind, ScriptError};
 
 /// Une entrée de menu gardée pour être relancée (voir [`Engine::popup_token`]).
 #[derive(Debug, Clone)]
@@ -164,7 +164,7 @@ impl Engine {
             Ok(t) => t,
             Err(e) => {
                 if let Some(m) = e.message() {
-                    h.script_error(ctx, &m);
+                    crate::exec::report(h, ctx, &m);
                 }
                 return None;
             }
@@ -260,7 +260,7 @@ impl Engine {
     pub fn popup_run(&mut self, host: &mut dyn Host, ctx: &Ctx, action: u32) -> Result<(), ScriptError> {
         self.flush_pending(host);
         let Some(a) = self.popup_actions.get(action as usize).cloned() else {
-            return Err(ScriptError::Message("* popup: no such menu item".into()));
+            return Err(ScriptError::Message(Msg::NoSuchMenuItem));
         };
         self.rt.menu = a.menu.clone();
         let frame = Frame { script: a.script.clone(), args: Self::default_args(ctx), ..Frame::default() };

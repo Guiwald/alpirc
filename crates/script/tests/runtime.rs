@@ -2,7 +2,7 @@
 
 mod common;
 
-use alpirc_script::{Ctx, DialogEvent, EventInfo, EventKind, MenuItem, PopupKind, ScriptError, ScriptKind};
+use alpirc_script::{Ctx, DialogEvent, EventInfo, EventKind, MenuItem, Msg, PopupKind, ScriptError, ScriptKind};
 use common::*;
 
 fn text_ev(nick: &str, chan: Option<&str>, text: &str) -> EventInfo {
@@ -314,6 +314,33 @@ fn handler_errors_are_reported() {
     let (mut e, mut h) = setup("on *:TEXT:*:#:{\n  echo -a before\n  fail\n}");
     e.fire(&mut h, &ctx(), &text_ev("Bob", Some("#test"), "x"));
     assert_eq!(h.errors, vec!["* /fail: insufficient parameters (line 3, test.mrc)"]);
+}
+
+/// L'hôte rédige les messages du moteur (erreurs et informations) à partir de leurs données.
+#[test]
+fn host_renders_engine_messages() {
+    fn fr(m: &Msg) -> String {
+        match m.inner() {
+            Msg::InsufficientParams { cmd } => match m {
+                Msg::At { line, script, .. } => format!("* /{cmd} : paramètres insuffisants (ligne {line}, {script})"),
+                _ => format!("* /{cmd} : paramètres insuffisants"),
+            },
+            Msg::TimerActivated { name } => format!("* Minuterie {name} activée"),
+            Msg::NoSuchTable { cmd, name } => format!("* /{cmd} : pas de table « {name} »"),
+            other => other.to_string(),
+        }
+    }
+    let (mut e, mut h) = setup("on *:TEXT:*:#:{\n  echo -a before\n  hmake\n}");
+    h.render = Some(fr);
+    e.fire(&mut h, &ctx(), &text_ev("Bob", Some("#test"), "x"));
+    assert_eq!(h.errors, vec!["* /hmake : paramètres insuffisants (ligne 3, test.mrc)"]);
+    run(&mut e, &mut h, "/timer1 0 60 echo -a x");
+    assert_eq!(h.echoes().last().unwrap(), "* Minuterie 1 activée");
+    // Les erreurs rendues à l'appelant gardent leurs données ; leur `Display` reste l'anglais du moteur.
+    let err = e.run_line(&mut h, &ctx(), "/hfree nope").unwrap_err();
+    assert_eq!(err, ScriptError::Message(Msg::NoSuchTable { cmd: "hfree".into(), name: "nope".into() }));
+    assert_eq!(err.to_string(), "* /hfree: no such table 'nope'");
+    assert_eq!(fr(&err.msg()), "* /hfree : pas de table « nope »");
 }
 
 #[test]
@@ -1067,7 +1094,7 @@ fn load_command_fires_on_load() {
     assert_eq!(ev(&mut e, &mut h, "$xx"), "reloaded");
     run(&mut e, &mut h, "/unload -rs x.mrc");
     assert!(e.scripts().is_empty());
-    assert!(run_err(&mut e, &mut h, "/load -rs ../x.mrc").contains("accès refusé"));
+    assert!(run_err(&mut e, &mut h, "/load -rs ../x.mrc").contains("access denied outside the scripts folder"));
 }
 
 #[test]

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use alpirc_core::Effect;
 use alpirc_core::settings::{EventSound, NotifyEntry, SoundPlay, Settings};
 use alpirc_script::ScriptKind;
+use alpirc_proto::neterror::{IoKind, NetError};
 use common::*;
 
 /// Un client dont le dossier des sons contient les sons fournis (de faux fichiers suffisent : le moteur ne les lit
@@ -144,7 +145,7 @@ fn connection_kick_invite_notify_sounds() {
     h.feed(":Pat!p@h INVITE Guiwald #b");
     assert_eq!(sounds(&h.effects()), vec![snd(&h, "alpirc-invite.wav")]);
     // Déconnexion subie : son ; déconnexion demandée : rien.
-    h.c.on_closed(h.conn, Some("Connection reset by peer"), h.now);
+    h.c.on_closed(h.conn, Some(&NetError::Io(IoKind::Reset)), h.now);
     assert_eq!(sounds(&h.effects()), vec![snd(&h, "alpirc-disconnect.wav")]);
     h.advance(20_000);
     h.c.tick(h.now);

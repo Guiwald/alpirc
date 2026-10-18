@@ -36,6 +36,7 @@ impl ShellPlatform for P {
     fn notify(&mut self, _title: &str, _body: &str) {}
     fn beep(&mut self) {}
     fn play_sound(&mut self, _path: &Path) {}
+    fn stop_sound(&mut self) {}
     fn flash(&mut self) {}
     fn open_url(&mut self, _url: &str) {}
     fn set_title(&mut self, _title: &str) {}
@@ -201,7 +202,11 @@ fn main() {
     shot(&mut shell, &out, "colors");
     close(&mut shell, &mut p);
     // Certificat refusé.
-    shell.on_net(NetEvent::Failed { conn, error: "certificate signed by an unknown authority".into(), cert_sha256: Some("3f2a".repeat(16)) }, &mut p);
+    let error = alpirc_net::NetError::CertRejected {
+        host: "irc.example.net".into(),
+        problem: alpirc_net::CertProblem::UnknownIssuer,
+    };
+    shell.on_net(NetEvent::Failed { conn, error, cert_sha256: Some("3f2a".repeat(16)) }, &mut p);
     shot(&mut shell, &out, "cert");
     close(&mut shell, &mut p);
     // Boîtes des menus et du premier lancement (pour vérifier la place prise par les traductions).

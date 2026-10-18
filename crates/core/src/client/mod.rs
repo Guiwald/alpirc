@@ -29,6 +29,7 @@ mod window;
 use std::path::{Path, PathBuf};
 
 use alpirc_proto::Message;
+use alpirc_proto::neterror::NetError;
 use alpirc_proto::encoding::Encoding;
 use alpirc_script::{Ctx, DialogEvent, Engine, EventInfo, EventKind, MenuItem, PopupKind, ScriptKind};
 
@@ -101,6 +102,8 @@ pub enum Effect {
     Notify { win: WinId, title: String, body: String },
     Beep,
     PlaySound(PathBuf),
+    /// Arrêter le son en cours (`/splay stop`).
+    StopSound,
     /// Faire clignoter la fenêtre ou l'icône (`/flash`, mot surligné).
     Flash { win: WinId },
     OpenUrl(String),
@@ -192,6 +195,9 @@ pub struct ChanList {
     pub max_users: Option<u32>,
     /// Le texte cherché seulement dans les noms des canaux, pas dans les sujets (boîte « Liste des canaux »).
     pub names_only: bool,
+    /// Numéro de la liste : il change à chaque nouvelle liste (`/list` relancé, réponse recommencée par le
+    /// serveur) ; entre deux changements, les entrées ne font que s'ajouter à la fin.
+    pub generation: u64,
 }
 
 /// Une entrée de la liste Notify avec son état.
@@ -328,7 +334,8 @@ impl Client {
                 None => self.engine.restore_file(&path, true),
             };
             if let Err(e) = r {
-                let t = self.st.t(Key::ScriptLoadError, &[("file", &name), ("error", &e.to_string())]);
+                let error = crate::script_text::error_text(self.st.lang, &e);
+                let t = self.st.t(Key::ScriptLoadError, &[("file", &name), ("error", &error)]);
                 self.st.print(status, LineKind::Error, t);
             }
         }
@@ -408,7 +415,7 @@ impl Client {
                 Deferred::Script(ctx, line) => {
                     if let Err(e) = engine.run_line(st, &ctx, &line) {
                         let (_, w) = st.resolve(&ctx);
-                        st.print(w, LineKind::Error, e.to_string());
+                        st.print(w, LineKind::Error, crate::script_text::error_line(st.lang, &e));
                     }
                 }
                 Deferred::AutoJoin(c) => st.auto_join(c),
@@ -479,14 +486,53 @@ impl Client {
         self.finish();
     }
 
-    /// L'ouverture de `conn` a échoué : message, puis nouvel essai (serveur suivant) si les réglages le veulent.
-    pub fn on_connect_failed(&mut self, conn: ConnId, error: &str, now_ms: i64) {
+    /// L'ouverture de `conn` a échoué : message (dans la langue de l'interface, avec l'empreinte du certificat
+    /// refusé s'il y en a une), puis nouvel essai (serveur suivant) si les réglages le veulent.
+    pub fn on_connect_failed(&mut self, conn: ConnId, error: &NetError, cert_sha256: Option<&str>, now_ms: i64) {
         self.st.now = now_ms;
         if self.consume_stale(conn) {
             return;
         }
-        self.st.conn_failed(conn, error);
+        let text = self.net_error_text(error);
+        let text = match cert_sha256 {
+            Some(fp) => format!("{text} [SHA-256 {fp}]"),
+            None => text,
+        };
+        self.st.conn_failed(conn, &text);
         self.finish();
+    }
+
+    /// Nouvelle installation (aucun réglage enregistré) : les textes par défaut que l'utilisateur voit et envoie
+    /// (nom complet, message d'absence) passent dans la langue de l'interface, comme les scripts par défaut. Seuls les
+    /// textes encore égaux à ceux d'origine changent. À n'appeler qu'au premier lancement, avant toute connexion :
+    /// des réglages déjà enregistrés ne sont jamais réécrits.
+    pub fn localize_new_install(&mut self) {
+        let lang = self.st.lang;
+        let d = Settings::default();
+        let s = &mut self.st.settings;
+        if s.identity.realname == d.identity.realname {
+            s.identity.realname = crate::i18n::tr(lang, Key::DefaultRealname).to_string();
+        }
+        if s.away.default_message == d.away.default_message {
+            s.away.default_message = crate::i18n::tr(lang, Key::DefaultAway).to_string();
+        }
+    }
+
+    /// Une erreur du moteur de scripts (chargement d'un fichier, ligne exécutée) dans la langue de l'interface, sans
+    /// astérisque (pour une boîte de message ou une phrase).
+    pub fn script_error_text(&self, error: &alpirc_script::ScriptError) -> String {
+        crate::script_text::error_text(self.st.lang, error)
+    }
+
+    /// Une erreur du réseau dans la langue de l'interface.
+    pub fn net_error_text(&self, error: &NetError) -> String {
+        crate::net_text::net_error(self.st.lang, error)
+    }
+
+    /// Pourquoi un certificat est refusé, dans la langue de l'interface (boîte « faire confiance à ce
+    /// certificat ») : le problème seul, sans « certificat refusé : ».
+    pub fn cert_reason_text(&self, error: &NetError) -> String {
+        crate::net_text::cert_reason(self.st.lang, error)
     }
 
     /// Une ligne reçue (sans ou avec sa fin de ligne), décodée selon l'encodage du réseau.
@@ -520,12 +566,13 @@ impl Client {
     }
 
     /// La connexion est fermée par le serveur ou le réseau (`error` : la raison, s'il y en a une).
-    pub fn on_closed(&mut self, conn: ConnId, error: Option<&str>, now_ms: i64) {
+    pub fn on_closed(&mut self, conn: ConnId, error: Option<&NetError>, now_ms: i64) {
         self.st.now = now_ms;
         if self.consume_stale(conn) {
             return;
         }
-        self.st.conn_closed(conn, error);
+        let text = error.map(|e| self.net_error_text(e));
+        self.st.conn_closed(conn, text.as_deref());
         self.finish();
     }
 
@@ -632,7 +679,7 @@ impl Client {
             let r = engine.run_line(st, ctx, line);
             st.input.end(owner);
             if let Err(e) = r {
-                st.print(win, LineKind::Error, e.to_string());
+                st.print(win, LineKind::Error, crate::script_text::error_line(st.lang, &e));
             }
         } else {
             let body = line.trim_start_matches('/');
@@ -913,7 +960,7 @@ impl Client {
             None => false,
         };
         if let Err(e) = engine.popup_run(st, &ctx, action) {
-            st.print(win, LineKind::Error, e.to_string());
+            st.print(win, LineKind::Error, crate::script_text::error_line(st.lang, &e));
         }
         st.input.end(owner);
         st.dcc.user = false;
@@ -945,7 +992,7 @@ impl Client {
                 st.dcc.user = true;
                 let owner = st.input.begin(prompt::Replay::Popup { win, selected: selected.clone(), token: token.clone() });
                 if let Err(e) = engine.popup_replay(st, &ctx, &token) {
-                    st.print(win, LineKind::Error, e.to_string());
+                    st.print(win, LineKind::Error, crate::script_text::error_line(st.lang, &e));
                 }
                 st.input.end(owner);
                 st.dcc.user = false;

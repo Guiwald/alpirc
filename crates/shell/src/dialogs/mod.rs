@@ -54,11 +54,13 @@ pub fn build(d: UiDialog, client: &Client) -> Box<dyn DialogCtl> {
     }
 }
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use alpirc_core::i18n::Lang;
 use alpirc_core::{Client, UiDialog, WinId};
-use alpirc_ui::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogUnits, DialogView};
+use alpirc_ui::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogUnits, DialogView, FontKind, Fonts, TextStyle};
 
 use crate::ShellPlatform;
 use crate::tr::{plain, t, tf};
@@ -339,10 +341,26 @@ pub fn edit(id: u32, r: (i32, i32, i32, i32), s: &str) -> ControlSpec {
     ControlSpec::new(id, ControlKind::Edit, r, s)
 }
 
-/// Nombre de lignes de texte qu'occupe `s` sur `w` pixels (estimation : 6 px par caractère).
-fn text_rows(s: &str, w: i32) -> i32 {
-    let per = (w / 6).max(10) as usize;
-    s.lines().map(|l| (l.chars().count().max(1)).div_ceil(per) as i32).sum::<i32>().max(1)
+thread_local! {
+    /// Polices avec lesquelles les boîtes mesurent leurs textes en se décrivant ([`DialogCtl::spec`] n'a pas les
+    /// ressources de dessin) : celles de l'application ([`set_measure_fonts`]), sinon les polices intégrées.
+    static MEASURE: RefCell<Option<Rc<Fonts>>> = const { RefCell::new(None) };
+}
+
+/// Donne aux boîtes les polices de l'application, pour mesurer leurs textes (voir [`text_height`]).
+pub(crate) fn set_measure_fonts(fonts: Rc<Fonts>) {
+    MEASURE.with(|m| *m.borrow_mut() = Some(fonts));
+}
+
+fn measure_fonts() -> Rc<Fonts> {
+    MEASURE.with(|m| m.borrow_mut().get_or_insert_with(|| Rc::new(crate::assets::fonts())).clone())
+}
+
+/// Hauteur du texte statique `s` sur `w` pixels : ses lignes, mesurées avec la police de l'interface et coupées
+/// comme à l'écran (une adresse trop longue passe à la ligne), à la hauteur de ligne de l'interface.
+pub(crate) fn text_height(s: &str, w: i32) -> i32 {
+    let f = measure_fonts();
+    f.label_rows(s, TextStyle::UI, w) as i32 * f.line_height(FontKind::Ui)
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -366,8 +384,7 @@ impl MessageBox {
 impl DialogCtl for MessageBox {
     fn spec(&self, _lang: Lang) -> DialogSpec {
         let w = 340;
-        let rows = text_rows(&self.text, w - 24);
-        let th = rows * 16;
+        let th = text_height(&self.text, w - 24);
         let by = 12 + th + 12;
         let mut c = vec![text(1, (12, 12, w - 24, th), &self.text)];
         match &self.no {
@@ -456,15 +473,20 @@ impl DialogCtl for JoinPrompt {
 
     fn spec(&self, lang: Lang) -> DialogSpec {
         let w = 300;
+        let prompt = t(lang, "join.prompt");
+        // La question peut tenir sur deux lignes (allemand).
+        let th = text_height(&prompt, w - 24);
+        let ey = 12 + th + 6;
+        let by = ey + 22 + 14;
         spec(
             &t(lang, "join.title"),
             w,
-            12 + 16 + 6 + 22 + 14 + 24 + 12,
+            by + 24 + 12,
             vec![
-                text(1, (12, 12, w - 24, 16), &t(lang, "join.prompt")),
-                edit(2, (12, 34, w - 24, 22), "#"),
-                button(3, (w - 12 - 2 * 84 - 8, 70, 84, 24), &t(lang, "dlg.ok")).style("default ok"),
-                button(4, (w - 12 - 84, 70, 84, 24), &t(lang, "dlg.cancel")).style("cancel"),
+                text(1, (12, 12, w - 24, th), &prompt),
+                edit(2, (12, ey, w - 24, 22), "#"),
+                button(3, (w - 12 - 2 * 84 - 8, by, 84, 24), &t(lang, "dlg.ok")).style("default ok"),
+                button(4, (w - 12 - 84, by, 84, 24), &t(lang, "dlg.cancel")).style("cancel"),
             ],
         )
     }
@@ -549,7 +571,7 @@ impl DialogCtl for About {
     fn spec(&self, lang: Lang) -> DialogSpec {
         let w = 380;
         let body = tf(lang, "about.text", &[("v", env!("CARGO_PKG_VERSION"))]);
-        let th = text_rows(&body, w - 80) * 16;
+        let th = text_height(&body, w - 80);
         let mut icon = ControlSpec::new(9, ControlKind::Icon, (16, 16, 32, 32), "app/alpirc-32");
         icon.styles.push("noborder".into());
         spec(
@@ -607,7 +629,9 @@ pub(crate) mod testkit {
             std::fs::create_dir_all(&dir).unwrap();
             let now = 1_792_260_000_000;
             let client = Client::new(Settings::default(), dir.clone(), now);
-            Kit { client, res: Res::new(crate::assets::fonts()), dir, now, lang: alpirc_core::i18n::Lang::En }
+            let res = Res::new(crate::assets::fonts());
+            super::set_measure_fonts(res.fonts.clone());
+            Kit { client, res, dir, now, lang: alpirc_core::i18n::Lang::En }
         }
 
         /// Construit la boîte et l'initialise.
@@ -696,6 +720,27 @@ pub(crate) mod testkit {
                     && t.chars().all(|c| c.is_ascii_lowercase() || c == '.' || c == '_' || c.is_ascii_digit());
                 assert!(!looks_like_key, "clé sans traduction : {t}");
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn about_text_is_measured_with_the_interface_font() {
+        let k = testkit::Kit::new("about");
+        for lang in Lang::ALL {
+            let s = About.spec(lang);
+            let body = s.controls.iter().find(|c| c.id == 1).unwrap();
+            // Toutes les lignes, coupées comme à l'écran (l'adresse peut passer à la ligne).
+            let rows = k.res.fonts.label_rows(&body.text, TextStyle::UI, body.rect.2);
+            assert!(rows >= body.text.lines().count());
+            assert_eq!(body.rect.3, rows as i32 * k.res.ui_line(), "{lang:?}");
+            // Le bouton OK est sous la dernière ligne.
+            let ok = s.controls.iter().find(|c| c.id == 2).unwrap();
+            assert!(ok.rect.1 >= body.rect.1 + body.rect.3);
         }
     }
 }

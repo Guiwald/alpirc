@@ -25,6 +25,7 @@ import android.os.VibratorManager;
 import android.widget.Toast;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -133,8 +134,8 @@ public final class Bridge {
         }
     }
 
-    /** Sons en cours de lecture (au plus quelques-uns à la fois). */
-    static int playing;
+    /** Sons en cours de lecture (au plus quelques-uns à la fois ; fil principal seulement). */
+    static final ArrayList<MediaPlayer> playing = new ArrayList<>();
 
     /**
      * Joue un fichier son (wav, mp3, ogg) une fois, au volume des notifications : muet en mode silencieux ou vibreur,
@@ -143,7 +144,7 @@ public final class Bridge {
     public static void playSound(String path) {
         if (path == null) return;
         main.post(() -> {
-            if (playing >= 4) return;
+            if (playing.size() >= 4) return;
             MediaPlayer mp = new MediaPlayer();
             try {
                 mp.setAudioAttributes(new AudioAttributes.Builder()
@@ -151,23 +152,39 @@ public final class Bridge {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build());
                 mp.setDataSource(path);
-                playing++;
+                playing.add(mp);
                 mp.setOnPreparedListener(MediaPlayer::start);
                 mp.setOnCompletionListener(m -> {
-                    playing--;
+                    playing.remove(m);
                     m.release();
                 });
                 mp.setOnErrorListener((m, what, extra) -> {
-                    playing--;
+                    playing.remove(m);
                     m.release();
                     post("log\tson illisible : " + path + " (" + what + ")");
                     return true;
                 });
                 mp.prepareAsync();
             } catch (Exception e) {
+                playing.remove(mp);
                 mp.release();
                 post("log\tson : " + e);
             }
+        });
+    }
+
+    /** Arrête les sons en cours ({@code /splay stop}). */
+    public static void stopSound() {
+        main.post(() -> {
+            for (MediaPlayer mp : playing) {
+                try {
+                    mp.stop();
+                } catch (IllegalStateException e) {
+                    // Pas encore prêt : release() suffit.
+                }
+                mp.release();
+            }
+            playing.clear();
         });
     }
 

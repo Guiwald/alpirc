@@ -102,6 +102,10 @@ impl ShellPlatform for Plat {
             log::warn!("son introuvable : {}", path.display());
         }
     }
+    /// `/splay stop`.
+    fn stop_sound(&mut self) {
+        self.host.stop_sound();
+    }
     fn flash(&mut self) {}
     fn open_url(&mut self, url: &str) {
         let url = if url.starts_with("www.") { format!("http://{url}") } else { url.to_string() };
@@ -713,5 +717,66 @@ impl MobileApp {
             _ => {}
         }
         self.after_events(el);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use super::*;
+
+    /// Un hôte qui note les sons demandés.
+    struct Rec(Rc<RefCell<Vec<String>>>, PathBuf);
+
+    impl Host for Rec {
+        fn clipboard_get(&mut self) -> Option<String> {
+            None
+        }
+        fn clipboard_set(&mut self, _text: &str) {}
+        fn notify(&mut self, _title: &str, _body: &str) {}
+        fn vibrate(&mut self, _ms: i32) {}
+        fn play_sound(&mut self, path: &Path) {
+            self.0.borrow_mut().push(format!("play {}", path.display()));
+        }
+        fn stop_sound(&mut self) {
+            self.0.borrow_mut().push("stop".into());
+        }
+        fn open_url(&mut self, _url: &str) {}
+        fn data_dir(&self) -> PathBuf {
+            self.1.clone()
+        }
+        fn utc_offset(&self, _now_ms: i64) -> i32 {
+            0
+        }
+        fn locale(&self) -> Option<String> {
+            None
+        }
+    }
+
+    #[test]
+    fn splay_stop_reaches_the_phone() {
+        let dir = std::env::temp_dir().join(format!("alpirc-android-son-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = dir.join("ding.wav");
+        std::fs::write(&wav, b"RIFF").unwrap();
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let mut plat = Plat {
+            host: Box::new(Rec(log.clone(), dir.clone())),
+            repaint: false,
+            tick_at: None,
+            exit: false,
+            prefs: Prefs::default(),
+            scale: 3.0,
+            scale_changed: false,
+            data_dir: dir.clone(),
+            picks: HashMap::new(),
+            next_pick: 0,
+            answers: Vec::new(),
+        };
+        ShellPlatform::play_sound(&mut plat, &wav);
+        ShellPlatform::stop_sound(&mut plat);
+        assert_eq!(*log.borrow(), vec![format!("play {}", wav.display()), "stop".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

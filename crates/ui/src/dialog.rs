@@ -234,6 +234,8 @@ pub struct DialogView {
     focus: Option<usize>,
     strip: Option<TabStrip>,
     drag: Option<(Point, Rect)>,
+    /// Déplacée par l'utilisateur (sinon elle reste centrée quand la zone de dessin change de taille).
+    moved: bool,
     close_pressed: Option<bool>,
     open_combo: Option<usize>,
 }
@@ -411,6 +413,7 @@ impl DialogView {
             focus: None,
             strip,
             drag: None,
+            moved: false,
             close_pressed: None,
             open_combo: None,
         };
@@ -427,6 +430,21 @@ impl DialogView {
     /// Centre la boîte dans `bounds`.
     pub fn center_in(&mut self, bounds: Rect) {
         self.rect = bounds.center_size(self.rect.size()).clamp_inside(&bounds);
+    }
+
+    /// Vrai si l'utilisateur a déplacé la boîte (par sa barre de titre).
+    pub fn moved(&self) -> bool {
+        self.moved
+    }
+
+    /// La zone de dessin `bounds` a changé de taille : une boîte jamais déplacée reste centrée, une boîte déplacée
+    /// est ramenée dedans. Plus grande que la zone, elle s'y cale en haut à gauche (barre de titre en vue).
+    pub fn keep_inside(&mut self, bounds: Rect) {
+        if self.moved {
+            self.rect = self.rect.clamp_inside(&bounds);
+        } else {
+            self.center_in(bounds);
+        }
     }
 
     /// Zone cliente (absolue).
@@ -1097,6 +1115,29 @@ impl DialogView {
         (0..self.controls.len()).find(|&i| self.is_shown(i) && self.controls[i].enabled && label_of(&self.controls[i].widget).is_some_and(|l| mnemonic_char(&l) == Some(c)))
     }
 
+    /// Onglet dont le titre a ce raccourci (`&Serveurs`).
+    fn tab_mnemonic(&self, c: char) -> Option<usize> {
+        let c = c.to_lowercase().next()?;
+        let s = self.strip.as_ref()?;
+        let tab = self.index(s.pages[0])?;
+        if !self.controls[tab].enabled || !self.controls[tab].visible {
+            return None;
+        }
+        s.tabs.labels.iter().position(|l| mnemonic_char(l) == Some(c))
+    }
+
+    /// Choisit l'onglet `k` (raccourci clavier), comme un clic sur lui : le focus va à la bande d'onglets.
+    fn select_tab(&mut self, k: usize, res: &Res, platform: &mut dyn Platform) -> Option<DialogMsg> {
+        let s = self.strip.as_mut()?;
+        s.tabs.selected = k.min(s.pages.len() - 1);
+        let page = s.pages[s.tabs.selected];
+        let first = s.pages[0];
+        let tab = self.index(first);
+        self.move_focus(tab, res, platform);
+        platform.request_repaint();
+        Some(DialogMsg::Clicked(page))
+    }
+
     fn accepts_chars(&self) -> bool {
         self.focus.is_some_and(|i| {
             matches!(&self.controls[i].widget, Widget::Edit(_) | Widget::TextArea(_) | Widget::List(_) | Widget::ListView(_) | Widget::Tree(_))
@@ -1146,6 +1187,7 @@ impl DialogView {
                 r.x = r.x.clamp(bounds.x - r.w + 40, bounds.right() - 40);
                 if r != self.rect {
                     self.rect = r;
+                    self.moved = true;
                     platform.request_repaint();
                 }
                 return None;
@@ -1274,6 +1316,9 @@ impl DialogView {
                                 _ => None,
                             };
                         }
+                        if let Some(k) = self.tab_mnemonic(*c) {
+                            return self.select_tab(k, res, platform);
+                        }
                         if mods.alt {
                             return None;
                         }
@@ -1352,6 +1397,13 @@ impl ModalStack {
 
     pub fn is_empty(&self) -> bool {
         self.dialogs.is_empty()
+    }
+
+    /// La zone de dessin a changé de taille : toutes les boîtes y restent (voir [`DialogView::keep_inside`]).
+    pub fn keep_inside(&mut self, bounds: Rect) {
+        for (_, d) in &mut self.dialogs {
+            d.keep_inside(bounds);
+        }
     }
 
     /// Dessine toutes les boîtes, de la plus ancienne à celle du dessus.
@@ -1522,6 +1574,65 @@ mod tests {
         assert_eq!(stack.event(&Input::key(Key::Escape, Mods::NONE), &res, &mut p, b), Some((2, DialogMsg::Cancel)));
         stack.pop();
         assert!(stack.dialogs[0].1.active);
+    }
+
+    #[test]
+    fn tab_mnemonics_select_the_page() {
+        use ControlKind::*;
+        let res = crate::test_res();
+        let mut p = TestPlatform::new();
+        let spec = DialogSpec {
+            title: "Réseau".into(),
+            width: 300,
+            height: 200,
+            units: DialogUnits::Px,
+            controls: vec![
+                ControlSpec::new(10, Tab, (5, 5, 290, 160), "&Serveurs"),
+                ControlSpec::new(11, Tab, (5, 5, 290, 160), "&Identité"),
+                ControlSpec::new(12, Button, (20, 40, 100, 23), "&Ajouter").in_tab(10),
+                ControlSpec::new(13, Edit, (20, 40, 150, 22), "").in_tab(11),
+                ControlSpec::new(14, Button, (220, 170, 75, 23), "OK").style("ok"),
+            ],
+        };
+        let b = Rect::new(0, 0, 800, 600);
+        let mut d = DialogView::new(&spec, &res);
+        d.center_in(b);
+        let alt = |c: char| Input::Key { key: Key::Char(c), mods: Mods::ALT, text: None, repeat: false };
+        assert_eq!(d.event(&alt('i'), &res, &mut p, b), Some(DialogMsg::Clicked(11)));
+        assert!(d.is_shown(3) && !d.is_shown(2));
+        assert_eq!(d.selection(10), vec![1]);
+        // Le raccourci d'un contrôle de la page passe avant ; celui d'une autre page ne fait rien.
+        assert_eq!(d.event(&alt('a'), &res, &mut p, b), None);
+        assert_eq!(d.event(&alt('s'), &res, &mut p, b), Some(DialogMsg::Clicked(10)));
+        assert_eq!(d.event(&alt('a'), &res, &mut p, b), Some(DialogMsg::Clicked(12)));
+    }
+
+    #[test]
+    fn dialogs_stay_inside_a_smaller_viewport() {
+        let res = crate::test_res();
+        let mut p = TestPlatform::new();
+        let big = Rect::new(0, 0, 1600, 1000);
+        let mut stack = ModalStack::new();
+        stack.push(1, DialogView::new(&spec(), &res), big);
+        stack.push(2, DialogView::new(&spec(), &res), big);
+        // La seconde est déplacée vers le coin en bas à droite.
+        let d = stack.top_mut().unwrap();
+        let r0 = d.rect;
+        d.event(&Input::click(r0.x + 20, r0.y + 8), &res, &mut p, big);
+        d.event(&Input::moved(r0.x + 520, r0.y + 308), &res, &mut p, big);
+        d.event(&Input::release(r0.x + 520, r0.y + 308), &res, &mut p, big);
+        assert!(d.moved());
+        // Fenêtre réduite : la première reste centrée, la seconde est ramenée dedans.
+        let small = Rect::new(0, 0, 600, 420);
+        stack.keep_inside(small);
+        let (a, b) = (stack.dialogs[0].1.rect, stack.dialogs[1].1.rect);
+        assert_eq!(a, small.center_size(a.size()));
+        assert_eq!(small.intersect(&b), b);
+        assert_eq!((b.right(), b.bottom()), (small.right(), small.bottom()));
+        // Plus petite que la boîte : calée en haut à gauche, barre de titre en vue.
+        let tiny = Rect::new(0, 0, a.w - 50, a.h - 50);
+        stack.keep_inside(tiny);
+        assert!(stack.dialogs.iter().all(|(_, d)| (d.rect.x, d.rect.y) == (0, 0)));
     }
 
     #[test]

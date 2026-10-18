@@ -162,12 +162,6 @@ pub(crate) fn civil(unix: i64) -> (i64, u32, u32, u32, u32, u32) {
     (y, m as u32, d as u32, (secs / 3600) as u32, (secs % 3600 / 60) as u32, (secs % 60) as u32)
 }
 
-/// Date au format « JJ/MM/AAAA » (messages d'erreur).
-pub(crate) fn french_date(unix: i64) -> String {
-    let (y, m, d, ..) = civil(unix);
-    format!("{d:02}/{m:02}/{y}")
-}
-
 fn pem(label: &str, der: &[u8]) -> Vec<u8> {
     let b64 = base64::engine::general_purpose::STANDARD.encode(der);
     let mut s = format!("-----BEGIN {label}-----\n");
@@ -192,7 +186,6 @@ mod tests {
         assert_eq!(civil(951_782_400), (2000, 2, 29, 0, 0, 0));
         assert_eq!(civil(1_700_000_000), (2023, 11, 14, 22, 13, 20));
         assert_eq!(civil(-1), (1969, 12, 31, 23, 59, 59));
-        assert_eq!(french_date(4_102_444_800), "01/01/2100");
         assert_eq!(der_time(1_700_000_000), tlv(0x17, b"231114221320Z"));
         assert_eq!(der_time(2_524_608_000), tlv(0x18, b"20500101000000Z"));
     }

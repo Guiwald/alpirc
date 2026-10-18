@@ -10,11 +10,11 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
     // Menus.
     ("menu.file", ["&File", "&Fichier", "&Archivo", "&Datei", "&File", "&Fitxer", "&Comhad"]),
     ("menu.view", ["&View", "&Affichage", "&Ver", "&Ansicht", "&Visualizza", "&Visualització", "&Amharc"]),
-    ("menu.favorites", ["Fa&vorites", "Fa&voris", "&Favoritos", "Fa&voriten", "&Preferiti", "&Preferits", "C&eanáin"]),
+    ("menu.favorites", ["F&avorites", "Fa&voris", "&Favoritos", "Fa&voriten", "&Preferiti", "&Preferits", "C&eanáin"]),
     ("menu.tools", ["&Tools", "&Outils", "&Herramientas", "E&xtras", "S&trumenti", "&Eines", "&Uirlisí"]),
     ("menu.commands", ["&Commands", "&Commandes", "&Comandos", "&Befehle", "&Comandi", "&Ordres", "&Orduithe"]),
     ("menu.window", ["&Window", "Fe&nêtre", "Ve&ntana", "&Fenster", "F&inestra", "Fi&nestra", "&Fuinneog"]),
-    ("menu.help", ["&Help", "&Aide", "Ay&uda", "&Hilfe", "&Aiuto", "&Ajuda", "Ca&bhair"]),
+    ("menu.help", ["&Help", "Ai&de", "Ay&uda", "&Hilfe", "&Aiuto", "&Ajuda", "Ca&bhair"]),
     (
         "file.new_status",
         [
@@ -27,7 +27,7 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
             "Fuinneog &nua freastalaí",
         ],
     ),
-    ("file.connect", ["&Connect", "&Se connecter", "&Conectar", "&Verbinden", "&Connetti", "&Connectar", "&Ceangail"]),
+    ("file.connect", ["&Connect", "Se &connecter", "&Conectar", "&Verbinden", "&Connetti", "&Connectar", "&Ceangail"]),
     (
         "file.disconnect",
         ["&Disconnect", "Se &déconnecter", "&Desconectar", "&Trennen", "&Disconnetti", "&Desconnectar", "&Dícheangail"],
@@ -71,7 +71,7 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
         "view.nicklist",
         [
             "&Nickname List",
-            "Liste des &pseudos",
+            "&Liste des pseudos",
             "Lista de &nicks",
             "&Nickliste",
             "Lista dei &nick",
@@ -113,7 +113,7 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
         "view.find",
         [
             "&Find Text...",
-            "&Rechercher...",
+            "Re&chercher...",
             "Bus&car texto...",
             "Text s&uchen...",
             "Tro&va testo...",
@@ -124,7 +124,7 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
     (
         "view.clear",
         [
-            "C&lear Window",
+            "Cl&ear Window",
             "&Effacer la fenêtre",
             "&Limpiar ventana",
             "Fenster &leeren",
@@ -370,7 +370,7 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
         ["&Restore", "Res&taurer", "&Restaurar", "&Wiederherstellen", "&Ripristina", "&Restaurar", "&Athchóirigh"],
     ),
     ("swb.log", ["&Logging", "&Journal", "Re&gistro", "L&ogging", "&Log", "Re&gistre", "&Logáil"]),
-    ("swb.clear", ["C&lear", "&Effacer", "&Limpiar", "&Leeren", "&Svuota", "Ne&tejar", "&Glan"]),
+    ("swb.clear", ["Cl&ear", "&Effacer", "&Limpiar", "&Leeren", "&Svuota", "Ne&tejar", "&Glan"]),
     ("swb.copy", ["&Copy", "&Copier", "&Copiar", "&Kopieren", "&Copia", "&Copiar", "&Cóipeáil"]),
     (
         "swb.select_all",
@@ -617,6 +617,19 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
         "quit.title",
         [
             "Exit AlpIRC",
+            "Quitter AlpIRC",
+            "Salir de AlpIRC",
+            "AlpIRC beenden",
+            "Esci da AlpIRC",
+            "Eixir d'AlpIRC",
+            "Scoir AlpIRC",
+        ],
+    ),
+    // Menu AlpIRC de macOS : « Quitter » selon les usages du Mac (et non « Exit »).
+    (
+        "mac.quit",
+        [
+            "Quit AlpIRC",
             "Quitter AlpIRC",
             "Salir de AlpIRC",
             "AlpIRC beenden",

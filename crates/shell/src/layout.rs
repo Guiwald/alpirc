@@ -587,6 +587,9 @@ impl Shell {
         if l.toolbar.is_some() {
             self.toolbar.paint_tooltip(canvas, &self.res, full);
         }
+        if l.switchbar.is_some() {
+            self.switchbar.paint_tooltip(canvas, &self.res, full);
+        }
         if let Some(v) = self.client.active().and_then(|a| self.views.get(&a)) {
             v.editbox.paint_popup(canvas, &self.res);
         }

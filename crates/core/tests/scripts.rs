@@ -5,6 +5,7 @@ mod common;
 
 use alpirc_core::{Effect, LineKind};
 use alpirc_script::{EventKind, MenuItem, PopupKind, ScriptKind};
+use alpirc_proto::neterror::{IoKind, NetError};
 use common::*;
 
 fn labels(m: &[MenuItem]) -> Vec<String> {
@@ -283,7 +284,7 @@ fn connect_and_disconnect_events() {
     assert_eq!(h.last(h.status), "logon");
     h.register();
     assert!(h.sends().contains(&"JOIN #auto".to_string()));
-    h.c.on_closed(h.conn, Some("reset"), h.now);
+    h.c.on_closed(h.conn, Some(&NetError::Io(IoKind::Reset)), h.now);
     assert!(h.has_line(h.status, "perdu TestNet"));
 }
 

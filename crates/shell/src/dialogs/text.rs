@@ -3,19 +3,19 @@
 
 pub(super) const TR: crate::tr::Table = &[
     // Boutons communs.
-    ("dlg.apply", ["&Apply", "A&ppliquer", "A&plicar", "Ü&bernehmen", "A&pplica", "A&plicar", "&Feidhmigh"]),
-    ("dlg.add", ["&Add", "&Ajouter", "&Añadir", "&Hinzufügen", "&Aggiungi", "&Afegir", "&Cuir leis"]),
+    ("dlg.apply", ["Appl&y", "Appli&quer", "A&plicar", "&Übernehmen", "App&lica", "Apl&icar", "&Feidhmigh"]),
+    ("dlg.add", ["&Add", "&Ajouter", "Añadi&r", "&Hinzufügen", "&Aggiungi", "A&fegir", "&Cuir leis"]),
     (
         "dlg.add_dots",
-        ["&Add...", "&Ajouter...", "&Añadir...", "&Neu...", "&Aggiungi...", "&Afegir...", "&Cuir leis..."],
+        ["&Add...", "&Ajouter...", "&Añadir...", "&Neu...", "&Aggiungi...", "&Afegir...", "Cuir &leis..."],
     ),
     (
         "dlg.edit_dots",
-        ["&Edit...", "&Modifier...", "&Editar...", "Än&dern...", "&Modifica...", "&Modificar...", "&Athraigh..."],
+        ["&Edit...", "&Modifier...", "&Editar...", "Än&dern...", "&Modifica...", "&Modificar...", "At&hraigh..."],
     ),
     ("dlg.remove", ["&Remove", "&Retirer", "&Quitar", "Ent&fernen", "&Rimuovi", "&Llevar", "&Bain"]),
     ("dlg.delete", ["&Delete", "&Supprimer", "E&liminar", "&Löschen", "&Elimina", "&Eliminar", "Sc&rios"]),
-    ("dlg.up", ["Move &up", "Mon&ter", "&Subir", "Nach &oben", "Sposta &su", "Pu&jar", "Bog &suas"]),
+    ("dlg.up", ["Move &up", "Mon&ter", "Su&bir", "Nach &oben", "Sposta &su", "Pu&jar", "Bog &suas"]),
     ("dlg.down", ["Move do&wn", "&Descendre", "Ba&jar", "Nach &unten", "Sposta &giù", "&Baixar", "Bog sí&os"]),
     // Questions des scripts ($?, $input).
     ("in.title", ["Input Request", "Question", "Pregunta", "Eingabe", "Richiesta", "Pregunta", "Ceist"]),
@@ -126,7 +126,7 @@ pub(super) const TR: crate::tr::Table = &[
             "{win} — loga",
         ],
     ),
-    ("logs.find", ["F&ind:", "&Chercher :", "&Buscar:", "&Suchen:", "&Trova:", "&Buscar:", "&Aimsigh:"]),
+    ("logs.find", ["F&ind:", "&Chercher :", "&Buscar:", "&Suchen:", "&Trova:", "&Buscar:", "A&imsigh:"]),
     (
         "logs.not_found",
         [
@@ -364,7 +364,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Roghnaigh &freastalaí...",
         ],
     ),
-    ("wel.later", ["&Later", "&Plus tard", "&Más tarde", "S&päter", "&Più tardi", "&Més avant", "Ar &ball"]),
+    ("wel.later", ["La&ter", "Plus &tard", "&Más tarde", "S&päter", "&Più tardi", "&Més avant", "Ar &ball"]),
     (
         "wel.bad_nick",
         [
@@ -444,19 +444,19 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.realname",
         [
             "&Full name:",
-            "Nom &complet :",
+            "&Nom complet :",
             "Nombre &completo:",
             "&Realname:",
             "Nome &completo:",
             "Nom &complet:",
-            "&Ainm iomlán:",
+            "Ainm i&omlán:",
         ],
     ),
     (
         "opt.username",
         [
             "&Email / ident:",
-            "&E-mail / ident :",
+            "E-&mail / ident :",
             "&E-mail / ident:",
             "&E-Mail / Ident:",
             "&E-mail / ident:",
@@ -464,16 +464,16 @@ pub(super) const TR: crate::tr::Table = &[
             "&Ríomhphost / ident:",
         ],
     ),
-    ("opt.nick", ["&Nickname:", "&Pseudo :", "&Nick:", "N&ickname:", "&Nick:", "S&obrenom:", "Lea&sainm:"]),
+    ("opt.nick", ["&Nickname:", "&Pseudo :", "&Nick:", "Ni&ckname:", "&Nick:", "S&obrenom:", "Lea&sainm:"]),
     (
         "opt.alt",
         [
-            "A&lternative:",
+            "&Alternative:",
             "Pseudo de seco&urs :",
-            "Nick &alternativo:",
+            "Nick a&lternativo:",
             "&Alternativ:",
             "Nick &alternativo:",
-            "Sobrenom &alternatiu:",
+            "Sob&renom alternatiu:",
             "Leasainm &eile:",
         ],
     ),
@@ -492,7 +492,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.new_window",
         [
-            "In a new &window",
+            "&In a new window",
             "Dans une nouvelle &fenêtre",
             "En una nueva &ventana",
             "In neuem &Fenster",
@@ -514,7 +514,7 @@ pub(super) const TR: crate::tr::Table = &[
         ],
     ),
     // Options › Serveurs.
-    ("opt.servers.label", ["&Networks:", "&Réseaux :", "&Redes:", "&Netzwerke:", "Ret&i:", "&Xarxes:", "&Líonraí:"]),
+    ("opt.servers.label", ["&Networks:", "&Réseaux :", "&Redes:", "N&etzwerke:", "Ret&i:", "&Xarxes:", "Lío&nraí:"]),
     ("opt.servers.col.name", ["Network", "Réseau", "Red", "Netzwerk", "Rete", "Xarxa", "Líonra"]),
     (
         "opt.servers.col.servers",
@@ -574,7 +574,7 @@ pub(super) const TR: crate::tr::Table = &[
             "&Délai avant d'essayer :",
             "&Demora entre intentos:",
             "&Neuer Versuch nach:",
-            "&Riprova dopo:",
+            "Riprova &dopo:",
             "&Espera entre intents:",
             "&Moill roimh thriail eile:",
         ],
@@ -599,7 +599,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Número de &intentos:",
             "Anzahl der Ve&rsuche:",
             "Numero di &tentativi:",
-            "Nombre d'&intents:",
+            "Nombre &d'intents:",
             "Líon na &n-iarrachtaí:",
         ],
     ),
@@ -620,7 +620,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.connect_startup",
         [
             "Connect at &startup to these networks:",
-            "Se connecter au &démarrage à ces réseaux :",
+            "&Se connecter au démarrage à ces réseaux :",
             "Conectar al i&niciar a estas redes:",
             "Beim &Start mit diesen Netzwerken verbinden:",
             "Connetti all'a&vvio a queste reti:",
@@ -660,7 +660,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Mesure de la &latence :",
             "Medir el &lag cada:",
             "&Lag messen alle:",
-            "Misura il &lag ogni:",
+            "Misura &il lag ogni:",
             "&Latència cada:",
             "Tomhais an mhoill &gach:",
         ],
@@ -700,7 +700,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.irc.quits",
         [
             "Show &quits",
-            "&Quits (déconnexions)",
+            "Q&uits (déconnexions)",
             "&Quits (desconexiones)",
             "&Quits",
             "&Quit (disconnessioni)",
@@ -736,12 +736,12 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.irc.nick_colors",
         [
             "Colored &nicknames",
-            "Pseudos en c&ouleur",
+            "Pseudos &en couleur",
             "&Nicks en color",
             "Nicks in Fa&rbe",
             "&Nick colorati",
             "&Sobrenoms en color",
-            "Leasainmneacha &daite",
+            "Lea&sainmneacha daite",
         ],
     ),
     (
@@ -764,7 +764,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.irc.notices_active",
         [
             "Notices in active &window",
-            "Avis dans la fenêtre a&ctive",
+            "A&vis dans la fenêtre active",
             "Notices en la ventana &activa",
             "Notices im aktiven Fen&ster",
             "Notice nella finestra &attiva",
@@ -775,7 +775,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.irc.query",
         [
-            "Open a &query on private msg",
+            "Open a query on private &msg",
             "Ouvrir un &privé (message)",
             "Abrir un pri&vado (mensaje)",
             "Q&uery bei privater Nachricht",
@@ -787,7 +787,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.irc.whois_active",
         [
-            "&Whois in active window",
+            "W&hois in active window",
             "&Whois dans la fenêtre active",
             "&Whois en la ventana activa",
             "&Whois im aktiven Fenster",
@@ -828,7 +828,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Entrar al ser &invitado",
             "Bei Ein&ladung betreten",
             "Entra su &invito",
-            "Entrar per &invitació",
+            "Entrar &per invitació",
             "Téigh isteach ar c&huireadh",
         ],
     ),
@@ -849,7 +849,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.irc.ts_format",
         [
             "Timestamp &format:",
-            "&Format de l'heure :",
+            "For&mat de l'heure :",
             "&Formato de la hora:",
             "Zeit&format:",
             "&Formato dell'ora:",
@@ -885,7 +885,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.irc.auto_op",
         [
             "Auto-op &delay:",
-            "Délai de l'auto-&op :",
+            "Délai de l'au&to-op :",
             "Demora del a&uto-op:",
             "Auto-Op-&Verzögerung:",
             "Ritardo a&uto-op:",
@@ -897,7 +897,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.hl.enabled",
         [
-            "&Enable highlighting",
+            "Enab&le highlighting",
             "&Surligner",
             "Ac&tivar el resaltado",
             "Hervorhebung &aktivieren",
@@ -912,13 +912,13 @@ pub(super) const TR: crate::tr::Table = &[
             "Highlight my &nickname",
             "Surligner mon &pseudo",
             "Resaltar mi &nick",
-            "Meinen &Nick hervorheben",
+            "&Meinen Nick hervorheben",
             "Evidenzia il mio &nick",
             "Ressaltar el meu &sobrenom",
-            "Aibhsigh mo &leasainm",
+            "&Aibhsigh mo leasainm",
         ],
     ),
-    ("opt.hl.words", ["&Words:", "&Mots :", "Pala&bras:", "&Wörter:", "Parol&e:", "Para&ules:", "F&ocail:"]),
+    ("opt.hl.words", ["&Words:", "Mo&ts :", "Pala&bras:", "&Wörter:", "Parol&e:", "Para&ules:", "F&ocail:"]),
     ("opt.hl.col.word", ["Word", "Mot", "Palabra", "Wort", "Parola", "Paraula", "Focal"]),
     ("opt.hl.col.color", ["Color", "Couleur", "Color", "Farbe", "Colore", "Color", "Dath"]),
     ("opt.hl.col.beep", ["Beep", "Bip", "Bip", "Piep", "Bip", "Bip", "Bíp"]),
@@ -929,7 +929,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.hl.notify",
         [
             "Notification on &highlight",
-            "Notification sur un &surlignage",
+            "N&otification sur un surlignage",
             "Notificar al &resaltar",
             "Mitteilung bei Hervorhebun&g",
             "Notifica all'evidenzia&zione",
@@ -942,7 +942,7 @@ pub(super) const TR: crate::tr::Table = &[
         [
             "&Beep when my nick is said",
             "&Bip quand on me nomme",
-            "Pi&tido cuando me nombran",
+            "Pitido &cuando me nombran",
             "&Piepen, wenn mein Nick fällt",
             "&Bip quando vengo nominato",
             "&Bip quan em nomenen",
@@ -956,7 +956,7 @@ pub(super) const TR: crate::tr::Table = &[
             "&Clignoter quand on me nomme",
             "Parpa&dear cuando me nombran",
             "B&linken, wenn mein Nick fällt",
-            "&Lampeggia quando vengo nominato",
+            "Lampeggia &quando vengo nominato",
             "Parpelle&jar quan em nomenen",
             "&Splanc nuair a luaitear mé",
         ],
@@ -965,7 +965,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.hl.notify_query",
         [
             "Notification on &private msg",
-            "Notification sur un p&rivé",
+            "&Notification sur un privé",
             "Notificar mensaje pri&vado",
             "Mitteilung bei &Query",
             "Notifica su messaggio pri&vato",
@@ -977,11 +977,11 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.hl.beep_query",
         [
             "Beep on private &message",
-            "Bip sur un &message privé",
+            "Bip sur &un message privé",
             "Pitido en un &mensaje privado",
             "Piepen bei pri&vater Nachricht",
             "Bip su messa&ggio privato",
-            "Bip en un m&issatge privat",
+            "Bip &en un missatge privat",
             "Bíp ar ph&ríobháideach",
         ],
     ),
@@ -1066,15 +1066,15 @@ pub(super) const TR: crate::tr::Table = &[
         ],
     ),
     ("opt.ctcp.version", ["&VERSION", "&VERSION", "&VERSION", "&VERSION", "&VERSION", "&VERSION", "&VERSION"]),
-    ("opt.ctcp.ping", ["&PING", "&PING", "&PING", "&PING", "&PING", "&PING", "&PING"]),
-    ("opt.ctcp.time", ["&TIME", "&TIME", "&TIME", "&TIME", "&TIME", "&TIME", "&TIME"]),
-    ("opt.ctcp.finger", ["&FINGER", "&FINGER", "&FINGER", "&FINGER", "&FINGER", "&FINGER", "&FINGER"]),
+    ("opt.ctcp.ping", ["&PING", "&PING", "P&ING", "&PING", "&PING", "&PING", "&PING"]),
+    ("opt.ctcp.time", ["&TIME", "T&IME", "&TIME", "&TIME", "&TIME", "&TIME", "&TIME"]),
+    ("opt.ctcp.finger", ["&FINGER", "&FINGER", "&FINGER", "&FINGER", "&FINGER", "&FINGER", "F&INGER"]),
     (
         "opt.ctcp.clientinfo",
         ["&CLIENTINFO", "&CLIENTINFO", "&CLIENTINFO", "&CLIENTINFO", "&CLIENTINFO", "&CLIENTINFO", "&CLIENTINFO"],
     ),
     ("opt.ctcp.userinfo", ["&USERINFO", "&USERINFO", "&USERINFO", "&USERINFO", "&USERINFO", "&USERINFO", "&USERINFO"]),
-    ("opt.ctcp.source", ["&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE"]),
+    ("opt.ctcp.source", ["&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE", "&SOURCE", "S&OURCE"]),
     (
         "opt.ctcp.version_text",
         [
@@ -1090,7 +1090,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.ctcp.finger_text",
         [
-            "FINGER &text:",
+            "FINGER te&xt:",
             "&Texte FINGER :",
             "Te&xto FINGER:",
             "FINGER-Te&xt:",
@@ -1121,27 +1121,27 @@ pub(super) const TR: crate::tr::Table = &[
             "&Nachricht:",
             "&Messaggio:",
             "&Missatge:",
-            "&Teachtaireacht:",
+            "T&eachtaireacht:",
         ],
     ),
     (
         "opt.away.queries",
         [
-            "Show the away message of others once in &queries",
-            "Montrer une fois l'absence de l'autre dans les &privés",
+            "Show the away message of others &once in queries",
+            "&Montrer une fois l'absence de l'autre dans les privés",
             "Mostrar una vez la ausencia del otro en los privad&os",
             "Abwesenheit anderer einmal in &Queries zeigen",
             "Mostra una volta l'assenza degli altri nelle &query",
-            "Mostrar una vegada l'absència de l'altre en els pri&vats",
+            "Mostrar una vegada &l'absència de l'altre en els privats",
             "Taispeáin as láthair daoine eile uair amháin sa c&homhrá",
         ],
     ),
     (
         "opt.away.auto",
         [
-            "Auto-awa&y after:",
+            "Auto-a&way after:",
             "A&bsence auto après :",
-            "A&usente tras:",
+            "&Ausente tras:",
             "Auto-A&way nach:",
             "Assente &dopo:",
             "Absent &després de:",
@@ -1168,8 +1168,8 @@ pub(super) const TR: crate::tr::Table = &[
             "Message de &départ :",
             "Mensa&je de salida:",
             "Quit-Nachric&ht:",
-            "Messaggio di &uscita:",
-            "Missatge d'&eixida:",
+            "Mess&aggio di uscita:",
+            "Miss&atge d'eixida:",
             "Teachtaireacht &scoir:",
         ],
     ),
@@ -1267,7 +1267,7 @@ pub(super) const TR: crate::tr::Table = &[
     ("opt.log.channels", ["&Channels", "&Canaux", "&Canales", "&Channels", "&Canali", "&Canals", "&Cainéil"]),
     (
         "opt.log.queries",
-        ["&Private messages", "&Privés", "&Privados", "&Queries", "&Query", "&Privats", "Comhráite &príobháideacha"],
+        ["&Private messages", "&Privés", "Pr&ivados", "&Queries", "&Query", "&Privats", "Comhráite &príobháideacha"],
     ),
     (
         "opt.log.status",
@@ -1276,12 +1276,12 @@ pub(super) const TR: crate::tr::Table = &[
             "Fenêtres &Status",
             "Ventanas &Status",
             "&Status-Fenster",
-            "Finestre &Status",
+            "&Finestre Status",
             "Finestres &Status",
             "Fuinneoga &Status",
         ],
     ),
-    ("opt.log.folder", ["&Folder:", "&Dossier :", "Carpe&ta:", "&Ordner:", "C&artella:", "Carpe&ta:", "&Fillteán:"]),
+    ("opt.log.folder", ["&Folder:", "&Dossier :", "Carpe&ta:", "&Ordner:", "C&artella:", "Carpe&ta:", "F&illteán:"]),
     (
         "opt.log.folder_note",
         [
@@ -1309,7 +1309,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.log.strip",
         [
-            "St&rip colors and formatting",
+            "Strip colors &and formatting",
             "&Retirer couleurs et mise en forme",
             "Quitar colores y &formato",
             "Farben und Formatierung &entfernen",
@@ -1322,7 +1322,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.log.reload",
         [
             "Lines &reloaded when a window opens:",
-            "Lignes &relues à l'ouverture :",
+            "&Lignes relues à l'ouverture :",
             "Líneas &releídas al abrir una ventana:",
             "Beim Öffnen &geladene Zeilen:",
             "Righe &ricaricate all'apertura:",
@@ -1423,7 +1423,7 @@ pub(super) const TR: crate::tr::Table = &[
             "&Liste des pseudos des canaux",
             "&Lista de nicks en los canales",
             "Nick&liste in Channels",
-            "&Lista dei nick nei canali",
+            "Lista &dei nick nei canali",
             "&Llista de sobrenoms dels canals",
             "&Liosta leasainmneacha sna cainéil",
         ],
@@ -1454,7 +1454,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Cló an chomhrá",
         ],
     ),
-    ("opt.disp.font_size", ["&Size:", "Ta&ille :", "&Tamaño:", "&Größe:", "&Corpo:", "&Mida:", "&Méid:"]),
+    ("opt.disp.font_size", ["&Size:", "Ta&ille :", "T&amaño:", "&Größe:", "&Corpo:", "&Mida:", "&Méid:"]),
     (
         "opt.disp.font_builtin",
         [
@@ -1588,7 +1588,7 @@ pub(super) const TR: crate::tr::Table = &[
         [
             "System &beep",
             "&Bip du système",
-            "&Pitido del sistema",
+            "Pitido &del sistema",
             "System&piepton",
             "&Bip di sistema",
             "&Bip del sistema",
@@ -1682,7 +1682,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Nur wenn das &Fenster nicht im Vordergrund ist",
             "Solo quando la &finestra non è in primo piano",
             "Només quan la &finestra no està davant",
-            "Ach amháin nuair nach bhfuil an &fhuinneog chun tosaigh",
+            "&Ach amháin nuair nach bhfuil an fhuinneog chun tosaigh",
         ],
     ),
     // Options › Scripts.
@@ -1690,7 +1690,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.scripts.enabled",
         [
-            "&Enable scripts",
+            "Enable &scripts",
             "&Activer les scripts",
             "&Activar los scripts",
             "Scripts &aktivieren",
@@ -1751,14 +1751,14 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     (
         "opt.dcc.ask",
-        ["As&k me", "&Demander", "&Preguntarme", "&Nachfragen", "&Chiedimi", "&Preguntar-me", "&Fiafraigh díom"],
+        ["As&k me", "Dema&nder", "Pregu&ntarme", "&Nachfragen", "&Chiedimi", "Preg&untar-me", "Fiafrai&gh díom"],
     ),
     (
         "opt.dcc.auto_get",
         [
             "Auto-&get (except risky files)",
             "Accepter (sauf &risque)",
-            "Aceptar (salvo &riesgo)",
+            "Aceptar (&salvo riesgo)",
             "Annehmen (außer &riskante)",
             "Accetta (tranne &rischiosi)",
             "Acceptar (excepte &risc)",
@@ -1768,23 +1768,32 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "opt.dcc.auto_accept",
         [
-            "&Auto-accept",
+            "A&uto-accept",
             "&Accepter tout seul",
             "&Aceptar automáticamente",
-            "&Automatisch annehmen",
+            "A&utomatisch annehmen",
             "&Accetta automaticamente",
             "&Acceptar automàticament",
             "Glac leo go &huathoibríoch",
         ],
     ),
-    ("opt.dcc.ignore", ["&Ignore", "&Ignorer", "&Ignorar", "&Ignorieren", "&Ignora", "&Ignorar", "&Déan neamhaird"]),
+    ("opt.dcc.ignore", ["&Ignore", "&Ignorer", "&Ignorar", "&Ignorieren", "&Ignora", "Ig&norar", "&Déan neamhaird"]),
+    // Les mêmes, pour le groupe des discussions (un autre raccourci que dans celui des envois).
+    (
+        "opt.dcc.chat_ask",
+        ["Ask &me", "D&emander", "P&reguntarme", "N&achfragen", "C&hiedimi", "Preguntar-&me", "F&iafraigh díom"],
+    ),
+    (
+        "opt.dcc.chat_ignore",
+        ["Ig&nore", "I&gnorer", "Ign&orar", "I&gnorieren", "I&gnora", "I&gnorar", "Déan &neamhaird"],
+    ),
     ("opt.dcc.options_group", ["Options", "Options", "Opciones", "Optionen", "Opzioni", "Opcions", "Roghanna"]),
     (
         "opt.dcc.passive",
         [
             "&Passive DCC for my file sends (works behind a box)",
             "DCC &passif pour mes envois (marche derrière une box)",
-            "DCC &pasivo en mis envíos (funciona tras un router)",
+            "DCC pasivo en &mis envíos (funciona tras un router)",
             "&Passives DCC beim Senden (hilft hinter einem Router)",
             "DCC &passivo per i miei invii (funziona dietro un router)",
             "DCC &passiu en els meus enviaments (darrere d'un router)",
@@ -1798,7 +1807,7 @@ pub(super) const TR: crate::tr::Table = &[
             "DCC passif pour mes de&mandes de discussion",
             "DCC pasivo en mis peticiones de &chat",
             "Passives DCC bei meinen &Chat-Anfragen",
-            "DCC passivo per le mie richieste di &chat",
+            "DCC passivo per le &mie richieste di chat",
             "DCC passiu en les meues peticions de &xat",
             "DCC éighníomhach do m'iarratais &chomhrá",
         ],
@@ -1807,7 +1816,7 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.dcc.exists",
         [
             "If the file &exists:",
-            "Si le fichier &existe :",
+            "Si &le fichier existe :",
             "Si el archivo &existe:",
             "Falls Datei &existiert:",
             "Se il file &esiste:",
@@ -1851,7 +1860,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Packet si&ze:",
             "&Taille des blocs :",
             "Tamaño de &bloque:",
-            "Paket&größe:",
+            "Pa&ketgröße:",
             "Dimensione dei &blocchi:",
             "Mida dels &blocs:",
             "Méid na b&paicéad:",
@@ -1878,12 +1887,12 @@ pub(super) const TR: crate::tr::Table = &[
         "opt.dcc.own_ip",
         [
             "My IP &address:",
-            "Mon adresse &IP :",
+            "Mon adre&sse IP :",
             "Mi &dirección IP:",
             "Meine IP-A&dresse:",
             "Il mio in&dirizzo IP:",
             "La meua a&dreça IP:",
-            "Mo sheoladh &IP:",
+            "&Mo sheoladh IP:",
         ],
     ),
     (
@@ -1906,7 +1915,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Carpeta de descar&gas:",
             "Down&load-Ordner:",
             "Cartella dei do&wnload:",
-            "Ca&rpeta de baixades:",
+            "&Carpeta de baixades:",
             "Fillteán íos&lódálacha:",
         ],
     ),
@@ -1957,18 +1966,18 @@ pub(super) const TR: crate::tr::Table = &[
         "net.title_new",
         ["New Network", "Nouveau réseau", "Nueva red", "Neues Netzwerk", "Nuova rete", "Xarxa nova", "Líonra nua"],
     ),
-    ("net.tab.servers", ["&Servers", "&Serveurs", "&Servidores", "&Server", "&Server", "&Servidors", "&Freastalaithe"]),
+    ("net.tab.servers", ["&Servers", "&Serveurs", "&Servidores", "&Server", "Ser&ver", "&Servidors", "&Freastalaithe"]),
     (
         "net.tab.identity",
         ["&Identity", "&Identité", "&Identidad", "&Identität", "&Identità", "&Identitat", "&Aitheantas"],
     ),
     ("net.tab.login", ["&Login", "Identi&fication", "&Acceso", "&Login", "&Login", "&Accés", "&Logáil isteach"]),
-    ("net.tab.perform", ["&Perform", "&Perform", "&Perform", "&Perform", "&Perform", "&Perform", "&Perform"]),
+    ("net.tab.perform", ["&Perform", "Perf&orm", "&Perform", "&Perform", "&Perform", "&Perform", "&Perform"]),
     (
         "net.name",
         [
             "Network &name:",
-            "&Nom du réseau :",
+            "Nom d&u réseau :",
             "&Nombre de red:",
             "Netzwerk&name:",
             "&Nome della rete:",
@@ -1978,7 +1987,7 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     (
         "net.servers",
-        ["Ser&vers:", "Ser&veurs :", "Ser&vidores:", "Ser&ver:", "Ser&ver:", "Ser&vidors:", "F&reastalaithe:"],
+        ["Ser&vers:", "Ser&veurs :", "Ser&vidores:", "Ser&ver:", "S&erver:", "Ser&vidors:", "Freastala&ithe:"],
     ),
     ("net.col.host", ["Address", "Adresse", "Dirección", "Adresse", "Indirizzo", "Adreça", "Seoladh"]),
     ("net.col.port", ["Port", "Port", "Pto.", "Port", "Porta", "Port", "Port"]),
@@ -2012,14 +2021,14 @@ pub(super) const TR: crate::tr::Table = &[
             "Freastalaí roghnaithe",
         ],
     ),
-    ("net.host", ["&Address:", "&Adresse :", "&Dirección:", "&Adresse:", "In&dirizzo:", "A&dreça:", "&Seoladh:"]),
-    ("net.port", ["P&ort:", "P&ort :", "P&to.:", "P&ort:", "P&orta:", "P&ort:", "P&ort:"]),
+    ("net.host", ["Addr&ess:", "Adr&esse :", "&Dirección:", "&Adresse:", "In&dirizzo:", "A&dreça:", "Seola&dh:"]),
+    ("net.port", ["P&ort:", "&Port :", "P&to.:", "Po&rt:", "P&orta:", "P&ort:", "Po&rt:"]),
     (
         "net.tls",
         [
             "Use &TLS (encrypted connection)",
-            "&TLS (connexion chiffrée)",
-            "Usar &TLS (conexión cifrada)",
+            "T&LS (connexion chiffrée)",
+            "&Usar TLS (conexión cifrada)",
             "&TLS verwenden (verschlüsselt)",
             "Usa &TLS (connessione cifrata)",
             "Usar &TLS (connexió xifrada)",
@@ -2079,11 +2088,16 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     (
         "net.fingerprint",
-        ["&Fingerprint:", "&Empreinte :", "&Huella:", "&Fingerprint:", "Imp&ronta:", "E&mpremta:", "&Méarlorg:"],
+        ["&Fingerprint:", "Emprei&nte :", "&Huella:", "Fing&erprint:", "I&mpronta:", "E&mpremta:", "&Méarlorg:"],
     ),
     (
         "net.password",
-        ["Pass&word:", "&Mot de passe :", "C&ontraseña:", "Pass&wort:", "Pass&word:", "Contrasen&ya:", "Pasf&hocal:"],
+        ["Passwor&d:", "&Mot de passe :", "C&ontraseña:", "Pass&wort:", "Pass&word:", "Contrasen&ya:", "Pasf&hocal:"],
+    ),
+    // Celui de X (même page que celui de SASL : un autre raccourci).
+    (
+        "net.x.password",
+        ["P&assword:", "Mo&t de passe :", "Co&ntraseña:", "Passw&ort:", "Pa&ssword:", "C&ontrasenya:", "Pa&sfhocal:"],
     ),
     (
         "net.ident_note",
@@ -2099,7 +2113,7 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     (
         "net.encoding",
-        ["&Encoding:", "&Encodage :", "C&odificación:", "&Kodierung:", "C&odifica:", "C&odificació:", "&Ionchódú:"],
+        ["Enc&oding:", "&Encodage :", "C&odificación:", "&Kodierung:", "C&odifica:", "Co&dificació:", "&Ionchódú:"],
     ),
     (
         "net.enc.auto",
@@ -2129,11 +2143,11 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "net.auto_connect",
         [
-            "Connect to this network when AlpIRC &starts",
+            "&Connect to this network when AlpIRC starts",
             "Se connecter à ce réseau au &démarrage d'AlpIRC",
-            "Conectar a esta red al i&niciar AlpIRC",
-            "Beim &Start von AlpIRC mit diesem Netzwerk verbinden",
-            "Connetti a questa rete all'&avvio di AlpIRC",
+            "Conectar a esta &red al iniciar AlpIRC",
+            "Beim Start &von AlpIRC mit diesem Netzwerk verbinden",
+            "Connetti a &questa rete all'avvio di AlpIRC",
             "Connectar a esta xarxa en i&niciar AlpIRC",
             "Ceangail leis an líonra seo nuair a &thosaíonn AlpIRC",
         ],
@@ -2164,7 +2178,7 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     (
         "net.sasl.mech",
-        ["&Mechanism:", "&Mécanisme :", "&Mecanismo:", "&Mechanismus:", "&Meccanismo:", "&Mecanisme:", "&Meicníocht:"],
+        ["&Mechanism:", "Méc&anisme :", "&Mecanismo:", "&Mechanismus:", "&Meccanismo:", "&Mecanisme:", "&Meicníocht:"],
     ),
     ("net.sasl.none", ["None", "Aucun", "Ninguno", "Keiner", "Nessuno", "Cap", "Dada"]),
     ("net.sasl.account", ["A&ccount:", "&Compte :", "&Cuenta:", "&Konto:", "A&ccount:", "&Compte:", "&Cuntas:"]),
@@ -2173,10 +2187,10 @@ pub(super) const TR: crate::tr::Table = &[
         [
             "Client c&ertificate:",
             "C&ertificat client :",
-            "C&ertificado cliente:",
+            "Ce&rtificado cliente:",
             "Client-&Zertifikat:",
             "C&ertificato client:",
-            "C&ertificat de client:",
+            "Ce&rtificat de client:",
             "&Teastas cliaint:",
         ],
     ),
@@ -2196,22 +2210,22 @@ pub(super) const TR: crate::tr::Table = &[
         "net.x.user",
         [
             "X &username:",
-            "&Compte X :",
+            "Compte &X :",
             "&Usuario de X:",
             "X-&Benutzername:",
             "&Utente X:",
             "&Usuari d'X:",
-            "Ainm ú&sáideora X:",
+            "Ainm úsáideora &X:",
         ],
     ),
     (
         "net.x.hide",
         [
             "&Hide my address (+x)",
-            "&Masquer mon adresse (+x)",
-            "&Ocultar mi dirección (+x)",
+            "Masq&uer mon adresse (+x)",
+            "Ocultar mi &dirección (+x)",
             "Meine Adresse &verbergen (+x)",
-            "&Nascondi il mio indirizzo (+x)",
+            "N&ascondi il mio indirizzo (+x)",
             "Ama&gar la meua adreça (+x)",
             "F&olaigh mo sheoladh (+x)",
         ],
@@ -2219,7 +2233,7 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "net.x.require",
         [
-            "Connect only if X &logs me in",
+            "Connect &only if X logs me in",
             "Connexion seulement si X m'i&dentifie",
             "Conectar solo si X me identi&fica",
             "Nur verbinden, wenn X mich &anmeldet",
@@ -2233,7 +2247,7 @@ pub(super) const TR: crate::tr::Table = &[
         [
             "&NickServ password:",
             "Mot de passe &NickServ :",
-            "Contraseña de &NickServ:",
+            "Con&traseña de NickServ:",
             "&NickServ-Passwort:",
             "Password di &NickServ:",
             "Contrasenya de &NickServ:",
@@ -2306,7 +2320,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Roghnaigh freastalaí",
         ],
     ),
-    ("srv.networks", ["&Networks:", "&Réseaux :", "&Redes:", "&Netzwerke:", "R&eti:", "&Xarxes:", "&Líonraí:"]),
+    ("srv.networks", ["&Networks:", "&Réseaux :", "&Redes:", "N&etzwerke:", "R&eti:", "&Xarxes:", "Lío&nraí:"]),
     (
         "srv.servers",
         ["&Servers:", "&Serveurs :", "&Servidores:", "&Server:", "&Server:", "&Servidors:", "&Freastalaithe:"],
@@ -2427,7 +2441,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Leabhar seoltaí",
         ],
     ),
-    ("ab.tab.notify", ["&Notify", "&Notify", "&Notify", "&Notify", "&Notify", "&Notify", "&Notify"]),
+    ("ab.tab.notify", ["&Notify", "&Notify", "&Notify", "N&otify", "&Notify", "&Notify", "&Notify"]),
     ("ab.tab.ignore", ["&Ignore", "&Ignorés", "&Ignorados", "&Ignore", "&Ignorati", "&Ignorats", "Neamh&aird"]),
     ("ab.tab.control", ["&Control", "&Control", "&Control", "&Control", "&Control", "&Control", "&Control"]),
     ("ab.col.nick", ["Nickname", "Pseudo", "Nick", "Nickname", "Nick", "Sobrenom", "Leasainm"]),
@@ -2580,7 +2594,7 @@ pub(super) const TR: crate::tr::Table = &[
             "Messages &privés",
             "Mensajes &privados",
             "&Private Nachrichten",
-            "Messaggi &privati",
+            "M&essaggi privati",
             "Missatges &privats",
             "&Príobháideach",
         ],
@@ -2601,7 +2615,7 @@ pub(super) const TR: crate::tr::Table = &[
         "ab.ign.notice",
         ["N&otices", "A&vis (notices)", "N&otices", "N&otices", "N&otice", "A&visos (notices)", "&Fógraí"],
     ),
-    ("ab.ign.ctcp", ["CTC&P", "CTC&P", "CTC&P", "CTC&P", "CTC&P", "CTC&P", "CTC&P"]),
+    ("ab.ign.ctcp", ["&CTCP", "C&TCP", "C&TCP", "&CTCP", "CTC&P", "C&TCP", "C&TCP"]),
     (
         "ab.ign.invite",
         ["&Invites", "&Invitations", "&Invitaciones", "&Einladungen", "&Inviti", "&Invitacions", "C&uirí"],
@@ -2619,7 +2633,7 @@ pub(super) const TR: crate::tr::Table = &[
         ],
     ),
     ("ab.ign.dcc", ["&DCC", "&DCC", "&DCC", "&DCC", "&DCC", "&DCC", "&DCC"]),
-    ("ab.ctl.kind", ["&Type:", "&Type :", "&Tipo:", "&Typ:", "&Tipo:", "&Tipus:", "&Cineál:"]),
+    ("ab.ctl.kind", ["&Type:", "&Type :", "&Tipo:", "&Typ:", "&Tipo:", "&Tipus:", "C&ineál:"]),
     ("ab.ctl.autoop", ["Auto-op", "Auto-op", "Auto-op", "Auto-Op", "Auto-op", "Auto-op", "Uath-op"]),
     (
         "ab.ctl.autovoice",
@@ -2678,16 +2692,16 @@ pub(super) const TR: crate::tr::Table = &[
     (
         "fold.prompt",
         [
-            "&Enter the name of the channel to join:",
+            "Enter &the name of the channel to join:",
             "&Nom du canal à rejoindre :",
             "&Nombre del canal al que entrar:",
-            "&Name des Channels zum Betreten:",
+            "Name des &Channels zum Betreten:",
             "&Nome del canale in cui entrare:",
             "&Nom del canal on voleu entrar:",
             "Ainm an chainéil le dul is&teach ann:",
         ],
     ),
-    ("fold.join", ["&Join", "&Rejoindre", "En&trar", "&Betreten", "&Entra", "&Entrar", "Té&igh isteach"]),
+    ("fold.join", ["&Join", "&Rejoindre", "En&trar", "&Betreten", "En&tra", "En&trar", "Té&igh isteach"]),
     (
         "fold.favorites",
         ["&Favorites:", "&Favoris :", "&Favoritos:", "&Favoriten:", "&Preferiti:", "&Preferits:", "C&eanáin:"],
@@ -2821,19 +2835,19 @@ pub(super) const TR: crate::tr::Table = &[
             "Solo los ops cambian el &tema (t)",
             "Nur Ops setzen das &Topic (t)",
             "Solo gli op cambiano il &topic (t)",
-            "Només els ops canvien el &tema (t)",
-            "Á&bhar ag oibreoirí amháin (t)",
+            "Només els &ops canvien el tema (t)",
+            "Ábhar ag &oibreoirí amháin (t)",
         ],
     ),
     (
         "cc.mode.n",
         [
             "&No external messages (n)",
-            "&Pas de messages extérieurs (n)",
-            "Sin mensajes e&xternos (n)",
+            "Pas &de messages extérieurs (n)",
+            "Sin me&nsajes externos (n)",
             "&Keine externen Nachrichten (n)",
             "&Nessun messaggio esterno (n)",
-            "Sense missatges e&xterns (n)",
+            "&Sense missatges externs (n)",
             "Gan teachtaireachtaí &seachtracha (n)",
         ],
     ),
@@ -2843,21 +2857,21 @@ pub(super) const TR: crate::tr::Table = &[
             "&Invite only (i)",
             "Sur &invitation (i)",
             "Solo con &invitación (i)",
-            "Nur mit &Einladung (i)",
+            "N&ur mit Einladung (i)",
             "Solo su &invito (i)",
-            "Només amb &invitació (i)",
-            "Ar &chuireadh amháin (i)",
+            "&Només amb invitació (i)",
+            "&Ar chuireadh amháin (i)",
         ],
     ),
     (
         "cc.mode.m",
         [
             "&Moderated (m)",
-            "&Modéré (m)",
+            "M&odéré (m)",
             "&Moderado (m)",
             "&Moderiert (m)",
-            "&Moderato (m)",
-            "&Moderat (m)",
+            "M&oderato (m)",
+            "Mo&derat (m)",
             "&Modhnaithe (m)",
         ],
     ),
@@ -2865,8 +2879,8 @@ pub(super) const TR: crate::tr::Table = &[
         "cc.mode.p",
         [
             "&Private (p)",
-            "P&rivé (p)",
-            "&Privado (p)",
+            "&Privé (p)",
+            "P&rivado (p)",
             "&Privat (p)",
             "&Privato (p)",
             "&Privat (p)",
@@ -2875,11 +2889,11 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     (
         "cc.mode.s",
-        ["&Secret (s)", "S&ecret (s)", "S&ecreto (s)", "&Geheim (s)", "&Segreto (s)", "S&ecret (s)", "&Rúnda (s)"],
+        ["&Secret (s)", "S&ecret (s)", "&Secreto (s)", "&Geheim (s)", "&Segreto (s)", "S&ecret (s)", "&Rúnda (s)"],
     ),
     (
         "cc.mode.k",
-        ["&Key (k):", "&Clé (k) :", "Cla&ve (k):", "&Schlüssel (k):", "C&hiave (k):", "Cla&u (k):", "&Eochair (k):"],
+        ["&Key (k):", "&Clé (k) :", "&Clave (k):", "&Schlüssel (k):", "C&hiave (k):", "Cla&u (k):", "Eocha&ir (k):"],
     ),
     (
         "cc.mode.l",
@@ -2888,8 +2902,8 @@ pub(super) const TR: crate::tr::Table = &[
             "&Limite (l) :",
             "&Límite (l):",
             "&Limit (l):",
-            "&Limite (l):",
-            "&Límit (l):",
+            "Limit&e (l):",
+            "Lími&t (l):",
             "&Teorainn (l):",
         ],
     ),
@@ -2975,7 +2989,7 @@ pub(super) const TR: crate::tr::Table = &[
     ("se.tab.users", ["&Users", "&Users", "&Users", "&Users", "&Users", "&Users", "&Users"]),
     (
         "se.tab.variables",
-        ["&Variables", "&Variables", "&Variables", "&Variablen", "&Variabili", "&Variables", "&Athróga"],
+        ["&Variables", "&Variables", "&Variables", "&Variablen", "&Variabili", "&Variables", "A&thróga"],
     ),
     ("se.file", ["&File:", "&Fichier :", "Arc&hivo:", "&Datei:", "&File:", "&Fitxer:", "&Comhad:"]),
     ("se.view", ["&Menu:", "&Menu :", "&Menú:", "&Menü:", "&Menu:", "&Menú:", "R&oghchlár:"]),
@@ -3008,8 +3022,8 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     ("se.new", ["&New", "&Nouveau", "&Nuevo", "&Neu", "&Nuovo", "&Nou", "&Nua"]),
     ("se.load", ["&Load...", "&Charger...", "&Cargar...", "&Laden...", "&Carica...", "&Carregar...", "&Lódáil..."]),
-    ("se.unload", ["&Unload", "&Décharger", "&Descargar", "&Entladen", "&Scarica", "&Llevar", "&Díluchtaigh"]),
-    ("se.save", ["&Save", "&Enregistrer", "&Guardar", "&Speichern", "Sal&va", "&Guardar", "&Sábháil"]),
+    ("se.unload", ["Unl&oad", "&Décharger", "&Descargar", "&Entladen", "&Scarica", "&Llevar", "&Díluchtaigh"]),
+    ("se.save", ["&Save", "&Enregistrer", "&Guardar", "&Speichern", "Sa&lva", "&Guardar", "&Sábháil"]),
     (
         "se.pos",
         [

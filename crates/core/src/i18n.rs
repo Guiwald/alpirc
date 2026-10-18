@@ -190,6 +190,122 @@ keys! {
     TitleChanList => "Channels List", "Liste des canaux";
     NotifHighlight => "{nick} on {chan}", "{nick} sur {chan}";
     NotifQuery => "Private message from {nick}", "Message privé de {nick}";
+    // --- échecs du réseau (alpirc-net), voir net_text.rs ---
+    NetConnectTimeout => "connection timed out ({secs} s)", "délai de connexion dépassé ({secs} s)";
+    NetTlsTimeout => "TLS handshake timed out ({secs} s)", "délai dépassé pendant la négociation TLS ({secs} s)";
+    NetDnsNotFound => "address of '{host}' not found", "adresse de « {host} » introuvable";
+    NetDnsTemporary => "temporary failure resolving '{host}'", "échec passager de la résolution de « {host} »";
+    NetNoAddress => "no address for '{host}'", "aucune adresse pour « {host} »";
+    NetNoAddressForBind => "no address of '{host}' in the same family as the local address {bind}",
+        "aucune adresse de « {host} » de la même famille que l'adresse locale {bind}";
+    NetUnreachable => "{target}: {cause}", "{target} : {cause}";
+    NetUnreachableVia => "{target} ({addr}): {cause}", "{target} ({addr}) : {cause}";
+    NetBadTlsName => "invalid host name for TLS: '{host}'", "nom d'hôte invalide pour TLS : « {host} »";
+    NetCertRejected => "certificate rejected: {problem}", "certificat refusé : {problem}";
+    NetTlsAlert => "the server aborted the TLS handshake (alert {alert})",
+        "le serveur a interrompu la négociation TLS (alerte {alert})";
+    NetNoServerCert => "the server presented no certificate", "le serveur n'a présenté aucun certificat";
+    NetTls => "TLS handshake: {detail}", "négociation TLS : {detail}";
+    NetBadPin => "invalid SHA-256 fingerprint '{pin}' (64 hexadecimal digits expected)",
+        "empreinte SHA-256 invalide « {pin} » (64 chiffres hexadécimaux attendus)";
+    NetClientCert => "client certificate: {problem}", "certificat client : {problem}";
+    NetPemBadCert => "unreadable PEM certificate ({detail})", "certificat PEM illisible ({detail})";
+    NetPemNoCert => "no certificate in the PEM file", "aucun certificat dans le fichier PEM";
+    NetPemBadKey => "unreadable PEM private key ({detail})", "clé privée PEM illisible ({detail})";
+    NetTlsSetup => "TLS setup: {detail}", "configuration TLS : {detail}";
+    NetStopped => "network layer stopped", "couche réseau arrêtée";
+    NetDccListen => "cannot listen for DCC on {ip}: {cause}", "écoute DCC impossible sur {ip} : {cause}";
+    NetTimeout => "timed out ({secs} s)", "délai dépassé ({secs} s)";
+    NetCancelled => "cancelled", "annulé";
+    NetPeerClosed => "connection closed by the other side at {pos} of {size} bytes",
+        "connexion fermée par l'autre à {pos} octets sur {size}";
+    NetFileRead => "reading {path}: {cause}", "lecture de {path} : {cause}";
+    NetFileShrunk => "{path} got shorter during the transfer", "{path} a raccourci pendant l'envoi";
+    NetFileWrite => "writing {path}: {cause}", "écriture de {path} : {cause}";
+    IoRefused => "connection refused", "connexion refusée";
+    IoReset => "connection reset by peer", "connexion réinitialisée par le pair";
+    IoAborted => "connection aborted", "connexion interrompue";
+    IoBrokenPipe => "connection broken", "connexion rompue";
+    IoTimedOut => "timed out", "délai dépassé";
+    IoHostUnreachable => "host unreachable", "hôte injoignable";
+    IoNetworkUnreachable => "network unreachable", "réseau injoignable";
+    IoAddrNotAvailable => "local address not available", "adresse locale indisponible";
+    IoAddrInUse => "address already in use", "adresse déjà utilisée";
+    IoNotFound => "no such file or folder", "fichier ou dossier introuvable";
+    IoPermissionDenied => "permission denied", "permission refusée";
+    IoStorageFull => "disk full", "disque plein";
+    CertExpired => "certificate expired", "certificat expiré";
+    CertExpiredOn => "certificate expired (valid until {date})", "certificat expiré (valable jusqu'au {date})";
+    CertNotYetValid => "certificate not valid yet", "certificat pas encore valable";
+    CertNotYetValidFrom => "certificate not valid yet (valid from {date})",
+        "certificat pas encore valable (valable à partir du {date})";
+    CertUnknownIssuer => "unknown issuer (self-signed certificate or unrecognised authority)",
+        "émetteur inconnu (certificat autosigné ou autorité non reconnue)";
+    CertNameMismatch => "the certificate does not match the name '{host}'",
+        "le certificat ne correspond pas au nom « {host} »";
+    CertNameMismatchNames => "the certificate does not match the name '{host}' (certificate names: {names})",
+        "le certificat ne correspond pas au nom « {host} » (noms du certificat : {names})";
+    CertBadSignature => "invalid certificate signature", "signature du certificat invalide";
+    CertRevoked => "certificate revoked", "certificat révoqué";
+    CertBadEncoding => "malformed certificate", "certificat mal formé";
+    CertWrongPurpose => "certificate not intended for a server", "certificat non prévu pour un serveur";
+    CertUnsupportedAlgorithm => "unsupported certificate signature algorithm",
+        "algorithme de signature du certificat non pris en charge";
+    CertPinMismatch => "the certificate fingerprint does not match the stored fingerprint",
+        "l'empreinte du certificat ne correspond pas à l'empreinte retenue";
+    PingTimeoutReason => "Ping timeout", "Délai de ping dépassé";
+    // --- messages du moteur de scripts (alpirc-script), voir script_text.rs ; sans l'astérisque du début ---
+    ScrInvalidParams => "/{cmd}: invalid parameters", "/{cmd} : paramètres invalides";
+    ScrCannotOpen => "/{cmd}: unable to open '{file}'", "/{cmd} : impossible d'ouvrir « {file} »";
+    ScrCannotWrite => "/{cmd}: unable to write '{file}'", "/{cmd} : impossible d'écrire « {file} »";
+    ScrCannotRemove => "/{cmd}: unable to remove '{file}'", "/{cmd} : impossible de supprimer « {file} »";
+    ScrCannotRename => "/{cmd}: unable to rename '{file}'", "/{cmd} : impossible de renommer « {file} »";
+    ScrCannotCopy => "/{cmd}: unable to copy '{file}'", "/{cmd} : impossible de copier « {file} »";
+    ScrCannotCreate => "/{cmd}: unable to create '{file}'", "/{cmd} : impossible de créer « {file} »";
+    ScrFileExists => "/{cmd}: '{file}' exists", "/{cmd} : « {file} » existe déjà";
+    ScrNoSuchDialog => "/{cmd}: no such dialog '{name}'", "/{cmd} : pas de dialogue « {name} »";
+    ScrNoSuchTable => "/{cmd}: no such table '{name}'", "/{cmd} : pas de table « {name} »";
+    ScrNoSuchScript => "/{cmd}: no such script '{name}'", "/{cmd} : pas de script « {name} »";
+    ScrTableExists => "/{cmd}: table '{name}' exists", "/{cmd} : la table « {name} » existe déjà";
+    ScrNameInUse => "/{cmd}: '{name}' name in use", "/{cmd} : le nom « {name} » est déjà pris";
+    ScrNoAddress => "/{cmd}: unable to find address of {nick}", "/{cmd} : adresse de {nick} introuvable";
+    ScrLabelNotFound => "/goto: '{label}' not found", "/goto : « {label} » introuvable";
+    ScrCommandSandboxed => "/{cmd}: not allowed by the script sandbox",
+        "/{cmd} : interdit par le bac à sable des scripts";
+    ScrIdentSandboxed => "${ident}: not allowed by the script sandbox",
+        "${ident} : interdit par le bac à sable des scripts";
+    ScrIdentParams => "Invalid parameters: ${ident}", "Paramètres invalides : ${ident}";
+    ScrIdentParamsDetail => "Invalid parameters: ${ident} ({detail})", "Paramètres invalides : ${ident} ({detail})";
+    ScrIdentOnlyMime => "Invalid parameters: ${ident} (only 'm' is supported)",
+        "Paramètres invalides : ${ident} (seule l'option « m » est prise en charge)";
+    ScrTooDeep => "Error: script too deep / infinite loop", "Erreur : script trop profond / boucle infinie";
+    ScrNoSuchMenuItem => "popup: no such menu item", "popup : élément de menu inconnu";
+    ScrSandbox => "access denied outside the scripts folder: {path}",
+        "accès refusé hors du dossier des scripts : {path}";
+    ScrParse => "{file}:{line}: {problem}", "{file}:{line} : {problem}";
+    ScrMissingClose => "missing '}'", "« } » manquant";
+    ScrMissingOpen => "missing '{'", "« { » manquant";
+    ScrAt => "{msg} (line {line}, {script})", "{msg} (ligne {line}, {script})";
+    ScrMadeTable => "Made hash table '{name}' ({size})", "Table de hachage « {name} » créée ({size})";
+    ScrAddedItem => "Added item '{item}' to hash table '{table}'",
+        "Élément « {item} » ajouté à la table de hachage « {table} »";
+    ScrTimerNotActive => "Timer {name} not active", "Timer {name} inactif";
+    ScrTimerHalted => "Timer {name} halted", "Timer {name} arrêté";
+    ScrTimerActivated => "Timer {name} activated", "Timer {name} activé";
+    ScrAllTimersHalted => "All timers halted", "Tous les timers sont arrêtés";
+    ScrNoActiveTimers => "No active timers", "Aucun timer actif";
+    ScrActiveTimers => "Active timers:", "Timers actifs :";
+    ScrTimerLine => "Timer {name} {delay} delay {command}", "Timer {name}, délai {delay} : {command}";
+    ScrTimerLineLeft => "Timer {name} {delay} delay {command} ({left} left)",
+        "Timer {name}, délai {delay} : {command} (encore {left})";
+    ScrVarSet => "Set {name} to {value}", "{name} vaut maintenant {value}";
+    ScrVarUnsetAll => "Unset all variables", "Toutes les variables sont effacées";
+    ScrVarUnset => "Unset {name}", "{name} effacée";
+    ScrVarInc => "Inc {name} to {value}", "{name} augmentée à {value}";
+    ScrVarDec => "Dec {name} to {value}", "{name} diminuée à {value}";
+    // --- textes par défaut d'une nouvelle installation (réglages), voir Client::localize_new_install ---
+    DefaultRealname => "AlpIRC user", "Utilisateur d'AlpIRC";
+    DefaultAway => "Away", "Absent";
 }
 
 /// Traductions des autres langues : (clé, [es, de, it, va, ga]). Une clé absente (ou vide) retombe sur l'anglais.
@@ -1036,6 +1152,922 @@ const OTHER: &[(Key, [&str; 5])] = &[
             "Teachtaireacht phríobháideach ó {nick}",
         ],
     ),
+    (
+        Key::NetConnectTimeout,
+        [
+            "tiempo de conexión agotado ({secs} s)",
+            "Zeitüberschreitung beim Verbindungsaufbau ({secs} s)",
+            "tempo di connessione scaduto ({secs} s)",
+            "temps de connexió esgotat ({secs} s)",
+            "teorainn ama an cheangail sáraithe ({secs} s)",
+        ],
+    ),
+    (
+        Key::NetTlsTimeout,
+        [
+            "tiempo agotado en la negociación TLS ({secs} s)",
+            "Zeitüberschreitung beim TLS-Handshake ({secs} s)",
+            "tempo scaduto durante la negoziazione TLS ({secs} s)",
+            "temps esgotat en la negociació TLS ({secs} s)",
+            "teorainn ama sáraithe le linn chaibidlíocht TLS ({secs} s)",
+        ],
+    ),
+    (
+        Key::NetDnsNotFound,
+        [
+            "no se encuentra la dirección de «{host}»",
+            "Adresse von „{host}“ nicht gefunden",
+            "indirizzo di «{host}» non trovato",
+            "no es troba l'adreça de «{host}»",
+            "níor aimsíodh seoladh '{host}'",
+        ],
+    ),
+    (
+        Key::NetDnsTemporary,
+        [
+            "fallo temporal al resolver «{host}»",
+            "vorübergehender Fehler bei der Namensauflösung von „{host}“",
+            "errore temporaneo nella risoluzione di «{host}»",
+            "error temporal en resoldre «{host}»",
+            "teip shealadach ar '{host}' a réiteach",
+        ],
+    ),
+    (
+        Key::NetNoAddress,
+        [
+            "ninguna dirección para «{host}»",
+            "keine Adresse für „{host}“",
+            "nessun indirizzo per «{host}»",
+            "cap adreça per a «{host}»",
+            "níl aon seoladh ag '{host}'",
+        ],
+    ),
+    (
+        Key::NetNoAddressForBind,
+        [
+            "ninguna dirección de «{host}» de la misma familia que la dirección local {bind}",
+            "keine Adresse von „{host}“ in derselben Familie wie die lokale Adresse {bind}",
+            "nessun indirizzo di «{host}» della stessa famiglia dell'indirizzo locale {bind}",
+            "cap adreça de «{host}» de la mateixa família que l'adreça local {bind}",
+            "níl aon seoladh ag '{host}' den teaghlach céanna leis an seoladh áitiúil {bind}",
+        ],
+    ),
+    (
+        Key::NetUnreachable,
+        [
+            "{target}: {cause}",
+            "{target}: {cause}",
+            "{target}: {cause}",
+            "{target}: {cause}",
+            "{target}: {cause}",
+        ],
+    ),
+    (
+        Key::NetUnreachableVia,
+        [
+            "{target} ({addr}): {cause}",
+            "{target} ({addr}): {cause}",
+            "{target} ({addr}): {cause}",
+            "{target} ({addr}): {cause}",
+            "{target} ({addr}): {cause}",
+        ],
+    ),
+    (
+        Key::NetBadTlsName,
+        [
+            "nombre de host no válido para TLS: «{host}»",
+            "ungültiger Hostname für TLS: „{host}“",
+            "nome host non valido per TLS: «{host}»",
+            "nom d'amfitrió no vàlid per a TLS: «{host}»",
+            "óstainm neamhbhailí do TLS: '{host}'",
+        ],
+    ),
+    (
+        Key::NetCertRejected,
+        [
+            "certificado rechazado: {problem}",
+            "Zertifikat abgelehnt: {problem}",
+            "certificato rifiutato: {problem}",
+            "certificat rebutjat: {problem}",
+            "diúltaíodh don teastas: {problem}",
+        ],
+    ),
+    (
+        Key::NetTlsAlert,
+        [
+            "el servidor interrumpió la negociación TLS (alerta {alert})",
+            "der Server hat den TLS-Handshake abgebrochen (Alert {alert})",
+            "il server ha interrotto la negoziazione TLS (avviso {alert})",
+            "el servidor ha interromput la negociació TLS (alerta {alert})",
+            "chuir an freastalaí deireadh le caibidlíocht TLS (foláireamh {alert})",
+        ],
+    ),
+    (
+        Key::NetNoServerCert,
+        [
+            "el servidor no presentó ningún certificado",
+            "der Server hat kein Zertifikat vorgelegt",
+            "il server non ha presentato alcun certificato",
+            "el servidor no ha presentat cap certificat",
+            "níor thaispeáin an freastalaí aon teastas",
+        ],
+    ),
+    (
+        Key::NetTls,
+        [
+            "negociación TLS: {detail}",
+            "TLS-Handshake: {detail}",
+            "negoziazione TLS: {detail}",
+            "negociació TLS: {detail}",
+            "caibidlíocht TLS: {detail}",
+        ],
+    ),
+    (
+        Key::NetBadPin,
+        [
+            "huella SHA-256 no válida «{pin}» (se esperan 64 dígitos hexadecimales)",
+            "ungültiger SHA-256-Fingerabdruck „{pin}“ (64 Hexadezimalziffern erwartet)",
+            "impronta SHA-256 non valida «{pin}» (attese 64 cifre esadecimali)",
+            "empremta SHA-256 no vàlida «{pin}» (s'esperen 64 dígits hexadecimals)",
+            "méarlorg SHA-256 neamhbhailí '{pin}' (64 digit heicsidheachúlach ag teastáil)",
+        ],
+    ),
+    (
+        Key::NetClientCert,
+        [
+            "certificado de cliente: {problem}",
+            "Client-Zertifikat: {problem}",
+            "certificato client: {problem}",
+            "certificat de client: {problem}",
+            "teastas cliaint: {problem}",
+        ],
+    ),
+    (
+        Key::NetPemBadCert,
+        [
+            "certificado PEM ilegible ({detail})",
+            "PEM-Zertifikat nicht lesbar ({detail})",
+            "certificato PEM illeggibile ({detail})",
+            "certificat PEM il·legible ({detail})",
+            "teastas PEM nach féidir a léamh ({detail})",
+        ],
+    ),
+    (
+        Key::NetPemNoCert,
+        [
+            "ningún certificado en el archivo PEM",
+            "kein Zertifikat in der PEM-Datei",
+            "nessun certificato nel file PEM",
+            "cap certificat en el fitxer PEM",
+            "níl aon teastas sa chomhad PEM",
+        ],
+    ),
+    (
+        Key::NetPemBadKey,
+        [
+            "clave privada PEM ilegible ({detail})",
+            "privater PEM-Schlüssel nicht lesbar ({detail})",
+            "chiave privata PEM illeggibile ({detail})",
+            "clau privada PEM il·legible ({detail})",
+            "eochair phríobháideach PEM nach féidir a léamh ({detail})",
+        ],
+    ),
+    (
+        Key::NetTlsSetup,
+        [
+            "configuración TLS: {detail}",
+            "TLS-Konfiguration: {detail}",
+            "configurazione TLS: {detail}",
+            "configuració TLS: {detail}",
+            "socrú TLS: {detail}",
+        ],
+    ),
+    (
+        Key::NetStopped,
+        [
+            "capa de red detenida",
+            "Netzwerkschicht angehalten",
+            "livello di rete arrestato",
+            "capa de xarxa aturada",
+            "stopadh an ciseal líonra",
+        ],
+    ),
+    (
+        Key::NetDccListen,
+        [
+            "no se puede escuchar DCC en {ip}: {cause}",
+            "DCC-Empfang auf {ip} nicht möglich: {cause}",
+            "impossibile restare in ascolto DCC su {ip}: {cause}",
+            "no es pot escoltar DCC en {ip}: {cause}",
+            "ní féidir éisteacht le haghaidh DCC ar {ip}: {cause}",
+        ],
+    ),
+    (
+        Key::NetTimeout,
+        [
+            "tiempo agotado ({secs} s)",
+            "Zeitüberschreitung ({secs} s)",
+            "tempo scaduto ({secs} s)",
+            "temps esgotat ({secs} s)",
+            "thar am ({secs} s)",
+        ],
+    ),
+    (Key::NetCancelled, ["cancelado", "abgebrochen", "annullato", "cancel·lat", "cealaithe"]),
+    (
+        Key::NetPeerClosed,
+        [
+            "conexión cerrada por el otro extremo en {pos} de {size} bytes",
+            "Verbindung von der Gegenseite bei {pos} von {size} Bytes geschlossen",
+            "connessione chiusa dall'altro capo a {pos} byte su {size}",
+            "connexió tancada per l'altre extrem a {pos} de {size} bytes",
+            "dhún an taobh eile an ceangal ag {pos} as {size} beart",
+        ],
+    ),
+    (
+        Key::NetFileRead,
+        [
+            "lectura de {path}: {cause}",
+            "Lesen von {path}: {cause}",
+            "lettura di {path}: {cause}",
+            "lectura de {path}: {cause}",
+            "{path} á léamh: {cause}",
+        ],
+    ),
+    (
+        Key::NetFileShrunk,
+        [
+            "{path} se ha acortado durante la transferencia",
+            "{path} wurde während der Übertragung kürzer",
+            "{path} si è accorciato durante il trasferimento",
+            "{path} s'ha escurçat durant la transferència",
+            "d'éirigh {path} níos giorra le linn an aistrithe",
+        ],
+    ),
+    (
+        Key::NetFileWrite,
+        [
+            "escritura de {path}: {cause}",
+            "Schreiben von {path}: {cause}",
+            "scrittura di {path}: {cause}",
+            "escriptura de {path}: {cause}",
+            "{path} á scríobh: {cause}",
+        ],
+    ),
+    (
+        Key::IoRefused,
+        [
+            "conexión rechazada",
+            "Verbindung abgelehnt",
+            "connessione rifiutata",
+            "connexió rebutjada",
+            "diúltaíodh don cheangal",
+        ],
+    ),
+    (
+        Key::IoReset,
+        [
+            "conexión restablecida por el otro extremo",
+            "Verbindung von der Gegenseite zurückgesetzt",
+            "connessione reimpostata dall'altro capo",
+            "connexió restablida per l'altre extrem",
+            "d'athshocraigh an taobh eile an ceangal",
+        ],
+    ),
+    (
+        Key::IoAborted,
+        [
+            "conexión interrumpida",
+            "Verbindung abgebrochen",
+            "connessione interrotta",
+            "connexió interrompuda",
+            "tobscoireadh an ceangal",
+        ],
+    ),
+    (
+        Key::IoBrokenPipe,
+        [
+            "conexión rota",
+            "Verbindung unterbrochen",
+            "connessione caduta",
+            "connexió trencada",
+            "briseadh an ceangal",
+        ],
+    ),
+    (Key::IoTimedOut, ["tiempo agotado", "Zeitüberschreitung", "tempo scaduto", "temps esgotat", "thar am"]),
+    (
+        Key::IoHostUnreachable,
+        [
+            "host inaccesible",
+            "Host nicht erreichbar",
+            "host irraggiungibile",
+            "amfitrió inaccessible",
+            "níl an t-óstríomhaire inrochtana",
+        ],
+    ),
+    (
+        Key::IoNetworkUnreachable,
+        [
+            "red inaccesible",
+            "Netzwerk nicht erreichbar",
+            "rete irraggiungibile",
+            "xarxa inaccessible",
+            "níl an líonra inrochtana",
+        ],
+    ),
+    (
+        Key::IoAddrNotAvailable,
+        [
+            "dirección local no disponible",
+            "lokale Adresse nicht verfügbar",
+            "indirizzo locale non disponibile",
+            "adreça local no disponible",
+            "níl an seoladh áitiúil ar fáil",
+        ],
+    ),
+    (
+        Key::IoAddrInUse,
+        [
+            "dirección ya en uso",
+            "Adresse bereits in Verwendung",
+            "indirizzo già in uso",
+            "adreça ja en ús",
+            "tá an seoladh in úsáid cheana",
+        ],
+    ),
+    (
+        Key::IoNotFound,
+        [
+            "no existe el archivo o la carpeta",
+            "Datei oder Ordner nicht vorhanden",
+            "file o cartella inesistente",
+            "no existix el fitxer o la carpeta",
+            "níl a leithéid de chomhad ná d'fhillteán ann",
+        ],
+    ),
+    (
+        Key::IoPermissionDenied,
+        [
+            "permiso denegado",
+            "Zugriff verweigert",
+            "permesso negato",
+            "permís denegat",
+            "cead diúltaithe",
+        ],
+    ),
+    (Key::IoStorageFull, ["disco lleno", "Datenträger voll", "disco pieno", "disc ple", "tá an diosca lán"]),
+    (
+        Key::CertExpired,
+        [
+            "certificado caducado",
+            "Zertifikat abgelaufen",
+            "certificato scaduto",
+            "certificat caducat",
+            "teastas as feidhm",
+        ],
+    ),
+    (
+        Key::CertExpiredOn,
+        [
+            "certificado caducado (válido hasta el {date})",
+            "Zertifikat abgelaufen (gültig bis {date})",
+            "certificato scaduto (valido fino al {date})",
+            "certificat caducat (vàlid fins al {date})",
+            "teastas as feidhm (bailí go dtí {date})",
+        ],
+    ),
+    (
+        Key::CertNotYetValid,
+        [
+            "certificado aún no válido",
+            "Zertifikat noch nicht gültig",
+            "certificato non ancora valido",
+            "certificat encara no vàlid",
+            "níl an teastas bailí fós",
+        ],
+    ),
+    (
+        Key::CertNotYetValidFrom,
+        [
+            "certificado aún no válido (válido a partir del {date})",
+            "Zertifikat noch nicht gültig (gültig ab {date})",
+            "certificato non ancora valido (valido dal {date})",
+            "certificat encara no vàlid (vàlid a partir del {date})",
+            "níl an teastas bailí fós (bailí ó {date})",
+        ],
+    ),
+    (
+        Key::CertUnknownIssuer,
+        [
+            "emisor desconocido (certificado autofirmado o autoridad no reconocida)",
+            "unbekannter Aussteller (selbstsigniertes Zertifikat oder nicht anerkannte Zertifizierungsstelle)",
+            "emittente sconosciuto (certificato autofirmato o autorità non riconosciuta)",
+            "emissor desconegut (certificat autosignat o autoritat no reconeguda)",
+            "eisitheoir anaithnid (teastas féinsínithe nó údarás nach n-aithnítear)",
+        ],
+    ),
+    (
+        Key::CertNameMismatch,
+        [
+            "el certificado no corresponde al nombre «{host}»",
+            "das Zertifikat passt nicht zum Namen „{host}“",
+            "il certificato non corrisponde al nome «{host}»",
+            "el certificat no correspon al nom «{host}»",
+            "níl an teastas ag teacht leis an ainm '{host}'",
+        ],
+    ),
+    (
+        Key::CertNameMismatchNames,
+        [
+            "el certificado no corresponde al nombre «{host}» (nombres del certificado: {names})",
+            "das Zertifikat passt nicht zum Namen „{host}“ (Namen im Zertifikat: {names})",
+            "il certificato non corrisponde al nome «{host}» (nomi del certificato: {names})",
+            "el certificat no correspon al nom «{host}» (noms del certificat: {names})",
+            "níl an teastas ag teacht leis an ainm '{host}' (ainmneacha an teastais: {names})",
+        ],
+    ),
+    (
+        Key::CertBadSignature,
+        [
+            "firma del certificado no válida",
+            "ungültige Zertifikatssignatur",
+            "firma del certificato non valida",
+            "signatura del certificat no vàlida",
+            "síniú neamhbhailí ar an teastas",
+        ],
+    ),
+    (
+        Key::CertRevoked,
+        [
+            "certificado revocado",
+            "Zertifikat widerrufen",
+            "certificato revocato",
+            "certificat revocat",
+            "teastas cúlghairthe",
+        ],
+    ),
+    (
+        Key::CertBadEncoding,
+        [
+            "certificado mal formado",
+            "fehlerhaft codiertes Zertifikat",
+            "certificato malformato",
+            "certificat mal format",
+            "teastas míchumtha",
+        ],
+    ),
+    (
+        Key::CertWrongPurpose,
+        [
+            "certificado no destinado a un servidor",
+            "Zertifikat nicht für einen Server bestimmt",
+            "certificato non destinato a un server",
+            "certificat no destinat a un servidor",
+            "níl an teastas ceaptha d'fhreastalaí",
+        ],
+    ),
+    (
+        Key::CertUnsupportedAlgorithm,
+        [
+            "algoritmo de firma del certificado no admitido",
+            "Signaturalgorithmus des Zertifikats nicht unterstützt",
+            "algoritmo di firma del certificato non supportato",
+            "algorisme de signatura del certificat no admés",
+            "algartam sínithe an teastais gan tacaíocht",
+        ],
+    ),
+    (
+        Key::CertPinMismatch,
+        [
+            "la huella del certificado no coincide con la huella guardada",
+            "der Fingerabdruck des Zertifikats stimmt nicht mit dem gespeicherten überein",
+            "l'impronta del certificato non corrisponde a quella memorizzata",
+            "l'empremta del certificat no coincidix amb l'empremta guardada",
+            "níl méarlorg an teastais mar an gcéanna leis an méarlorg a stóráladh",
+        ],
+    ),
+    (
+        Key::PingTimeoutReason,
+        [
+            "Tiempo de ping agotado",
+            "Ping-Timeout",
+            "Timeout del ping",
+            "Temps d'espera del ping esgotat",
+            "Teorainn ama ping sáraithe",
+        ],
+    ),
+    (
+        Key::ScrInvalidParams,
+        [
+            "/{cmd}: parámetros no válidos",
+            "/{cmd}: ungültige Parameter",
+            "/{cmd}: parametri non validi",
+            "/{cmd}: paràmetres no vàlids",
+            "/{cmd}: paraiméadair neamhbhailí",
+        ],
+    ),
+    (
+        Key::ScrCannotOpen,
+        [
+            "/{cmd}: no se puede abrir «{file}»",
+            "/{cmd}: „{file}“ kann nicht geöffnet werden",
+            "/{cmd}: impossibile aprire «{file}»",
+            "/{cmd}: no es pot obrir «{file}»",
+            "/{cmd}: ní féidir '{file}' a oscailt",
+        ],
+    ),
+    (
+        Key::ScrCannotWrite,
+        [
+            "/{cmd}: no se puede escribir «{file}»",
+            "/{cmd}: „{file}“ kann nicht geschrieben werden",
+            "/{cmd}: impossibile scrivere «{file}»",
+            "/{cmd}: no es pot escriure «{file}»",
+            "/{cmd}: ní féidir '{file}' a scríobh",
+        ],
+    ),
+    (
+        Key::ScrCannotRemove,
+        [
+            "/{cmd}: no se puede eliminar «{file}»",
+            "/{cmd}: „{file}“ kann nicht gelöscht werden",
+            "/{cmd}: impossibile eliminare «{file}»",
+            "/{cmd}: no es pot eliminar «{file}»",
+            "/{cmd}: ní féidir '{file}' a bhaint",
+        ],
+    ),
+    (
+        Key::ScrCannotRename,
+        [
+            "/{cmd}: no se puede cambiar el nombre de «{file}»",
+            "/{cmd}: „{file}“ kann nicht umbenannt werden",
+            "/{cmd}: impossibile rinominare «{file}»",
+            "/{cmd}: no es pot canviar el nom de «{file}»",
+            "/{cmd}: ní féidir '{file}' a athainmniú",
+        ],
+    ),
+    (
+        Key::ScrCannotCopy,
+        [
+            "/{cmd}: no se puede copiar «{file}»",
+            "/{cmd}: „{file}“ kann nicht kopiert werden",
+            "/{cmd}: impossibile copiare «{file}»",
+            "/{cmd}: no es pot copiar «{file}»",
+            "/{cmd}: ní féidir '{file}' a chóipeáil",
+        ],
+    ),
+    (
+        Key::ScrCannotCreate,
+        [
+            "/{cmd}: no se puede crear «{file}»",
+            "/{cmd}: „{file}“ kann nicht erstellt werden",
+            "/{cmd}: impossibile creare «{file}»",
+            "/{cmd}: no es pot crear «{file}»",
+            "/{cmd}: ní féidir '{file}' a chruthú",
+        ],
+    ),
+    (
+        Key::ScrFileExists,
+        [
+            "/{cmd}: «{file}» ya existe",
+            "/{cmd}: „{file}“ existiert bereits",
+            "/{cmd}: «{file}» esiste già",
+            "/{cmd}: «{file}» ja existix",
+            "/{cmd}: tá '{file}' ann cheana",
+        ],
+    ),
+    (
+        Key::ScrNoSuchDialog,
+        [
+            "/{cmd}: no existe el diálogo «{name}»",
+            "/{cmd}: kein Dialog „{name}“",
+            "/{cmd}: nessuna finestra di dialogo «{name}»",
+            "/{cmd}: no hi ha cap diàleg «{name}»",
+            "/{cmd}: níl dialóg ann darb ainm '{name}'",
+        ],
+    ),
+    (
+        Key::ScrNoSuchTable,
+        [
+            "/{cmd}: no existe la tabla «{name}»",
+            "/{cmd}: keine Tabelle „{name}“",
+            "/{cmd}: nessuna tabella «{name}»",
+            "/{cmd}: no hi ha cap taula «{name}»",
+            "/{cmd}: níl tábla ann darb ainm '{name}'",
+        ],
+    ),
+    (
+        Key::ScrNoSuchScript,
+        [
+            "/{cmd}: no existe el script «{name}»",
+            "/{cmd}: kein Script „{name}“",
+            "/{cmd}: nessuno script «{name}»",
+            "/{cmd}: no hi ha cap script «{name}»",
+            "/{cmd}: níl script ann darb ainm '{name}'",
+        ],
+    ),
+    (
+        Key::ScrTableExists,
+        [
+            "/{cmd}: la tabla «{name}» ya existe",
+            "/{cmd}: Tabelle „{name}“ existiert bereits",
+            "/{cmd}: la tabella «{name}» esiste già",
+            "/{cmd}: la taula «{name}» ja existix",
+            "/{cmd}: tá an tábla '{name}' ann cheana",
+        ],
+    ),
+    (
+        Key::ScrNameInUse,
+        [
+            "/{cmd}: el nombre «{name}» ya está en uso",
+            "/{cmd}: Name „{name}“ wird bereits verwendet",
+            "/{cmd}: il nome «{name}» è già in uso",
+            "/{cmd}: el nom «{name}» ja està en ús",
+            "/{cmd}: tá an t-ainm '{name}' in úsáid cheana",
+        ],
+    ),
+    (
+        Key::ScrNoAddress,
+        [
+            "/{cmd}: no se encuentra la dirección de {nick}",
+            "/{cmd}: Adresse von {nick} nicht gefunden",
+            "/{cmd}: impossibile trovare l'indirizzo di {nick}",
+            "/{cmd}: no es troba l'adreça de {nick}",
+            "/{cmd}: ní féidir seoladh {nick} a aimsiú",
+        ],
+    ),
+    (
+        Key::ScrLabelNotFound,
+        [
+            "/goto: no se encuentra «{label}»",
+            "/goto: „{label}“ nicht gefunden",
+            "/goto: etichetta «{label}» non trovata",
+            "/goto: no es troba «{label}»",
+            "/goto: níor aimsíodh '{label}'",
+        ],
+    ),
+    (
+        Key::ScrCommandSandboxed,
+        [
+            "/{cmd}: no permitido por el entorno aislado de los scripts",
+            "/{cmd}: von der Script-Sandbox nicht erlaubt",
+            "/{cmd}: non consentito dalla sandbox degli script",
+            "/{cmd}: no es permet en l'entorn aïllat dels scripts",
+            "/{cmd}: ní cheadaíonn bosca gainimh na scripteanna é",
+        ],
+    ),
+    (
+        Key::ScrIdentSandboxed,
+        [
+            "${ident}: no permitido por el entorno aislado de los scripts",
+            "${ident}: von der Script-Sandbox nicht erlaubt",
+            "${ident}: non consentito dalla sandbox degli script",
+            "${ident}: no es permet en l'entorn aïllat dels scripts",
+            "${ident}: ní cheadaíonn bosca gainimh na scripteanna é",
+        ],
+    ),
+    (
+        Key::ScrIdentParams,
+        [
+            "Parámetros no válidos: ${ident}",
+            "Ungültige Parameter: ${ident}",
+            "Parametri non validi: ${ident}",
+            "Paràmetres no vàlids: ${ident}",
+            "Paraiméadair neamhbhailí: ${ident}",
+        ],
+    ),
+    (
+        Key::ScrIdentParamsDetail,
+        [
+            "Parámetros no válidos: ${ident} ({detail})",
+            "Ungültige Parameter: ${ident} ({detail})",
+            "Parametri non validi: ${ident} ({detail})",
+            "Paràmetres no vàlids: ${ident} ({detail})",
+            "Paraiméadair neamhbhailí: ${ident} ({detail})",
+        ],
+    ),
+    (
+        Key::ScrIdentOnlyMime,
+        [
+            "Parámetros no válidos: ${ident} (solo se admite «m»)",
+            "Ungültige Parameter: ${ident} (nur „m“ wird unterstützt)",
+            "Parametri non validi: ${ident} (è supportata solo «m»)",
+            "Paràmetres no vàlids: ${ident} (només s'admet «m»)",
+            "Paraiméadair neamhbhailí: ${ident} (ní thacaítear ach le 'm')",
+        ],
+    ),
+    (
+        Key::ScrTooDeep,
+        [
+            "Error: script demasiado profundo / bucle infinito",
+            "Fehler: Script zu tief verschachtelt / Endlosschleife",
+            "Errore: script troppo annidato / ciclo infinito",
+            "Error: script massa profund / bucle infinit",
+            "Earráid: script ró-dhomhain / lúb gan deireadh",
+        ],
+    ),
+    (
+        Key::ScrNoSuchMenuItem,
+        [
+            "popup: elemento de menú inexistente",
+            "Popup: Menüeintrag nicht vorhanden",
+            "popup: voce di menu inesistente",
+            "popup: element de menú inexistent",
+            "popup: níl a leithéid de mhír roghchláir ann",
+        ],
+    ),
+    (
+        Key::ScrSandbox,
+        [
+            "acceso denegado fuera de la carpeta de scripts: {path}",
+            "Zugriff außerhalb des Script-Ordners verweigert: {path}",
+            "accesso negato fuori dalla cartella degli script: {path}",
+            "accés denegat fora de la carpeta dels scripts: {path}",
+            "rochtain diúltaithe lasmuigh d'fhillteán na scripteanna: {path}",
+        ],
+    ),
+    (
+        Key::ScrParse,
+        [
+            "{file}:{line}: {problem}",
+            "{file}:{line}: {problem}",
+            "{file}:{line}: {problem}",
+            "{file}:{line}: {problem}",
+            "{file}:{line}: {problem}",
+        ],
+    ),
+    (Key::ScrMissingClose, ["falta «}»", "„}“ fehlt", "manca «}»", "falta «}»", "'}' ar iarraidh"]),
+    (Key::ScrMissingOpen, ["falta «{»", "„{“ fehlt", "manca «{»", "falta «{»", "'{' ar iarraidh"]),
+    (
+        Key::ScrAt,
+        [
+            "{msg} (línea {line}, {script})",
+            "{msg} (Zeile {line}, {script})",
+            "{msg} (riga {line}, {script})",
+            "{msg} (línia {line}, {script})",
+            "{msg} (líne {line}, {script})",
+        ],
+    ),
+    (
+        Key::ScrMadeTable,
+        [
+            "Tabla hash «{name}» creada ({size})",
+            "Hashtabelle „{name}“ erstellt ({size})",
+            "Tabella hash «{name}» creata ({size})",
+            "Taula hash «{name}» creada ({size})",
+            "Cruthaíodh an tábla haiseála '{name}' ({size})",
+        ],
+    ),
+    (
+        Key::ScrAddedItem,
+        [
+            "Elemento «{item}» añadido a la tabla hash «{table}»",
+            "Eintrag „{item}“ zur Hashtabelle „{table}“ hinzugefügt",
+            "Elemento «{item}» aggiunto alla tabella hash «{table}»",
+            "Element «{item}» afegit a la taula hash «{table}»",
+            "Cuireadh an mhír '{item}' leis an tábla haiseála '{table}'",
+        ],
+    ),
+    (
+        Key::ScrTimerNotActive,
+        [
+            "Timer {name} inactivo",
+            "Timer {name} nicht aktiv",
+            "Timer {name} non attivo",
+            "Temporitzador {name} inactiu",
+            "Níl an lasc ama {name} gníomhach",
+        ],
+    ),
+    (
+        Key::ScrTimerHalted,
+        [
+            "Timer {name} detenido",
+            "Timer {name} angehalten",
+            "Timer {name} fermato",
+            "Temporitzador {name} aturat",
+            "Stopadh an lasc ama {name}",
+        ],
+    ),
+    (
+        Key::ScrTimerActivated,
+        [
+            "Timer {name} activado",
+            "Timer {name} aktiviert",
+            "Timer {name} attivato",
+            "Temporitzador {name} activat",
+            "Gníomhachtaíodh an lasc ama {name}",
+        ],
+    ),
+    (
+        Key::ScrAllTimersHalted,
+        [
+            "Todos los timers detenidos",
+            "Alle Timer angehalten",
+            "Tutti i timer fermati",
+            "Tots els temporitzadors aturats",
+            "Stopadh na lasca ama go léir",
+        ],
+    ),
+    (
+        Key::ScrNoActiveTimers,
+        [
+            "Ningún timer activo",
+            "Keine aktiven Timer",
+            "Nessun timer attivo",
+            "Cap temporitzador actiu",
+            "Níl aon lasc ama gníomhach",
+        ],
+    ),
+    (
+        Key::ScrActiveTimers,
+        [
+            "Timers activos:",
+            "Aktive Timer:",
+            "Timer attivi:",
+            "Temporitzadors actius:",
+            "Lasca ama gníomhacha:",
+        ],
+    ),
+    (
+        Key::ScrTimerLine,
+        [
+            "Timer {name}, retardo {delay}: {command}",
+            "Timer {name}, Verzögerung {delay}: {command}",
+            "Timer {name}, ritardo {delay}: {command}",
+            "Temporitzador {name}, retard {delay}: {command}",
+            "Lasc ama {name}, moill {delay}: {command}",
+        ],
+    ),
+    (
+        Key::ScrTimerLineLeft,
+        [
+            "Timer {name}, retardo {delay}: {command} ({left} restantes)",
+            "Timer {name}, Verzögerung {delay}: {command} (noch {left})",
+            "Timer {name}, ritardo {delay}: {command} (ancora {left})",
+            "Temporitzador {name}, retard {delay}: {command} (en queden {left})",
+            "Lasc ama {name}, moill {delay}: {command} ({left} fágtha)",
+        ],
+    ),
+    (
+        Key::ScrVarSet,
+        [
+            "{name} ahora vale {value}",
+            "{name} auf {value} gesetzt",
+            "{name} impostata a {value}",
+            "{name} ara val {value}",
+            "Socraíodh {name} go {value}",
+        ],
+    ),
+    (
+        Key::ScrVarUnsetAll,
+        [
+            "Todas las variables borradas",
+            "Alle Variablen gelöscht",
+            "Tutte le variabili cancellate",
+            "Totes les variables esborrades",
+            "Glanadh na hathróga go léir",
+        ],
+    ),
+    (
+        Key::ScrVarUnset,
+        [
+            "{name} borrada",
+            "{name} gelöscht",
+            "{name} cancellata",
+            "{name} esborrada",
+            "Glanadh {name}",
+        ],
+    ),
+    (
+        Key::ScrVarInc,
+        [
+            "{name} incrementada a {value}",
+            "{name} auf {value} erhöht",
+            "{name} incrementata a {value}",
+            "{name} incrementada a {value}",
+            "Méadaíodh {name} go {value}",
+        ],
+    ),
+    (
+        Key::ScrVarDec,
+        [
+            "{name} decrementada a {value}",
+            "{name} auf {value} verringert",
+            "{name} decrementata a {value}",
+            "{name} decrementada a {value}",
+            "Laghdaíodh {name} go {value}",
+        ],
+    ),
+    (
+        Key::DefaultRealname,
+        [
+            "Usuario de AlpIRC",
+            "AlpIRC-Benutzer",
+            "Utente di AlpIRC",
+            "Usuari d'AlpIRC",
+            "Úsáideoir AlpIRC",
+        ],
+    ),
+    (Key::DefaultAway, ["Ausente", "Abwesend", "Assente", "Absent", "As láthair"]),
 ];
 
 /// Texte brut d'une clé dans une langue (repli sur l'anglais).
@@ -1148,7 +2180,8 @@ mod tests {
     }
 
     /// Clés qui restent identiques à l'anglais dans toutes les langues (rien que des marques et des signes).
-    const SAME_AS_ENGLISH: &[Key] = &[Key::MsgSent, Key::NoticeSent, Key::CtcpSent];
+    const SAME_AS_ENGLISH: &[Key] =
+        &[Key::MsgSent, Key::NoticeSent, Key::CtcpSent, Key::NetUnreachable, Key::NetUnreachableVia, Key::ScrParse];
 
     // Toute nouvelle clé doit être traduite dans les 7 langues (voir l'ADR 0012).
     #[test]

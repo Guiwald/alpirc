@@ -62,7 +62,7 @@ fn build(model: &Model, lang: Lang) -> Menu {
             &PredefinedMenuItem::show_all(None),
             &PredefinedMenuItem::separator(),
             // Pas l'élément « Quitter » prédéfini : il fermerait sans envoyer QUIT aux serveurs.
-            &muda::MenuItem::with_id(ids::EXIT.to_string(), plain(&t(lang, "quit.title")), true, accel(ids::EXIT)),
+            &muda::MenuItem::with_id(ids::EXIT.to_string(), plain(&t(lang, "mac.quit")), true, accel(ids::EXIT)),
         ],
     )
     .expect("menu AlpIRC");

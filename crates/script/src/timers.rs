@@ -8,7 +8,7 @@
 use crate::calc::{fmt_num, parse_num};
 use crate::exec::{Frame, R, split_word, switches};
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host};
+use crate::{Ctx, Engine, Host, Msg};
 
 #[derive(Debug, Clone)]
 pub struct Timer {
@@ -91,12 +91,12 @@ impl Engine {
             let pat = if name.is_empty() { "*" } else { name };
             let idx = self.timer_names_matching(pat);
             if idx.is_empty() && !quiet {
-                self.info(h, ctx, &format!("* Timer {name} not active"));
+                self.info(h, ctx, Msg::TimerNotActive { name: name.to_string() });
             }
             for i in idx.into_iter().rev() {
                 let t = self.timers.list.remove(i);
                 if !quiet {
-                    self.info(h, ctx, &format!("* Timer {} halted", t.name));
+                    self.info(h, ctx, Msg::TimerHalted { name: t.name.clone() });
                 }
             }
             return Ok(());
@@ -123,11 +123,11 @@ impl Engine {
                 return Ok(());
             }
             if idx.is_empty() {
-                self.info(h, ctx, &format!("* Timer {name} not active"));
+                self.info(h, ctx, Msg::TimerNotActive { name: name.to_string() });
             } else {
                 for i in idx {
                     let line = self.timer_line(&self.timers.list[i].clone(), now);
-                    self.info(h, ctx, &line);
+                    self.info(h, ctx, line);
                 }
             }
             return Ok(());
@@ -147,10 +147,10 @@ impl Engine {
         }
         let (iv, cmd) = split_word(r);
         let (Some(reps), Some(iv)) = (first.parse::<u64>().ok(), parse_num(iv)) else {
-            return Err(self.err("/timer: invalid parameters"));
+            return Err(self.err(Msg::InvalidParams { cmd: "timer".into() }));
         };
         if cmd.trim().is_empty() {
-            return Err(self.err("/timer: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "timer".into() }));
         }
         let ms = sw.contains('m') || sw.contains('h');
         let interval = if ms { iv as i64 } else { (iv * 1000.0) as i64 }.max(0);
@@ -177,15 +177,15 @@ impl Engine {
         }
         self.rt.ltimer = tname.clone();
         if !quiet {
-            self.info(h, ctx, &format!("* Timer {tname} activated"));
+            self.info(h, ctx, Msg::TimerActivated { name: tname.to_string() });
         }
         Ok(())
     }
 
-    fn timer_line(&self, t: &Timer, _now: i64) -> String {
+    fn timer_line(&self, t: &Timer, _now: i64) -> Msg {
         let delay = if t.ms { format!("{}ms", t.interval) } else { format!("{}s", fmt_num(t.interval as f64 / 1000.0)) };
-        let reps = if t.reps == 0 { String::new() } else { format!(" ({} left)", t.left) };
-        format!("* Timer {} {delay} delay {}{reps}", t.name, t.command)
+        let left = (t.reps != 0).then_some(t.left);
+        Msg::TimerLine { name: t.name.clone(), delay, command: t.command.clone(), left }
     }
 
     /// `/timers [off]`.
@@ -193,19 +193,19 @@ impl Engine {
         if args.trim().eq_ignore_ascii_case("off") {
             self.timers.list.clear();
             if !quiet {
-                self.info(h, ctx, "* All timers halted");
+                self.info(h, ctx, Msg::AllTimersHalted);
             }
             return Ok(());
         }
         if self.timers.list.is_empty() {
-            self.info(h, ctx, "* No active timers");
+            self.info(h, ctx, Msg::NoActiveTimers);
             return Ok(());
         }
-        self.info(h, ctx, "* Active timers:");
+        self.info(h, ctx, Msg::ActiveTimers);
         let now = h.now_ms();
         for t in self.timers.list.clone() {
             let line = self.timer_line(&t, now);
-            self.info(h, ctx, &line);
+            self.info(h, ctx, line);
         }
         Ok(())
     }
@@ -217,10 +217,7 @@ impl Engine {
         match self.run_top(h, &ctx, frame, &block, false) {
             Ok(()) => Ok(()),
             Err(e) => {
-                h.script_error(&ctx, &match e {
-                    crate::ScriptError::Sandbox(p) => format!("* {}", crate::ScriptError::Sandbox(p)),
-                    other => other.to_string(),
-                });
+                crate::exec::report(h, &ctx, &e.msg());
                 Ok(())
             }
         }

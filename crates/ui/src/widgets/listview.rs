@@ -119,6 +119,26 @@ impl ListView {
         self.top = 0;
     }
 
+    /// Ajoute des lignes : à la fin, ou à leur place si la liste est triée (après les lignes égales, comme le
+    /// ferait [`ListView::sort_rows`]) ; la sélection suit ses lignes. Pour une liste qui se remplit peu à peu
+    /// (`/list`), sans tout retrier à chaque ligne.
+    pub fn add_rows(&mut self, rows: Vec<ListRow>) {
+        let Some((col, asc)) = self.sort else {
+            self.rows.extend(rows);
+            self.sel.resize(self.rows.len());
+            return;
+        };
+        for row in rows {
+            let key = row.cells.get(col).map_or("", |s| s.as_str());
+            let i = self.rows.partition_point(|r| {
+                let o = natural_cmp(r.cells.get(col).map_or("", |s| s.as_str()), key);
+                (if asc { o } else { o.reverse() }) != Ordering::Greater
+            });
+            self.rows.insert(i, row);
+            self.sel.insert(i);
+        }
+    }
+
     /// Trie les lignes selon [`ListView::sort`] (la sélection suit les lignes).
     pub fn sort_rows(&mut self) {
         let Some((col, asc)) = self.sort else { return };
@@ -528,5 +548,27 @@ mod tests {
         assert_eq!(lv.event(&Input::moved(142, hy), rect, &res, &mut p), Some(ListViewMsg::ColumnResized(0, 140)));
         lv.event(&Input::release(142, hy), rect, &res, &mut p);
         assert_eq!(lv.sort, Some((0, true)), "redimensionner ne trie pas");
+    }
+
+    #[test]
+    fn added_rows_take_their_sorted_place() {
+        let row = |n: &str, u: &str| ListRow::new(&[n, u]);
+        let names = |lv: &ListView| lv.rows.iter().map(|r| r.cells[0].clone()).collect::<Vec<_>>();
+        let mut lv = ListView::new(vec![Column::new("Canal", 100), Column::new("Users", 60)]);
+        // Sans tri : à la fin.
+        lv.add_rows(vec![row("#b", "5"), row("#a", "9")]);
+        assert_eq!(names(&lv), ["#b", "#a"]);
+        // Les plus peuplés d'abord : chaque ligne à sa place, les égales dans l'ordre d'arrivée.
+        let mut lv = ListView::new(vec![Column::new("Canal", 100), Column::new("Users", 60)]);
+        lv.sort = Some((1, false));
+        lv.add_rows(vec![row("#petit", "2"), row("#lyon", "42")]);
+        lv.sel.select_only(0);
+        lv.add_rows(vec![row("#grenoble", "12"), row("#annecy", "2"), row("#paris", "100")]);
+        assert_eq!(names(&lv), ["#paris", "#lyon", "#grenoble", "#petit", "#annecy"]);
+        assert_eq!(lv.sel.selected(), vec![1], "la sélection suit #lyon");
+        assert_eq!(lv.sel.cursor, 1);
+        let mut sorted = lv.clone();
+        sorted.sort_rows();
+        assert_eq!(names(&sorted), names(&lv), "comme un tri complet");
     }
 }

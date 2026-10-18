@@ -1065,13 +1065,13 @@ pub const HELP: &[(&str, [&str; 7])] = &[
     (
         "splay",
         [
-            "/splay file — play a sound",
-            "/splay fichier — jouer un son",
-            "/splay file — reproducir un sonido",
-            "/splay file — einen Klang abspielen",
-            "/splay file — riproduci un suono",
-            "/splay file — reproduir un so",
-            "/splay file — seinn fuaim",
+            "/splay file — play a sound; /splay stop — stop it",
+            "/splay fichier — jouer un son ; /splay stop — l'arrêter",
+            "/splay file — reproducir un sonido; /splay stop — detenerlo",
+            "/splay file — einen Klang abspielen; /splay stop — ihn anhalten",
+            "/splay file — riproduci un suono; /splay stop — fermalo",
+            "/splay file — reproduir un so; /splay stop — aturar-lo",
+            "/splay file — seinn fuaim; /splay stop — stad í",
         ],
     ),
     (

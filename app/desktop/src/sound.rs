@@ -2,10 +2,10 @@
 //!
 //! Un fil « alpirc-son » décode le fichier au fil de la lecture (symphonia, Rust pur), le met au format de la sortie
 //! (canaux, fréquence) et remplit une file que vide le rappel de la sortie audio (cpal : CoreAudio sur Mac, ALSA sous
-//! Linux). Comme dans mIRC, un nouveau son remplace celui qui joue. Les bips, eux, se suivent (`/beep 3`), dix au plus
-//! en attente, et se mêlent au son en cours. La sortie n'est ouverte que le temps de jouer, et quelques secondes
-//! après : rien ne garde la carte son occupée entre deux sons. Un fichier absent ou illisible est ignoré (une ligne
-//! dans le journal).
+//! Linux). Comme dans mIRC, un nouveau son remplace celui qui joue, et `/splay stop` le coupe. Les bips, eux, se
+//! suivent (`/beep 3`), dix au plus en attente, et se mêlent au son en cours. La sortie n'est ouverte que le temps de
+//! jouer, et quelques secondes après : rien ne garde la carte son occupée entre deux sons. Un fichier absent ou
+//! illisible est ignoré (une ligne dans le journal).
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -38,6 +38,8 @@ enum Cmd {
     File(PathBuf),
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     Beep,
+    /// Couper le son en cours et les bips en attente.
+    Stop,
 }
 
 /// Le lecteur de sons de l'application (le fil de lecture démarre au premier son).
@@ -59,6 +61,13 @@ impl Sound {
     #[cfg_attr(target_os = "macos", allow(dead_code))]
     pub fn beep(&mut self) {
         self.send(Cmd::Beep);
+    }
+
+    /// Coupe le son en cours (et les bips en attente). Rien ne joue encore : rien à faire.
+    pub fn stop(&mut self) {
+        if self.tx.is_some() {
+            self.send(Cmd::Stop);
+        }
     }
 
     fn send(&mut self, cmd: Cmd) {
@@ -105,6 +114,14 @@ fn run(rx: Receiver<Cmd>) {
                 Err(_) => return,
             },
         };
+        if let Some(Cmd::Stop) = cmd {
+            // Sans ouvrir la sortie : on vide ce qu'elle allait jouer.
+            playing = None;
+            if let Some(o) = &out {
+                o.queues().clear();
+            }
+            continue;
+        }
         if let Some(cmd) = cmd {
             if out.as_ref().is_some_and(Output::failed) {
                 out = None;
@@ -138,6 +155,7 @@ fn run(rx: Receiver<Cmd>) {
                         q.beeps.extend(one);
                     }
                 }
+                Cmd::Stop => {}
             }
             idle_since = None;
         }
@@ -207,6 +225,12 @@ struct Queues {
 impl Queues {
     fn is_empty(&self) -> bool {
         self.sound.is_empty() && self.beeps.is_empty()
+    }
+
+    /// Plus rien à jouer (`/splay stop`).
+    fn clear(&mut self) {
+        self.sound.clear();
+        self.beeps.clear();
     }
 
     /// Remplit un tampon de la sortie : son et bips mêlés, silence quand il n'y a rien.
@@ -670,7 +694,25 @@ mod tests {
             s.beep();
         }
         std::thread::sleep(Duration::from_millis(1000));
+        // Un son coupé au bout d'un quart de seconde (`/splay stop`).
+        s.play_file(&a);
+        std::thread::sleep(Duration::from_millis(250));
+        s.stop();
+        std::thread::sleep(Duration::from_millis(600));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn arreter_sans_rien_jouer() {
+        // Rien n'a encore joué : pas de fil de lecture lancé pour rien.
+        let mut s = Sound::new();
+        s.stop();
+        assert!(s.tx.is_none());
+        let mut q = Queues::default();
+        q.sound.extend([0.5, 0.5]);
+        q.beeps.extend([0.25]);
+        q.clear();
+        assert!(q.is_empty());
     }
 
     #[test]

@@ -890,6 +890,12 @@ impl Fonts {
         out
     }
 
+    /// Nombre de lignes qu'occupe une étiquette à retour à la ligne (`&` de raccourci compris) sur `width` pixels,
+    /// coupée comme la dessine [`crate::widgets::Label`] : aux `\n`, aux espaces, ou dans un mot trop long (adresse).
+    pub fn label_rows(&self, text: &str, style: TextStyle, width: i32) -> usize {
+        self.wrap_text(&parse_mnemonic(text).0, style, width).len().max(1)
+    }
+
     /// Vrai si une police (intégrée ou du système) a un glyphe pour ce caractère.
     pub fn has_glyph(&self, c: char) -> bool {
         let shaped = self.shape_rich(&c.to_string(), TextStyle::UI, &[]);
@@ -1025,6 +1031,21 @@ pub(crate) mod tests {
             include_bytes!("../../../assets/fonts/PixelOperator.ttf"),
             include_bytes!("../../../assets/fonts/PixelOperator-Bold.ttf"),
         )
+    }
+
+    #[test]
+    fn label_rows_count_wrapped_lines() {
+        let f = fonts();
+        let w = f.measure("Licence MIT", TextStyle::UI);
+        assert_eq!(f.label_rows("&Licence MIT", TextStyle::UI, w), 1, "le & ne compte pas");
+        assert_eq!(f.label_rows("Licence MIT", TextStyle::UI, w - 1), 2);
+        assert_eq!(f.label_rows("a\n\nb", TextStyle::UI, 200), 3);
+        assert_eq!(f.label_rows("", TextStyle::UI, 200), 1);
+        // Une adresse sans espace plus large que l'étiquette est coupée, et ses lignes comptées.
+        let url = "https://github.com/Guiwald/alpirc/blob/main/README.md";
+        let uw = f.measure(url, TextStyle::UI);
+        assert_eq!(f.label_rows(url, TextStyle::UI, uw / 2 + 4), 2);
+        assert_eq!(f.label_rows(&format!("MIT — {url}"), TextStyle::UI, uw), 2);
     }
 
     #[test]

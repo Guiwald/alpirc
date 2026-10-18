@@ -364,7 +364,8 @@ impl State {
                 let t = self.t(Key::PingTimeout, &[("secs", &co.ping_timeout_secs.to_string())]);
                 self.print(st, LineKind::Error, t);
                 self.close_effect(id);
-                self.conn_closed(id, Some("Ping timeout"));
+                let reason = self.t(Key::PingTimeoutReason, &[]);
+                self.conn_closed(id, Some(&reason));
                 continue;
             }
             let registered = c.session.is_registered();

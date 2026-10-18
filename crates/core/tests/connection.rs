@@ -5,7 +5,17 @@ mod common;
 
 use alpirc_core::settings::{Network, Server};
 use alpirc_core::{ConnState, Effect, WinKind};
+use alpirc_proto::neterror::{IoKind, NetError};
 use common::*;
+
+fn x() -> NetError {
+    NetError::Other("x".into())
+}
+
+fn refused(port: u16) -> NetError {
+    let addr = Some(format!("192.0.2.7:{port}").parse().unwrap());
+    NetError::Unreachable { host: "irc.test.net".into(), port, addr, cause: IoKind::Refused }
+}
 
 #[test]
 fn reconnect_and_rejoin_with_keys() {
@@ -14,10 +24,10 @@ fn reconnect_and_rejoin_with_keys() {
     let w = h.join("#lyon", "@Guiwald");
     h.feed(":Guiwald!alpirc@host.test MODE #lyon +k clé");
     h.join("#open", "Guiwald");
-    h.c.on_closed(h.conn, Some("Connection reset by peer"), h.now);
-    assert!(h.has_line(h.status, "* Disconnected (Connection reset by peer)"));
+    h.c.on_closed(h.conn, Some(&NetError::Io(IoKind::Reset)), h.now);
+    assert!(h.has_line(h.status, "* Disconnected (connection reset by peer)"));
     assert!(h.has_line(h.status, "* Retrying in 10 seconds (attempt 1)..."));
-    assert_eq!(h.last(w), "* Disconnected (Connection reset by peer)");
+    assert_eq!(h.last(w), "* Disconnected (connection reset by peer)");
     assert!(!h.c.window(w).unwrap().joined);
     assert_eq!(h.c.conn_info(h.conn).unwrap().state, ConnState::Disconnected);
     let next = h.advance(9_999);
@@ -54,21 +64,22 @@ fn backoff_and_server_rotation() {
     let mut h = H::with(s);
     h.c.connect(h.status, "TestNet", None, h.now);
     assert_eq!(h.connects()[0].1, "irc.test.net");
-    h.c.on_connect_failed(h.conn, "Connection refused", h.now);
-    assert!(h.has_line(h.status, "* Unable to connect to server (Connection refused)"));
+    h.c.on_connect_failed(h.conn, &refused(6667), None, h.now);
+    let want = "* Unable to connect to server (irc.test.net:6667 (192.0.2.7:6667): connection refused)";
+    assert!(h.has_line(h.status, want), "{:#?}", h.status_lines());
     assert!(h.has_line(h.status, "* Retrying in 10 seconds (attempt 1)..."));
     h.advance(10_000);
     assert_eq!(h.connects(), vec![(h.conn, "irc2.test.net".into(), 6697, true)]);
-    h.c.on_connect_failed(h.conn, "timeout", h.now);
+    h.c.on_connect_failed(h.conn, &NetError::ConnectTimeout { ms: 30_000 }, None, h.now);
     assert!(h.has_line(h.status, "* Retrying in 20 seconds (attempt 2)..."));
     h.advance(20_000);
     assert_eq!(h.connects()[0].1, "irc.test.net");
-    h.c.on_connect_failed(h.conn, "x", h.now);
+    h.c.on_connect_failed(h.conn, &x(), None, h.now);
     h.advance(40_000);
-    h.c.on_connect_failed(h.conn, "x", h.now);
+    h.c.on_connect_failed(h.conn, &x(), None, h.now);
     assert!(h.has_line(h.status, "* Retrying in 60 seconds (attempt 4)..."));
     h.advance(60_000);
-    h.c.on_connect_failed(h.conn, "x", h.now);
+    h.c.on_connect_failed(h.conn, &x(), None, h.now);
     assert_eq!(h.last(h.status), "* Retrying in 60 seconds (attempt 5)...");
     // Une connexion réussie remet le compteur à zéro.
     h.advance(60_000);
@@ -84,12 +95,12 @@ fn max_retries() {
     s.connect.max_retries = 2;
     let mut h = H::with(s);
     h.c.connect(h.status, "TestNet", None, h.now);
-    h.c.on_connect_failed(h.conn, "x", h.now);
+    h.c.on_connect_failed(h.conn, &x(), None, h.now);
     h.advance(10_000);
-    h.c.on_connect_failed(h.conn, "x", h.now);
+    h.c.on_connect_failed(h.conn, &x(), None, h.now);
     h.advance(20_000);
     h.clear();
-    h.c.on_connect_failed(h.conn, "x", h.now);
+    h.c.on_connect_failed(h.conn, &x(), None, h.now);
     h.advance(120_000);
     assert!(h.connects().is_empty());
 }
@@ -117,7 +128,7 @@ fn ping_timeout_closes_and_reconnects() {
     assert!(h.has_line(h.status, "* Disconnected (Ping timeout)"));
     // L'hôte signale ensuite la fermeture : ignorée.
     let n = h.status_lines().len();
-    h.c.on_closed(h.conn, Some("closed"), h.now);
+    h.c.on_closed(h.conn, Some(&x()), h.now);
     assert_eq!(h.status_lines().len(), n);
     h.advance(10_000);
     assert_eq!(h.connects().len(), 1);

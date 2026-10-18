@@ -53,6 +53,20 @@ impl ListSel {
         self.selected.len()
     }
 
+    /// Un élément non choisi est inséré au rang `i` : la sélection, l'élément courant et l'ancre suivent leurs
+    /// éléments.
+    pub fn insert(&mut self, i: usize) {
+        let i = i.min(self.selected.len());
+        let had = !self.selected.is_empty();
+        self.selected.insert(i, false);
+        if had && self.cursor >= i {
+            self.cursor += 1;
+        }
+        if had && self.anchor >= i {
+            self.anchor += 1;
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.selected.is_empty()
     }

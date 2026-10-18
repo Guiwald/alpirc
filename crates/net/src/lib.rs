@@ -32,6 +32,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
+pub use alpirc_proto::neterror::{CertProblem, IoKind, NetError, PemProblem};
 pub use cert::generate_self_signed;
 pub use dcc::DccJob;
 pub use tls::fingerprint;
@@ -127,17 +128,18 @@ pub enum NetEvent {
     /// Connexion terminée : fermée par le pair, erreur, ou [`Net::close`]. `error` vaut `None` pour une
     /// fermeture demandée par nous ou une fin de flux normale. Arrive aussi (avec `None`) quand
     /// [`Net::close`] interrompt une tentative pas encore aboutie.
-    Closed { conn: u32, error: Option<String> },
+    Closed { conn: u32, error: Option<NetError> },
     /// Échec de la tentative avant `Connected` (résolution, refus, délai, TLS). Pour un certificat refusé,
     /// `cert_sha256` donne l'empreinte du certificat présenté, pour proposer « faire confiance à ce
-    /// certificat » ([`Verify::Pinned`]).
-    Failed { conn: u32, error: String, cert_sha256: Option<String> },
+    /// certificat » ([`Verify::Pinned`]). L'erreur est décrite par ses données ([`NetError`]) : à l'interface
+    /// de la rédiger ; son `Display` est en anglais (journaux).
+    Failed { conn: u32, error: NetError, cert_sha256: Option<String> },
     /// Côté serveur : un client s'est connecté à `listener` (négociation TLS terminée s'il y a lieu).
     /// L'identifiant `conn` est attribué par [`Net`] (à partir de [`FIRST_ACCEPTED_ID`]) et s'utilise avec
     /// [`Net::send`] et [`Net::close`] ; la connexion produit ensuite les mêmes `Line` et `Closed`.
     Accepted { listener: u32, conn: u32, peer: SocketAddr, tls: bool },
     /// Côté serveur : l'écoute s'est arrêtée, sur erreur (`Some`) ou par [`Net::stop_listener`] (`None`).
-    ListenerClosed { listener: u32, error: Option<String> },
+    ListenerClosed { listener: u32, error: Option<NetError> },
     /// DCC : la connexion directe `id` est établie (sortante, ou pair accepté par [`Net::dcc_listen`]).
     DccConnected { id: u32, peer: SocketAddr },
     /// DCC CHAT : une ligne reçue, sans CR/LF (octets bruts).
@@ -147,7 +149,7 @@ pub enum NetEvent {
     DccProgress { id: u32, bytes: u64 },
     /// DCC : fin, toujours exactement une par identifiant : `error` vaut `None` pour un transfert complet ou
     /// une discussion terminée normalement ; `bytes` : position finale.
-    DccEnded { id: u32, bytes: u64, error: Option<String> },
+    DccEnded { id: u32, bytes: u64, error: Option<NetError> },
 }
 
 impl NetEvent {
@@ -185,7 +187,7 @@ impl fmt::Debug for ServerTls {
 pub fn client_config(
     verify: &Verify,
     client_cert: Option<(&[u8], &[u8])>,
-) -> Result<Arc<rustls::ClientConfig>, String> {
+) -> Result<Arc<rustls::ClientConfig>, NetError> {
     tls::build_client_config(verify, client_cert, None)
 }
 

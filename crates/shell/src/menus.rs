@@ -2,7 +2,8 @@
 //! conversion des menus des scripts.
 
 use alpirc_core::i18n::Lang;
-use alpirc_core::{Client, WinId};
+use alpirc_core::settings::DisplayOptions;
+use alpirc_core::{Client, Settings, WinId};
 use alpirc_ui::MenuItem;
 
 use crate::tr::t;
@@ -49,6 +50,9 @@ pub mod ids {
     pub const ABOUT: u32 = 61;
     /// Favoris : `FAV_BASE + index`.
     pub const FAV_BASE: u32 = 1_000;
+    /// Thèmes de l'utilisateur (`display.user_themes`) : `THEME_BASE + index`, au plus `THEME_MAX`.
+    pub const THEME_BASE: u32 = 2_000;
+    pub const THEME_MAX: u32 = 100;
     /// Fenêtres : `WIN_BASE + id`.
     pub const WIN_BASE: u32 = 10_000;
     /// Menu « Commandes » des scripts : `SCRIPT_BASE + action`.
@@ -61,7 +65,6 @@ pub struct MenuState {
     pub switchbar: bool,
     pub treebar: bool,
     pub nicklist: bool,
-    pub dark: bool,
     pub connected: bool,
     /// La connexion active est marquée absente.
     pub away: bool,
@@ -93,7 +96,44 @@ pub fn from_script(items: &[alpirc_script::MenuItem], base: u32) -> Vec<MenuItem
         .collect()
 }
 
-/// La barre de menus complète.
+/// Le thème choisi, tel que le menu Affichage › Thème le coche.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThemeChoice {
+    /// Un thème fourni (`classic`, `dark`).
+    Builtin(&'static str),
+    /// Un thème de l'utilisateur, par son rang dans `display.user_themes`.
+    User(usize),
+}
+
+/// Thème coché dans le menu : celui des réglages (les anciens noms `classique`, `sombre` compris). Un nom inconnu
+/// (thème supprimé ailleurs) coche le thème fourni qui sert de base à l'affichage.
+pub fn current_theme(d: &DisplayOptions) -> ThemeChoice {
+    let name = d.theme.trim();
+    if let Some(i) = d.user_themes.iter().position(|u| u.name.eq_ignore_ascii_case(name)) {
+        return ThemeChoice::User(i);
+    }
+    ThemeChoice::Builtin(alpirc_core::settings::theme(name).map(|t| t.name).unwrap_or_else(|| d.theme_base()))
+}
+
+/// Le sous-menu Affichage › Thème : Classique, Sombre, puis les thèmes enregistrés par l'utilisateur (boîte
+/// Couleurs) ; une coche (radio) sur le thème choisi.
+fn theme_menu(s: &Settings, lang: Lang) -> Vec<MenuItem> {
+    use ids::*;
+    let d = &s.display;
+    let cur = current_theme(d);
+    let mut v = vec![
+        MenuItem::new(THEME_CLASSIC, &t(lang, "view.theme.classic")).radio(cur == ThemeChoice::Builtin("classic")),
+        MenuItem::new(THEME_DARK, &t(lang, "view.theme.dark")).radio(cur == ThemeChoice::Builtin("dark")),
+    ];
+    if !d.user_themes.is_empty() {
+        v.push(MenuItem::separator());
+    }
+    for (i, u) in d.user_themes.iter().enumerate().take(THEME_MAX as usize) {
+        v.push(MenuItem::new(THEME_BASE + i as u32, &u.name.replace('&', "&&")).radio(cur == ThemeChoice::User(i)));
+    }
+    v
+}
+
 /// Chemin (index à chaque niveau) de l'entrée d'action `action`.
 pub fn path_of(items: &[alpirc_script::MenuItem], action: u32) -> Option<Vec<usize>> {
     for (i, it) in items.iter().enumerate() {
@@ -151,7 +191,7 @@ pub fn menubar(client: &mut Client, active: Option<WinId>, st: &MenuState) -> (V
         m(TREEBAR, "view.treebar").checked(st.treebar),
         m(NICKLIST, "view.nicklist").checked(st.nicklist),
         MenuItem::separator(),
-        MenuItem::submenu(&tr("view.theme"), vec![m(THEME_CLASSIC, "view.theme.classic").radio(!st.dark), m(THEME_DARK, "view.theme.dark").radio(st.dark)]),
+        MenuItem::submenu(&tr("view.theme"), theme_menu(client.settings(), lang)),
         m(FONT_BIGGER, "view.font_bigger").shortcut(&sc(mac, "Ctrl++")),
         m(FONT_SMALLER, "view.font_smaller").shortcut(&sc(mac, "Ctrl+-")),
         MenuItem::separator(),

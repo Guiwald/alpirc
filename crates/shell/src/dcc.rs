@@ -143,7 +143,7 @@ pub const TR: crate::tr::Table = &[
         "dcc.send.browse",
         [
             "&Browse...",
-            "&Parcourir...",
+            "Pa&rcourir...",
             "&Examinar...",
             "D&urchsuchen...",
             "Sfogl&ia...",
@@ -284,7 +284,7 @@ pub const TR: crate::tr::Table = &[
         "dcc.offer.rename",
         ["Re&name", "Re&nommer", "Re&nombrar", "&Umbenennen", "Ri&nomina", "Rea&nomenar", "Athai&nmnigh"],
     ),
-    ("dcc.offer.ignore", ["&Ignore", "&Ignorer", "&Ignorar", "&Ignorieren", "&Ignora", "&Ignorar", "Neamh&aird"]),
+    ("dcc.offer.ignore", ["&Ignore", "&Ignorer", "&Ignorar", "&Ignorieren", "&Ignora", "Ig&norar", "Neamh&aird"]),
     ("dcc.error.title", ["DCC", "DCC", "DCC", "DCC", "DCC", "DCC", "DCC"]),
 ];
 
@@ -412,7 +412,7 @@ impl Shell {
             NetEvent::DccConnected { id, .. } => self.client.on_dcc_connected(id, now),
             NetEvent::DccLine { id, bytes } => self.client.on_dcc_chat_line(id, &bytes, now),
             NetEvent::DccProgress { id, bytes } => self.client.on_dcc_progress(id, bytes, now),
-            NetEvent::DccEnded { id, bytes, error } => self.client.on_dcc_ended(id, bytes, error.as_deref(), now),
+            NetEvent::DccEnded { id, bytes, error } => self.client.on_dcc_ended(id, bytes, error.as_ref(), now),
             _ => {}
         }
     }

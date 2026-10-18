@@ -88,8 +88,10 @@ impl App {
                 match ev {
                     NetEvent::Connected { conn, .. } => self.client.on_connected(conn, now),
                     NetEvent::Line { conn, bytes } => self.client.on_line(conn, &bytes, now),
-                    NetEvent::Closed { conn, error } => self.client.on_closed(conn, error.as_deref(), now),
-                    NetEvent::Failed { conn, error, .. } => self.client.on_connect_failed(conn, &error, now),
+                    NetEvent::Closed { conn, error } => self.client.on_closed(conn, error.as_ref(), now),
+                    NetEvent::Failed { conn, error, cert_sha256 } => {
+                        self.client.on_connect_failed(conn, &error, cert_sha256.as_deref(), now)
+                    }
                     _ => {}
                 }
             }

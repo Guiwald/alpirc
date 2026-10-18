@@ -360,7 +360,7 @@ impl ScriptEditor {
                             }
                         }
                     }
-                    Err(e) => errors.push(format!("{name} : {e}")),
+                    Err(e) => errors.push(format!("{name} : {}", cx.client.script_error_text(&e))),
                 }
             }
         }
@@ -560,7 +560,7 @@ impl LoadScript {
             return Err(tf(lang, "se.err_file", &[("path", &path.display().to_string())]));
         }
         let already = cx.client.engine().scripts().iter().any(|s| s.path.as_deref() == Some(path));
-        let name = cx.client.engine_mut().load_file(path, true).map_err(|e| e.to_string())?;
+        let name = cx.client.engine_mut().load_file(path, true).map_err(|e| cx.client.script_error_text(&e))?;
         let warn = cx.client.settings().scripts.warn_on_load && !already && cx.client.engine().runs_at_startup(&name);
         if warn {
             // On retire le script en attendant la réponse : rien ne doit s'exécuter avant.
@@ -668,7 +668,10 @@ impl DialogCtl for ConfirmScript {
                             log::warn!("scripts non enregistrés : {e}");
                         }
                     }
-                    Err(e) => cx.actions.push(Action::Open(Box::new(MessageBox::info(&t(cx.lang, "se.load_title"), &e.to_string(), cx.lang)))),
+                    Err(e) => {
+                        let (title, text) = (t(cx.lang, "se.load_title"), cx.client.script_error_text(&e));
+                        cx.actions.push(Action::Open(Box::new(MessageBox::info(&title, &text, cx.lang))))
+                    }
                 }
                 Outcome::Close
             }

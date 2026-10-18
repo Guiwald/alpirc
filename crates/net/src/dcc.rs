@@ -27,8 +27,8 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::conn::{describe_io, wait_closing};
-use crate::{Inner, MAX_LINE, Net, NetEvent, lock};
+use crate::conn::{millis, wait_closing};
+use crate::{Inner, IoKind, MAX_LINE, Net, NetError, NetEvent, lock};
 
 /// Intervalle minimal entre deux [`NetEvent::DccProgress`].
 const PROGRESS_EVERY: Duration = Duration::from_millis(200);
@@ -76,10 +76,10 @@ impl Net {
     /// Écoute sur `ip` (un port de `ports`, `(0, 0)` : choisi par le système) et rend l'adresse effective ;
     /// le premier pair qui se connecte dans `timeout` reçoit `job` (l'écoute s'arrête alors). Une connexion DCC
     /// de même identifiant est d'abord annulée.
-    pub fn dcc_listen(&self, id: u32, ip: IpAddr, ports: (u16, u16), job: DccJob, timeout: Duration) -> Result<SocketAddr, String> {
+    pub fn dcc_listen(&self, id: u32, ip: IpAddr, ports: (u16, u16), job: DccJob, timeout: Duration) -> Result<SocketAddr, NetError> {
         let inner = &self.inner;
         if inner.stopping.load(Ordering::Acquire) {
-            return Err("couche réseau arrêtée".into());
+            return Err(NetError::Stopped);
         }
         let (lo, hi) = if ports.0 == 0 { (0, 0) } else { (ports.0, ports.1.max(ports.0)) };
         let mut last = None;
@@ -93,10 +93,10 @@ impl Net {
                 Err(e) => last = Some(e),
             }
         }
-        let fail = |e: io::Error| format!("écoute DCC sur {ip} : {}", describe_io(&e));
+        let fail = |e: io::Error| NetError::DccListen { ip, cause: IoKind::of(&e) };
         let std_listener = match bound {
             Some(l) => l,
-            None => return Err(fail(last.unwrap_or_else(|| io::Error::other("aucun port")))),
+            None => return Err(fail(last.unwrap_or_else(|| io::Error::from(io::ErrorKind::AddrInUse)))),
         };
         std_listener.set_nonblocking(true).map_err(fail)?;
         let addr = std_listener.local_addr().map_err(fail)?;
@@ -180,7 +180,7 @@ impl Task {
     }
 
     /// Événement final, puis retrait du registre.
-    fn end(&self, bytes: u64, error: Option<String>) {
+    fn end(&self, bytes: u64, error: Option<NetError>) {
         log::info!("DCC {} terminé ({bytes} octets){}", self.id, error.as_ref().map(|e| format!(" : {e}")).unwrap_or_default());
         self.emit(NetEvent::DccEnded { id: self.id, bytes, error });
         let mut map = lock(&self.inner.dcc);
@@ -198,11 +198,9 @@ impl Task {
     }
 }
 
-fn timeout_text(d: Duration) -> String {
-    format!("délai dépassé ({} s)", d.as_secs())
+fn timed_out(d: Duration) -> NetError {
+    NetError::Timeout { ms: millis(d) }
 }
-
-const CANCELLED: &str = "annulé";
 
 /// La tâche : connexion (écoute ou sortie), puis le travail.
 async fn run(mut t: Task, how: How, job: DccJob) {
@@ -225,12 +223,12 @@ async fn run(mut t: Task, how: How, job: DccJob) {
     };
     let r = tokio::select! {
         r = tokio::time::timeout(timeout, established) => r,
-        _ = wait_closing(&mut t.cancel) => return t.end(start, Some(CANCELLED.into())),
+        _ = wait_closing(&mut t.cancel) => return t.end(start, Some(NetError::Cancelled)),
     };
     let (stream, peer) = match r {
         Ok(Ok(v)) => v,
-        Ok(Err(e)) => return t.end(start, Some(describe_io(&e))),
-        Err(_) => return t.end(start, Some(timeout_text(timeout))),
+        Ok(Err(e)) => return t.end(start, Some(NetError::io(&e))),
+        Err(_) => return t.end(start, Some(timed_out(timeout))),
     };
     let _ = stream.set_nodelay(true);
     log::info!("DCC {} : connecté à {peer}", t.id);
@@ -250,7 +248,7 @@ async fn run(mut t: Task, how: How, job: DccJob) {
 // -------------------------------------------------------------------------------------------------------------
 // Discussion
 
-async fn run_chat(t: &mut Task, stream: TcpStream) -> Option<String> {
+async fn run_chat(t: &mut Task, stream: TcpStream) -> Option<NetError> {
     let (rd, mut wr) = stream.into_split();
     let inner = t.inner.clone();
     let id = t.id;
@@ -261,14 +259,14 @@ async fn run_chat(t: &mut Task, stream: TcpStream) -> Option<String> {
             r = &mut reader => {
                 return match r {
                     Ok(()) => None,
-                    Err(e) => Some(describe_io(&e)),
+                    Err(e) => Some(NetError::io(&e)),
                 };
             }
             l = t.lines.recv() => match l {
                 Some(mut l) => {
                     l.push(b'\n');
                     if let Err(e) = wr.write_all(&l).await {
-                        return Some(describe_io(&e));
+                        return Some(NetError::io(&e));
                     }
                 }
                 None => {
@@ -339,16 +337,17 @@ fn unwrap32(prev: u64, v: u32) -> u64 {
     c
 }
 
-async fn run_send(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, size: u64, packet: usize) -> (u64, Option<String>) {
+async fn run_send(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, size: u64, packet: usize) -> (u64, Option<NetError>) {
     use std::sync::atomic::Ordering::Relaxed;
+    let rerr = |e: io::Error| NetError::FileRead { path: path.to_path_buf(), cause: IoKind::of(&e) };
     let mut file = match tokio::fs::File::open(path).await {
         Ok(f) => f,
-        Err(e) => return (offset, Some(format!("lecture de {} : {}", path.display(), describe_io(&e)))),
+        Err(e) => return (offset, Some(rerr(e))),
     };
     if offset > 0
         && let Err(e) = file.seek(SeekFrom::Start(offset)).await
     {
-        return (offset, Some(format!("lecture de {} : {}", path.display(), describe_io(&e))));
+        return (offset, Some(rerr(e)));
     }
     let (mut rd, mut wr) = stream.into_split();
     let wide = size > u32::MAX as u64;
@@ -360,25 +359,25 @@ async fn run_send(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, siz
     let activity = AtomicU64::new(0);
     let touch = || activity.store(base.elapsed().as_millis() as u64, Relaxed);
     let timeout = t.timeout;
-    let result: (u64, Option<String>) = {
+    let result: (u64, Option<NetError>) = {
         // Écrivain : tout le fichier, d'avance.
         let writer = async {
             let mut buf = vec![0u8; packet];
             while sent.load(Relaxed) < size {
                 let want = ((size - sent.load(Relaxed)) as usize).min(packet);
-                let n = file.read(&mut buf[..want]).await?;
+                let n = file.read(&mut buf[..want]).await.map_err(rerr)?;
                 if n == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "fichier raccourci pendant l'envoi"));
+                    return Err(NetError::FileShrunk { path: path.to_path_buf() });
                 }
-                wr.write_all(&buf[..n]).await?;
+                wr.write_all(&buf[..n]).await.map_err(|e| NetError::io(&e))?;
                 sent.store(sent.load(Relaxed) + n as u64, Relaxed);
                 touch();
             }
-            wr.flush().await?;
+            wr.flush().await.map_err(|e| NetError::io(&e))?;
             // Fin de flux tout de suite (les accusés continuent d'arriver dans l'autre sens) : sert aux
             // destinataires qui lisent jusqu'à la fermeture.
             let _ = wr.shutdown().await;
-            Ok::<(), io::Error>(())
+            Ok::<(), NetError>(())
         };
         // Lecteur : les accusés de réception ; vrai quand le dernier arrive, faux à la fermeture par l'autre.
         let reader = async {
@@ -421,7 +420,7 @@ async fn run_send(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, siz
             tokio::select! {
                 w = &mut writer, if !writer_done => match w {
                     Ok(()) => writer_done = true,
-                    Err(e) => break (acked.load(Relaxed), Some(describe_io(&e))),
+                    Err(e) => break (acked.load(Relaxed), Some(e)),
                 },
                 r = &mut reader => {
                     let all_sent = writer_done && sent.load(Relaxed) >= size;
@@ -431,10 +430,10 @@ async fn run_send(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, siz
                         Ok(false) if all_sent && (acked.load(Relaxed) >= size || !acks_seen.load(Relaxed) || wide) => (size, None),
                         Ok(false) => {
                             let pos = if acks_seen.load(Relaxed) { acked.load(Relaxed) } else { sent.load(Relaxed) };
-                            (pos, Some(format!("connexion fermée par l'autre à {pos} octets sur {size}")))
+                            (pos, Some(NetError::PeerClosed { pos, size }))
                         }
                         Err(_) if all_sent && acked.load(Relaxed) >= size => (size, None),
-                        Err(e) => (acked.load(Relaxed), Some(describe_io(&e))),
+                        Err(e) => (acked.load(Relaxed), Some(NetError::io(&e))),
                     };
                 }
                 _ = tick.tick() => {
@@ -444,10 +443,10 @@ async fn run_send(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, siz
                         t.progress(pos);
                     }
                     if base.elapsed().as_millis() as u64 - activity.load(Relaxed) > timeout.as_millis() as u64 {
-                        break (pos, Some(timeout_text(timeout)));
+                        break (pos, Some(timed_out(timeout)));
                     }
                 }
-                _ = wait_closing(&mut t.cancel) => break (acked.load(Relaxed), Some(CANCELLED.into())),
+                _ = wait_closing(&mut t.cancel) => break (acked.load(Relaxed), Some(NetError::Cancelled)),
             }
         }
     };
@@ -511,8 +510,8 @@ impl Acks {
     }
 }
 
-async fn run_receive(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, size: Option<u64>) -> (u64, Option<String>) {
-    let werr = |e: io::Error| format!("écriture de {} : {}", path.display(), describe_io(&e));
+async fn run_receive(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, size: Option<u64>) -> (u64, Option<NetError>) {
+    let werr = |e: io::Error| NetError::FileWrite { path: path.to_path_buf(), cause: IoKind::of(&e) };
     let mut opts = tokio::fs::OpenOptions::new();
     opts.write(true).create(true);
     if offset == 0 {
@@ -544,11 +543,11 @@ async fn run_receive(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, 
         }
         tokio::select! {
             r = tokio::time::timeout(timeout, rd.read(&mut buf)) => match r {
-                Err(_) => break Some(timeout_text(timeout)),
-                Ok(Err(e)) if e.kind() != io::ErrorKind::UnexpectedEof => break Some(describe_io(&e)),
+                Err(_) => break Some(timed_out(timeout)),
+                Ok(Err(e)) if e.kind() != io::ErrorKind::UnexpectedEof => break Some(NetError::io(&e)),
                 Ok(Err(_)) | Ok(Ok(0)) => {
                     break match size {
-                        Some(s) if pos < s => Some(format!("connexion fermée par l'autre à {pos} octets sur {s}")),
+                        Some(s) if pos < s => Some(NetError::PeerClosed { pos, size: s }),
                         _ => None,
                     };
                 }
@@ -572,7 +571,7 @@ async fn run_receive(t: &mut Task, stream: TcpStream, path: &Path, offset: u64, 
                     }
                 }
             },
-            _ = wait_closing(&mut t.cancel) => break Some(CANCELLED.into()),
+            _ = wait_closing(&mut t.cancel) => break Some(NetError::Cancelled),
         }
     };
     if let Err(e) = file.flush().await

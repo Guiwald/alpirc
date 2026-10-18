@@ -574,7 +574,7 @@ fn slow_device_is_disconnected() {
     use std::io::{Read, Write};
     let env = Env::start_with("slow", |c| {
         c.listen.push(alpirc_relay::config::ListenConfig { address: "127.0.0.1:0".into(), tls: false });
-        c.clients.max_send_queue_kib = 64;
+        c.clients.max_send_queue_kib = 512; // assez pour la rafale normale de A (300 × 400 octets)
     });
     let plain = env.relay.as_ref().unwrap().listeners()[1].0;
     let bob = env.bob("Bob");

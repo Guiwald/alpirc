@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use crate::ast::{Block, parse_body};
-use crate::{EventKind, ScriptError, ScriptKind};
+use crate::{EventKind, ParseProblem, ScriptError, ScriptKind};
 
 /// Un alias (`alias [-l] nom { … }`).
 #[derive(Debug)]
@@ -395,8 +395,8 @@ struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    fn err(&self, line: usize, msg: impl Into<String>) -> ScriptError {
-        ScriptError::Parse { file: self.file.to_string(), line: self.base + line, message: msg.into() }
+    fn err(&self, line: usize, problem: ParseProblem) -> ScriptError {
+        ScriptError::Parse { file: self.file.to_string(), line: self.base + line, problem }
     }
 
     /// Lit un bloc dont le `{` vient d'être trouvé en ligne `li` (indice), colonne `col` (après le `{`).
@@ -408,7 +408,7 @@ impl<'a> Reader<'a> {
         let mut c = col;
         loop {
             if l >= self.lines.len() {
-                return Err(self.err(li + 1, "missing '}'"));
+                return Err(self.err(li + 1, ParseProblem::MissingClose));
             }
             let s = self.lines[l].clone();
             let b = s.as_bytes();
@@ -492,7 +492,7 @@ impl<'a> Reader<'a> {
             let text = self.collect(j, col)?;
             return Ok((text, self.base + j + 1));
         }
-        Err(self.err(li + 1, "missing '{'"))
+        Err(self.err(li + 1, ParseProblem::MissingOpen))
     }
 }
 

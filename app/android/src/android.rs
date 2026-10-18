@@ -223,6 +223,10 @@ impl Host for AndroidHost {
         call_with_strings("playSound", "(Ljava/lang/String;)V", &[], &[], &[&path.to_string_lossy()]);
     }
 
+    fn stop_sound(&mut self) {
+        call_void("stopSound", "()V", &[]);
+    }
+
     fn beep_tone(&mut self) {
         call_void("beep", "()V", &[]);
     }

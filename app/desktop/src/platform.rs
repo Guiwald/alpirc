@@ -138,6 +138,11 @@ impl ShellPlatform for DesktopPlatform {
         self.sound.play_file(path);
     }
 
+    /// `/splay stop` : coupe le son en cours (les bips en attente aussi).
+    fn stop_sound(&mut self) {
+        self.sound.stop();
+    }
+
     fn flash(&mut self) {
         if let Some(w) = &self.window {
             w.request_user_attention(Some(UserAttentionType::Informational));

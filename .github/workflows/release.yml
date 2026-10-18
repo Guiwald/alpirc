@@ -196,14 +196,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Les fichiers de la version, sans l'archive du site APT (artefact « github-pages »).
+          FICHIERS=()
+          for f in artifacts/*/*; do
+            case "$f" in artifacts/github-pages/*) ;; *) FICHIERS+=("$f") ;; esac
+          done
           if gh release view "$TAG" > /dev/null 2>&1; then
             # Une version publiée ne change jamais : seuls les fichiers qui manquent sont ajoutés.
             PRESENTS="$(gh release view "$TAG" --json assets -q '.assets[].name')"
-            for f in artifacts/*/*; do
+            for f in "${FICHIERS[@]}"; do
               if ! printf '%s\n' "$PRESENTS" | grep -qxF "$(basename "$f")"; then
                 gh release upload "$TAG" "$f"
               fi
             done
           else
-            gh release create "$TAG" artifacts/*/* --title "AlpIRC ${TAG#v}" --notes-file notes.md
+            gh release create "$TAG" "${FICHIERS[@]}" --title "AlpIRC ${TAG#v}" --notes-file notes.md
           fi

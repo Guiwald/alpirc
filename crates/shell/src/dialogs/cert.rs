@@ -106,7 +106,7 @@ impl DialogCtl for CertPrompt {
         let tx = MARGIN + 4 + 32 + 12;
         let tw = W - tx - MARGIN - 4;
         let body = tf(lang, "cert.text", &[("host", &self.host), ("port", &self.port.to_string()), ("error", &self.error)]);
-        let bh = text_rows(&body, tw) * 16;
+        let bh = text_height(&body, tw);
         let mut icon = ControlSpec::new(9, ControlKind::Icon, (MARGIN + 4, MARGIN + 4, 32, 32), "ui/msg_warning_32");
         icon.styles.push("noborder".into());
         let mut y = MARGIN + 4;
@@ -114,10 +114,12 @@ impl DialogCtl for CertPrompt {
         y += bh + 10;
         c.push(text(5, (tx, y, tw, LABEL_H), &t(lang, "cert.fingerprint")));
         y += LABEL_H + 2;
-        c.push(text(6, (tx + 8, y, tw - 8, 32), &pretty_fp(&self.fp)));
-        y += 32 + 10;
+        let fp = pretty_fp(&self.fp);
+        let fh = text_height(&fp, tw - 8);
+        c.push(text(6, (tx + 8, y, tw - 8, fh), &fp));
+        y += fh + 10;
         let advice = t(lang, "cert.advice");
-        let ah = text_rows(&advice, tw) * 16;
+        let ah = text_height(&advice, tw);
         c.push(text(7, (tx, y, tw, ah), &advice));
         y += ah + 16;
         let bw = [168, 206, BTN_W];

@@ -7,6 +7,23 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+### Added
+- Interface: View › Theme also lists your own themes; Alt+letter picks a tab in dialogs; a window's full name
+  shows in a tooltip when its switchbar button is shortened.
+- Sounds: `/splay stop` stops the current sound (Mac, Linux, Android).
+
+### Changed
+- Languages: connection, certificate and DCC errors and script messages follow the interface language; on first
+  run, the full name and away message are created in your language; on the Mac, the app menu says "Quit AlpIRC".
+- Interface: every underlined shortcut is unique within a dialog or menu, in all 7 languages; Larger and Smaller
+  Font follow the sizes of the Options dialog; dialogs stay inside the window when it shrinks; switchbar buttons
+  take the width of their name.
+
+### Fixed
+- Interface: the channel list and the URL catcher update even when the number of rows doesn't change; the last
+  line of About is no longer cut off.
+- Release: the APT site archive is no longer attached to a version's files.
+
 ## [0.9.0] - 2026-10-18
 
 > Rollout: first published version, install as is. Mac: open the `.dmg`, drag AlpIRC into Applications; on first

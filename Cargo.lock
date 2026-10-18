@@ -109,6 +109,7 @@ dependencies = [
 name = "alpirc-net"
 version = "0.9.0"
 dependencies = [
+ "alpirc-proto",
  "base64",
  "graviola",
  "log",

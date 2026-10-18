@@ -7,29 +7,26 @@ use std::sync::Arc;
 
 use crate::ast::{Block, Stmt, parse_body};
 use crate::source::Alias;
-use crate::{Ctx, Engine, Host, ScriptError};
-
-/// Message des garde-fous.
-pub const TOO_DEEP: &str = "Error: script too deep / infinite loop";
+use crate::{Ctx, Engine, Host, Msg, ScriptError};
 
 /// Arrêt d'un script.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Abort {
     /// `/halt` ou `$$1` vide : arrêt silencieux.
     Halt,
-    /// Erreur affichée (déjà au format de mIRC : `* /msg: insufficient parameters (line 3, x.mrc)`).
-    Error(String),
+    /// Erreur affichée (au format de mIRC : `* /msg: insufficient parameters (line 3, x.mrc)`).
+    Error(Msg),
     /// Accès à un fichier hors du dossier des scripts (chemin demandé).
     Sandbox(String),
 }
 
 impl Abort {
-    /// Texte à montrer à l'utilisateur (`None` pour un arrêt silencieux).
-    pub fn message(&self) -> Option<String> {
+    /// Message à montrer à l'utilisateur (`None` pour un arrêt silencieux).
+    pub fn message(&self) -> Option<Msg> {
         match self {
             Abort::Halt => None,
             Abort::Error(m) => Some(m.clone()),
-            Abort::Sandbox(p) => Some(format!("* {}", ScriptError::Sandbox(p.clone()))),
+            Abort::Sandbox(p) => Some(Msg::Sandbox { path: p.clone() }),
         }
     }
 
@@ -40,6 +37,12 @@ impl Abort {
             Abort::Sandbox(p) => Some(ScriptError::Sandbox(p)),
         }
     }
+}
+
+/// Montre un message du moteur à l'utilisateur, rédigé par l'hôte.
+pub(crate) fn report(h: &mut dyn Host, ctx: &Ctx, msg: &Msg) {
+    let text = h.message_text(msg);
+    h.script_error(ctx, &text);
 }
 
 pub type R<T> = Result<T, Abort>;
@@ -181,15 +184,20 @@ impl Engine {
     }
 
     /// Erreur au format de mIRC, avec la ligne et le fichier si on est dans un script.
-    pub(crate) fn err(&self, msg: impl Into<String>) -> Abort {
-        let msg = msg.into();
-        let msg = if msg.starts_with("* ") { msg } else { format!("* {msg}") };
+    pub(crate) fn err(&self, msg: Msg) -> Abort {
         match self.rt.frames.last() {
-            Some(f) if f.script.is_some() && f.line > 0 => {
-                Abort::Error(format!("{msg} (line {}, {})", f.line, f.script.as_deref().unwrap_or("")))
-            }
+            Some(f) if f.script.is_some() && f.line > 0 => Abort::Error(Msg::At {
+                msg: Box::new(msg),
+                line: f.line,
+                script: f.script.clone().unwrap_or_default(),
+            }),
             _ => Abort::Error(msg),
         }
+    }
+
+    /// Erreur d'un script chargé ou relu par une commande (`/load`, `/reload`).
+    pub(crate) fn err_script(&self, e: ScriptError) -> Abort {
+        self.err(e.msg())
     }
 
     /// Contexte effectif (connexion changée par `/scid`).
@@ -206,7 +214,7 @@ impl Engine {
 
     pub(crate) fn count_iter(&mut self) -> R<()> {
         self.rt.iterations += 1;
-        if self.rt.iterations > self.rt.max_iterations { Err(self.err(TOO_DEEP)) } else { Ok(()) }
+        if self.rt.iterations > self.rt.max_iterations { Err(self.err(Msg::TooDeep)) } else { Ok(()) }
     }
 
     /// Exécution « de premier niveau » : remet les compteurs à zéro au début, fait le ménage (`set -u0`) à la fin.
@@ -230,12 +238,12 @@ impl Engine {
     /// Exécute une routine (corps d'alias, d'événement, de popup, de timer…) dans un nouveau contexte.
     pub(crate) fn run_routine(&mut self, h: &mut dyn Host, ctx: &Ctx, frame: Frame, body: &[Stmt]) -> R<Option<String>> {
         if self.rt.frames.len() >= self.rt.max_depth {
-            return Err(self.err(TOO_DEEP));
+            return Err(self.err(Msg::TooDeep));
         }
         self.rt.frames.push(frame);
         let r = self.exec_block(h, ctx, body);
         let r = match r {
-            Ok(Flow::Goto(l)) => Err(self.err(format!("/goto: '{l}' not found"))),
+            Ok(Flow::Goto(l)) => Err(self.err(Msg::LabelNotFound { label: l })),
             Ok(Flow::Return(v)) => Ok(v),
             Ok(_) => Ok(None),
             Err(e) => Err(e),
@@ -476,7 +484,7 @@ impl Engine {
             "tokenize" => {
                 let (c, text) = split_word(args);
                 let Some(c) = crate::strings::sep_char(c) else {
-                    return Err(self.err("/tokenize: invalid parameters"));
+                    return Err(self.err(Msg::InvalidParams { cmd: "tokenize".into() }));
                 };
                 let t: Vec<String> = crate::strings::toks(text, c).into_iter().map(|x| x.to_string()).collect();
                 self.frame_mut().args = t;
@@ -502,22 +510,23 @@ impl Engine {
             "enable" | "disable" => self.cmd_enable(args, name == "enable"),
             "auser" | "ruser" | "guser" | "rlevel" | "flush" => self.cmd_users(h, ctx, name, args)?,
             "run" | "dll" | "comopen" | "comclose" | "comreg" | "sockopen" | "socklisten" | "sockudp" => {
-                return Err(self.err(format!("/{name}: not allowed by the script sandbox")));
+                return Err(self.err(Msg::CommandSandboxed { cmd: name.to_string() }));
             }
             _ => {
                 let c = self.eff_ctx(ctx).into_owned();
                 let r = if quiet { h.command_quiet(&c, name, args) } else { h.command(&c, name, args) };
                 if let Err(e) = r {
-                    return Err(self.err(e));
+                    return Err(self.err(Msg::Host(e)));
                 }
             }
         }
         Ok(Flow::Normal)
     }
 
-    /// Écho d'information du moteur (`* Timer 1 activated`…), dans la fenêtre active.
-    pub(crate) fn info(&mut self, h: &mut dyn Host, ctx: &Ctx, text: &str) {
+    /// Écho d'information du moteur (`* Timer 1 activated`…), dans la fenêtre active, rédigé par l'hôte.
+    pub(crate) fn info(&mut self, h: &mut dyn Host, ctx: &Ctx, msg: Msg) {
         let c = self.eff_ctx(ctx).into_owned();
+        let text = h.message_text(&msg);
         let _ = h.command(&c, "echo", &format!("-a {text}"));
     }
 
@@ -641,7 +650,7 @@ impl Engine {
             Ok(v) => v,
             Err(e) => {
                 if let Some(m) = e.message() {
-                    host.script_error(ctx, &m);
+                    report(host, ctx, &m);
                 }
                 String::new()
             }

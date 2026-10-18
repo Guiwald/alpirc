@@ -10,7 +10,7 @@ use crate::regexid;
 use crate::strings as st;
 use crate::timefmt;
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host};
+use crate::{Ctx, Engine, Host, Msg};
 
 pub const TRUE: &str = "$true";
 pub const FALSE: &str = "$false";
@@ -54,6 +54,11 @@ impl Engine {
     /// Secondes depuis 1970 (horloge de l'hôte).
     pub(crate) fn now_secs(&self, h: &dyn Host) -> i64 {
         h.now_ms().div_euclid(1000)
+    }
+
+    /// Expression régulière refusée : paramètres invalides, avec la précision de la bibliothèque.
+    fn bad_regex(&self, ident: &str, detail: String) -> crate::exec::Abort {
+        self.err(Msg::IdentParams { ident: ident.to_string(), detail: Some(detail) })
     }
 
     /// Identifiants qui reçoivent leurs paramètres bruts : `$eval`/`$()`, `$iif`, `$regsubex`, `$regsub`.
@@ -107,11 +112,11 @@ impl Engine {
                     (String::new(), raw)
                 };
                 if rest.len() < 3 {
-                    return Err(self.err("Invalid parameters: $regsubex"));
+                    return Err(self.err(Msg::IdentParams { ident: "regsubex".into(), detail: None }));
                 }
                 let text = self.eval_arg(h, ctx, rest[0])?;
                 let pat = self.eval_arg(h, ctx, rest[1])?;
-                let re = regexid::compile(&pat).map_err(|e| self.err(format!("Invalid parameters: $regsubex ({e})")))?;
+                let re = regexid::compile(&pat).map_err(|e| self.bad_regex("regsubex", e))?;
                 let text = if re.strip { alpirc_proto::format::strip(&text) } else { text };
                 let found = regexid::find_all(&re, &text);
                 let total = found.len();
@@ -137,13 +142,13 @@ impl Engine {
                     (String::new(), raw)
                 };
                 if rest.len() < 4 {
-                    return Err(self.err("Invalid parameters: $regsub"));
+                    return Err(self.err(Msg::IdentParams { ident: "regsub".into(), detail: None }));
                 }
                 let text = self.eval_arg(h, ctx, rest[0])?;
                 let pat = self.eval_arg(h, ctx, rest[1])?;
                 let sub = self.eval_arg(h, ctx, rest[2])?;
                 let var = rest[3].trim().to_string();
-                let re = regexid::compile(&pat).map_err(|e| self.err(format!("Invalid parameters: $regsub ({e})")))?;
+                let re = regexid::compile(&pat).map_err(|e| self.bad_regex("regsub", e))?;
                 let found = regexid::find_all(&re, &text);
                 let mut out = String::new();
                 let mut last = 0;
@@ -198,7 +203,7 @@ impl Engine {
         macro_rules! need {
             ($k:expr) => {
                 if n < $k {
-                    return Err(self.err(format!("Invalid parameters: ${name}")));
+                    return Err(self.err(Msg::IdentParams { ident: name.to_string(), detail: None }));
                 }
             };
         }
@@ -206,7 +211,7 @@ impl Engine {
             ($i:expr) => {
                 match st::sep_char(a($i)) {
                     Some(c) => c,
-                    None => return Err(self.err(format!("Invalid parameters: ${name}"))),
+                    None => return Err(self.err(Msg::IdentParams { ident: name.to_string(), detail: None })),
                 }
             };
         }
@@ -351,7 +356,7 @@ impl Engine {
             "encode" | "decode" => {
                 let opts = a(1);
                 if !opts.is_empty() && !opts.contains('m') {
-                    return Err(self.err(format!("Invalid parameters: ${name} (only 'm' is supported)")));
+                    return Err(self.err(Msg::IdentOnlyMime { ident: name.to_string() }));
                 }
                 if name == "encode" {
                     base64::engine::general_purpose::STANDARD.encode(a(0).as_bytes())
@@ -460,7 +465,7 @@ impl Engine {
             "regex" => {
                 need!(2);
                 let (rname, text, pat) = if n >= 3 { (a(0), a(1), a(2)) } else { ("", a(0), a(1)) };
-                let re = regexid::compile(pat).map_err(|e| self.err(format!("Invalid parameters: $regex ({e})")))?;
+                let re = regexid::compile(pat).map_err(|e| self.bad_regex("regex", e))?;
                 let text = if re.strip { alpirc_proto::format::strip(text) } else { text.to_string() };
                 let found = regexid::find_all(&re, &text);
                 let mut ml = Vec::new();
@@ -594,7 +599,7 @@ impl Engine {
             }
             "group" => self.group_ident(a(0), prop),
             "dll" | "dllcall" | "com" | "comcall" | "comval" => {
-                return Err(self.err(format!("${name}: not allowed by the script sandbox")));
+                return Err(self.err(Msg::IdentSandboxed { ident: name.to_string() }));
             }
 
             // --- modules ---

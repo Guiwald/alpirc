@@ -7,6 +7,24 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+### Ajouté
+- Interface : Affichage › Thème liste aussi tes thèmes ; Alt+lettre choisit un onglet dans les boîtes ; le nom
+  complet d'une fenêtre s'affiche en info-bulle quand son bouton de la switchbar est réduit.
+- Sons : `/splay stop` arrête le son en cours (Mac, Linux, Android).
+
+### Modifié
+- Langues : les erreurs de connexion, de certificat, de DCC et les messages des scripts suivent la langue de
+  l'interface ; au premier lancement, le nom complet et le message d'absence sont créés dans ta langue ; sur Mac,
+  le menu de l'appli dit « Quitter AlpIRC ».
+- Interface : chaque raccourci souligné est unique dans une boîte ou un menu, dans les 7 langues ; Agrandir et
+  Réduire la police suivent les tailles de la boîte Options ; les boîtes restent dans la fenêtre quand on la
+  réduit ; les boutons de la switchbar prennent la largeur de leur nom.
+
+### Corrigé
+- Interface : la liste des canaux et le capteur d'URL se mettent à jour même quand le nombre de lignes ne change
+  pas ; la dernière ligne de « À propos » n'est plus coupée.
+- Publication : l'archive du site APT n'est plus jointe aux fichiers d'une version.
+
 ## [0.9.0] - 2026-10-18
 
 > Mise en service : première version publiée, à installer telle quelle. Mac : ouvrir le `.dmg`, glisser AlpIRC

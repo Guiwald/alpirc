@@ -3,6 +3,10 @@
 //!
 //! La couleur du texte signale l'activité d'une fenêtre qu'on ne regarde pas (thème : événement, message,
 //! on vous a nommé).
+//!
+//! Comme dans mIRC, un bouton de la switchbar est à la largeur de son nom (jusqu'à un maximum) ; quand la rangée
+//! est pleine, les plus larges rétrécissent d'abord (jusqu'à un minimum), puis les boutons passent à la ligne.
+//! Un nom raccourci se lit en entier dans l'info-bulle du bouton.
 
 use crate::canvas::{Bevel, Canvas};
 use crate::geom::{Point, Rect};
@@ -11,7 +15,7 @@ use crate::input::{Cursor, Input, MouseButton, Platform};
 use crate::text::{Align, TextStyle};
 use crate::theme::Theme;
 use crate::widgets::treeview::{TreeNode, TreeView, TreeViewMsg};
-use crate::widgets::dither;
+use crate::widgets::{TooltipState, dither};
 use crate::Res;
 
 /// Activité d'une fenêtre qu'on ne regarde pas.
@@ -74,6 +78,8 @@ pub struct Switchbar {
     pub max_button_w: i32,
     pub min_button_w: i32,
     pressed: Option<u64>,
+    /// Info-bulle du nom entier d'un bouton raccourci.
+    tip: TooltipState,
 }
 
 impl Default for Switchbar {
@@ -84,7 +90,15 @@ impl Default for Switchbar {
 
 impl Switchbar {
     pub fn new() -> Switchbar {
-        Switchbar { items: Vec::new(), active: None, vertical: false, max_button_w: 140, min_button_w: 56, pressed: None }
+        Switchbar {
+            items: Vec::new(),
+            active: None,
+            vertical: false,
+            max_button_w: 140,
+            min_button_w: 56,
+            pressed: None,
+            tip: TooltipState::default(),
+        }
     }
 
     /// Hauteur d'un bouton.
@@ -92,12 +106,31 @@ impl Switchbar {
         res.ui_line() + 6
     }
 
+    /// Largeur qui montre tout le nom (le bouton de la fenêtre active l'écrit en gras : mesuré dans les deux
+    /// graisses), entre le minimum et le maximum.
     fn button_w(&self, res: &Res, it: &SwitchItem) -> i32 {
         let icon = it.icon.and_then(|i| res.icons.image(i)).map_or(0, |im| im.w as i32 + 4);
-        (res.fonts.measure(&it.label, TextStyle::UI) + icon + 12).clamp(self.min_button_w, self.max_button_w)
+        let text = res.fonts.measure(&it.label, TextStyle::UI).max(res.fonts.measure(&it.label, TextStyle::UI_BOLD));
+        (text + icon + 12).clamp(self.min_button_w, self.max_button_w.max(self.min_button_w))
     }
 
-    /// Place les boutons dans `rect` (retour à la ligne si la rangée est pleine).
+    /// Plus grande largeur `c` (au moins le minimum) telle que les boutons, chacun ramené à `c` au plus, tiennent
+    /// dans `room` pixels ; `None` si même au minimum ils ne tiennent pas.
+    fn shrink_cap(&self, widths: &[i32], room: i32) -> Option<i32> {
+        let fits = |c: i32| widths.iter().map(|w| (*w).min(c)).sum::<i32>() <= room;
+        let (mut lo, mut hi) = (self.min_button_w, widths.iter().copied().max().unwrap_or(0));
+        if !fits(lo) {
+            return None;
+        }
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2;
+            if fits(mid) { lo = mid } else { hi = mid - 1 }
+        }
+        Some(lo)
+    }
+
+    /// Place les boutons dans `rect` : à la largeur de leur nom s'il y a la place ; sinon les plus larges
+    /// rétrécissent ; si même au minimum la rangée déborde, retour à la ligne.
     pub fn layout(&self, res: &Res, rect: Rect) -> Vec<(u64, Rect)> {
         let h = Self::button_h(res);
         let mut out = Vec::with_capacity(self.items.len());
@@ -109,11 +142,22 @@ impl Switchbar {
             }
             return out;
         }
+        let avail = (rect.w - 4).max(1);
+        let mut widths: Vec<i32> = self.items.iter().map(|it| self.button_w(res, it).min(avail)).collect();
+        let gaps = self.items.len().saturating_sub(1) as i32;
+        let wrap = match self.shrink_cap(&widths, avail - gaps) {
+            Some(cap) => {
+                for w in &mut widths {
+                    *w = (*w).min(cap);
+                }
+                false
+            }
+            None => true,
+        };
         let mut x = rect.x + 2;
         let mut y = rect.y + 2;
-        for it in &self.items {
-            let w = self.button_w(res, it).min(rect.w - 4);
-            if x + w > rect.right() - 2 && x > rect.x + 2 {
+        for (it, w) in self.items.iter().zip(widths) {
+            if wrap && x + w > rect.right() - 2 && x > rect.x + 2 {
                 x = rect.x + 2;
                 y += h + 1;
             }
@@ -121,6 +165,29 @@ impl Switchbar {
             x += w + 1;
         }
         out
+    }
+
+    /// Zone du nom dans un bouton (après l'icône), décalée quand le bouton est enfoncé.
+    fn label_rect(res: &Res, it: &SwitchItem, r: Rect, down: bool) -> Rect {
+        let o = if down { 1 } else { 0 };
+        let inner = r.inset_sides(4, 2, 4, 2).offset(o, o);
+        let icon = it.icon.and_then(|i| res.icons.image(i)).map_or(0, |im| im.w as i32 + 4);
+        Rect::from_corners(inner.x + icon, inner.y, inner.right().max(inner.x + icon), inner.bottom())
+    }
+
+    fn label_style(&self, it: &SwitchItem) -> TextStyle {
+        if self.active == Some(it.id) { TextStyle::UI_BOLD } else { TextStyle::UI }
+    }
+
+    /// Le nom du bouton ne tient pas : il est raccourci (« ... »).
+    fn truncated(&self, res: &Res, it: &SwitchItem, r: Rect) -> bool {
+        let down = self.active == Some(it.id) || self.pressed == Some(it.id);
+        res.fonts.measure(&it.label, self.label_style(it)) > Self::label_rect(res, it, r, down).w
+    }
+
+    /// Dessine l'info-bulle (à appeler après tout le reste).
+    pub fn paint_tooltip(&self, canvas: &mut Canvas, res: &Res, bounds: Rect) {
+        self.tip.paint(canvas, res, bounds);
     }
 
     /// Hauteur nécessaire (switchbar horizontale) pour une largeur donnée.
@@ -146,15 +213,14 @@ impl Switchbar {
             }
             let o = if down { 1 } else { 0 };
             let inner = r.inset_sides(4, 2, 4, 2).offset(o, o);
-            let mut tx = inner.x;
             if let Some(img) = it.icon.and_then(|i| res.icons.image(i)) {
                 canvas.blit(img, inner.x, inner.y + (inner.h - img.h as i32) / 2);
-                tx += img.w as i32 + 4;
             }
-            let tr = Rect::from_corners(tx, inner.y, inner.right(), inner.bottom());
-            let label = res.fonts.ellipsize(&it.label, TextStyle::UI, tr.w);
+            let tr = Self::label_rect(res, it, r, down);
+            // Raccourci dans la graisse où il est écrit (gras pour la fenêtre active).
+            let style = self.label_style(it);
+            let label = res.fonts.ellipsize(&it.label, style, tr.w);
             let color = if active { t.text } else { it.activity.color(t).unwrap_or(t.text) };
-            let style = if active { TextStyle::UI_BOLD } else { TextStyle::UI };
             canvas.with_clip(tr, |c| {
                 res.fonts.draw_label(c, tr, &label.replace('&', "&&"), style, color, Align::Left, false, None);
             });
@@ -165,7 +231,22 @@ impl Switchbar {
         let layout = self.layout(res, rect);
         let hit = |p: Point| layout.iter().find(|(_, r)| r.contains(p)).map(|x| x.0);
         match input {
+            Input::MouseMove { pos } => {
+                // Info-bulle : le nom entier d'un bouton raccourci.
+                let over = if rect.contains(*pos) { layout.iter().find(|(_, r)| r.contains(*pos)) } else { None };
+                let tip = over.and_then(|(id, r)| {
+                    let it = self.items.iter().find(|i| i.id == *id)?;
+                    self.truncated(res, it, *r).then(|| (*id, it.label.clone()))
+                });
+                match tip {
+                    Some((id, label)) => self.tip.hover(Some(id), &label, *pos, platform),
+                    None => self.tip.hover(None, "", *pos, platform),
+                }
+            }
+            Input::MouseLeave => self.tip.hide(platform),
+            Input::Tick => self.tip.tick(platform),
             Input::MouseDown { pos, button, .. } if rect.contains(*pos) => {
+                self.tip.hide(platform);
                 let id = hit(*pos)?;
                 match button {
                     MouseButton::Left => {
@@ -392,6 +473,71 @@ mod tests {
         let l = sb.layout(&res, Rect::new(0, 0, 120, 400));
         assert_eq!(l[1].1.x, l[0].1.x);
         assert!(l[1].1.y > l[0].1.y);
+    }
+
+    #[test]
+    fn switchbar_buttons_fit_their_names_then_shrink() {
+        let res = crate::test_res();
+        let mut sb = Switchbar::new();
+        for (i, l) in ["UnderNet", "#alpirc-test", "#a", "Elisa"].iter().enumerate() {
+            sb.items.push(SwitchItem::new(i as u64, l, None));
+        }
+        // La place ne manque pas : chaque nom tient, même en gras (fenêtre active).
+        for active in 0..4 {
+            sb.active = Some(active);
+            let l = sb.layout(&res, Rect::new(0, 0, 1000, 30));
+            for (it, (_, r)) in sb.items.iter().zip(&l) {
+                assert!(!sb.truncated(&res, it, *r), "{} coupé dans {}", it.label, r.w);
+                assert!(r.w <= sb.button_w(&res, it));
+            }
+        }
+        // Rangée pleine : les plus larges rétrécissent, les courts gardent leur largeur, tout tient sur une ligne.
+        let natural: Vec<i32> = sb.items.iter().map(|it| sb.button_w(&res, it)).collect();
+        let full = natural.iter().sum::<i32>() + 3 + 4;
+        let rect = Rect::new(0, 0, full - 20, 30);
+        let l = sb.layout(&res, rect);
+        assert!(l.iter().all(|(_, r)| r.y == l[0].1.y), "une seule rangée");
+        assert!(l.last().unwrap().1.right() <= rect.right() - 2);
+        assert!(l[1].1.w < natural[1], "le plus large rétrécit");
+        assert_eq!(l[2].1.w, natural[2], "le plus court reste");
+        assert!(l.iter().all(|(_, r)| r.w >= sb.min_button_w));
+        // Même au minimum la rangée déborde : retour à la ligne.
+        let narrow = Rect::new(0, 0, 2 * sb.min_button_w + 10, 100);
+        let l = sb.layout(&res, narrow);
+        assert!(l.iter().any(|(_, r)| r.y > l[0].1.y));
+        assert!(l.iter().all(|(_, r)| r.right() <= narrow.right()));
+    }
+
+    #[test]
+    fn switchbar_tooltip_shows_a_shortened_name() {
+        let res = crate::test_res();
+        let mut p = TestPlatform::new();
+        let mut sb = Switchbar::new();
+        sb.items.push(SwitchItem::new(1, "#un-canal-au-nom-vraiment-très-long", None));
+        sb.items.push(SwitchItem::new(2, "#a", None));
+        let rect = Rect::new(0, 0, 800, 30);
+        let l = sb.layout(&res, rect);
+        assert_eq!(l[0].1.w, sb.max_button_w);
+        // Bouton raccourci : l'info-bulle vient après le délai, avec le nom entier.
+        let c = l[0].1.center();
+        sb.event(&Input::moved(c.x, c.y), rect, &res, &mut p);
+        p.now = 600;
+        sb.event(&Input::Tick, rect, &res, &mut p);
+        assert!(sb.tip.visible);
+        assert_eq!(sb.tip.text, "#un-canal-au-nom-vraiment-très-long");
+        // Nom entier visible : pas d'info-bulle ; un clic la cache.
+        let c2 = l[1].1.center();
+        sb.event(&Input::moved(c2.x, c2.y), rect, &res, &mut p);
+        assert!(!sb.tip.visible);
+        p.now = 1500;
+        sb.event(&Input::Tick, rect, &res, &mut p);
+        assert!(!sb.tip.visible);
+        sb.event(&Input::moved(c.x, c.y), rect, &res, &mut p);
+        p.now = 2200;
+        sb.event(&Input::Tick, rect, &res, &mut p);
+        assert!(sb.tip.visible);
+        sb.event(&Input::click(c.x, c.y), rect, &res, &mut p);
+        assert!(!sb.tip.visible);
     }
 
     #[test]

@@ -34,6 +34,7 @@ mod exec;
 mod files;
 mod hash;
 mod idents;
+mod msg;
 mod popups;
 mod regexid;
 mod scripts;
@@ -45,18 +46,32 @@ mod users;
 mod vars;
 mod wild;
 
+pub use msg::{Msg, ParseProblem};
 pub use popups::PopupToken;
 
-/// Erreur d'un script (lecture ou exécution). Le texte est affiché à l'utilisateur, en anglais comme mIRC
-/// (`* /msg: insufficient parameters`), le client le traduit si besoin.
+/// Erreur d'un script (lecture ou exécution), décrite par ses données. `Display` l'écrit en anglais comme mIRC
+/// (`* /msg: insufficient parameters`) ; le client la rédige dans sa langue s'il le veut (voir [`Msg`]).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ScriptError {
     #[error("{0}")]
-    Message(String),
-    #[error("{file}:{line}: {message}")]
-    Parse { file: String, line: usize, message: String },
-    #[error("accès refusé hors du dossier des scripts : {0}")]
+    Message(Msg),
+    #[error("{file}:{line}: {problem}")]
+    Parse { file: String, line: usize, problem: ParseProblem },
+    #[error("access denied outside the scripts folder: {0}")]
     Sandbox(String),
+}
+
+impl ScriptError {
+    /// Le message à montrer à l'utilisateur, décrit par ses données (l'hôte le rédige avec [`Host::message_text`]).
+    pub fn msg(&self) -> Msg {
+        match self {
+            ScriptError::Message(m) => m.clone(),
+            ScriptError::Parse { file, line, problem } => {
+                Msg::Parse { file: file.clone(), line: *line, problem: problem.clone() }
+            }
+            ScriptError::Sandbox(p) => Msg::Sandbox { path: p.clone() },
+        }
+    }
 }
 
 /// Ce que contient un fichier de script.
@@ -315,8 +330,15 @@ pub trait Host {
     /// Vrai si le nom est un canal sur la connexion courante (opérateur `ischan`, CHANTYPES).
     fn is_channel(&mut self, ctx: &Ctx, name: &str) -> bool;
 
-    /// Écrit une erreur de script là où l'utilisateur la verra (fenêtre courante ou Status).
+    /// Écrit une erreur de script là où l'utilisateur la verra (fenêtre courante ou Status). `text` est déjà
+    /// rédigé par [`Host::message_text`].
     fn script_error(&mut self, ctx: &Ctx, text: &str);
+
+    /// Rédige un message du moteur (erreur, information comme `* Timer 1 activated`), astérisque du début compris.
+    /// Par défaut en anglais, comme mIRC ; le client le rédige dans la langue de son interface.
+    fn message_text(&self, msg: &Msg) -> String {
+        msg.to_string()
+    }
 
     /// Heure actuelle en millisecondes depuis 1970 (sert à `$ctime`, `$ticks`, aux timers ; les tests la fixent).
     fn now_ms(&self) -> i64;

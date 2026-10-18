@@ -11,7 +11,7 @@ use crate::calc::parse_num;
 use crate::exec::{Abort, R, split_word};
 use crate::idents::{rand_u64, tf};
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host};
+use crate::{Ctx, Engine, Host, Msg};
 
 /// Décode un fichier : UTF-8 (BOM retiré), sinon Windows-1252 (vieux scripts).
 pub fn decode(bytes: &[u8]) -> String {
@@ -169,7 +169,7 @@ impl Engine {
         }
         let (file, text) = take_filename(rest);
         if file.is_empty() {
-            return Err(self.err("/write: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "write".into() }));
         }
         let path = self.sandbox_path(&file)?;
         let mut lines = if clear { Vec::new() } else { std::fs::read(&path).map(|b| lines_of(&decode(&b))).unwrap_or_default() };
@@ -225,7 +225,8 @@ impl Engine {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        write_lines(&path, &lines, !nonl).map_err(|_| self.err(format!("/write: unable to open '{file}'")))
+        write_lines(&path, &lines, !nonl)
+            .map_err(|_| self.err(Msg::CannotOpen { cmd: "write".into(), file: file.to_string() }))
     }
 
     /// `/remove fichier`.
@@ -233,7 +234,8 @@ impl Engine {
         let (file, _) = take_filename(args);
         let p = self.sandbox_path(&file)?;
         if p.is_file() {
-            std::fs::remove_file(&p).map_err(|_| self.err(format!("/remove: unable to remove '{file}'")))?;
+            std::fs::remove_file(&p)
+                .map_err(|_| self.err(Msg::CannotRemove { cmd: "remove".into(), file: file.to_string() }))?;
         }
         Ok(())
     }
@@ -243,7 +245,7 @@ impl Engine {
         let (a, rest) = take_filename(args);
         let (b, _) = take_filename(rest);
         let (pa, pb) = (self.sandbox_path(&a)?, self.sandbox_path(&b)?);
-        std::fs::rename(&pa, &pb).map_err(|_| self.err(format!("/rename: unable to rename '{a}'")))
+        std::fs::rename(&pa, &pb).map_err(|_| self.err(Msg::CannotRename { cmd: "rename".into(), file: a.to_string() }))
     }
 
     /// `/copy [-o] fichier destination` (destination : fichier ou dossier).
@@ -259,21 +261,23 @@ impl Engine {
             pb.push(n);
         }
         if pb.exists() && !sw.contains('o') {
-            return Err(self.err(format!("/copy: '{b}' exists")));
+            return Err(self.err(Msg::FileExists { cmd: "copy".into(), file: b.to_string() }));
         }
-        std::fs::copy(&pa, &pb).map(|_| ()).map_err(|_| self.err(format!("/copy: unable to copy '{a}'")))
+        std::fs::copy(&pa, &pb).map(|_| ())
+            .map_err(|_| self.err(Msg::CannotCopy { cmd: "copy".into(), file: a.to_string() }))
     }
 
     pub(crate) fn cmd_mkdir(&mut self, args: &str) -> R<()> {
         let (d, _) = take_filename(args);
         let p = self.sandbox_path(&d)?;
-        std::fs::create_dir_all(&p).map_err(|_| self.err(format!("/mkdir: unable to create '{d}'")))
+        std::fs::create_dir_all(&p)
+            .map_err(|_| self.err(Msg::CannotCreate { cmd: "mkdir".into(), file: d.to_string() }))
     }
 
     pub(crate) fn cmd_rmdir(&mut self, args: &str) -> R<()> {
         let (d, _) = take_filename(args);
         let p = self.sandbox_path(&d)?;
-        std::fs::remove_dir(&p).map_err(|_| self.err(format!("/rmdir: unable to remove '{d}'")))
+        std::fs::remove_dir(&p).map_err(|_| self.err(Msg::CannotRemove { cmd: "rmdir".into(), file: d.to_string() }))
     }
 
     /// `/writeini [-n] fichier section élément valeur`.
@@ -283,7 +287,7 @@ impl Engine {
         let (sec, rest) = split_word(rest);
         let (item, value) = split_word(rest);
         if item.is_empty() {
-            return Err(self.err("/writeini: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "writeini".into() }));
         }
         let path = self.sandbox_path(&file)?;
         let mut secs = std::fs::read(&path).map(|b| ini_parse(&decode(&b))).unwrap_or_default();
@@ -302,7 +306,8 @@ impl Engine {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        std::fs::write(&path, ini_write(&secs)).map_err(|_| self.err(format!("/writeini: unable to write '{file}'")))
+        std::fs::write(&path, ini_write(&secs))
+            .map_err(|_| self.err(Msg::CannotWrite { cmd: "writeini".into(), file: file.to_string() }))
     }
 
     /// `/remini fichier section [élément]`.
@@ -319,7 +324,8 @@ impl Engine {
         } else if let Some(s) = secs.iter_mut().find(|(s, _)| s.eq_ignore_ascii_case(sec)) {
             s.1.retain(|(k, _)| !k.eq_ignore_ascii_case(item.trim()));
         }
-        std::fs::write(&path, ini_write(&secs)).map_err(|_| self.err(format!("/remini: unable to write '{file}'")))
+        std::fs::write(&path, ini_write(&secs))
+            .map_err(|_| self.err(Msg::CannotWrite { cmd: "remini".into(), file: file.to_string() }))
     }
 
     /// `$read(fichier, [ntswr], [texte], [N])`.

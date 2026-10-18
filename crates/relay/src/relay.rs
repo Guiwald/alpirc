@@ -464,7 +464,8 @@ impl Core {
             }
             NetEvent::Closed { conn, error } => {
                 if let Some(key) = self.up_conns.remove(&conn) {
-                    self.up_closed(&key, conn, error);
+                    // Texte anglais de l'erreur (`Display`), comme les avis envoyés aux appareils.
+                    self.up_closed(&key, conn, error.map(|e| e.to_string()));
                 } else if self.downs.contains_key(&conn) {
                     self.client_closed(conn);
                 }
@@ -473,7 +474,7 @@ impl Core {
                 if let Some(key) = self.up_conns.remove(&conn) {
                     let e = match cert_sha256 {
                         Some(fp) => format!("{error} (SHA-256 {fp})"),
-                        None => error,
+                        None => error.to_string(),
                     };
                     self.up_closed(&key, conn, Some(e));
                 }

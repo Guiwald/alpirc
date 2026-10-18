@@ -44,6 +44,8 @@ pub trait ShellPlatform: Platform {
     fn notify(&mut self, title: &str, body: &str);
     fn beep(&mut self);
     fn play_sound(&mut self, path: &Path);
+    /// Arrête le son en cours (`/splay stop`). Par défaut : rien.
+    fn stop_sound(&mut self) {}
     /// Attirer l'attention (icône qui rebondit, fenêtre qui clignote).
     fn flash(&mut self);
     fn open_url(&mut self, url: &str);
@@ -184,10 +186,16 @@ impl Shell {
         if let Some(l) = &cfg.locale {
             client.set_system_locale(l);
         }
+        // Premier lancement : nom complet et message d'absence par défaut dans la langue de l'interface.
+        if !cfg.settings_path.exists() {
+            client.localize_new_install();
+        }
         let fonts = assets::fonts();
         fonts.load_system_fallbacks();
         let mut res = Res::new(fonts);
         assets::register_icons(&mut res.icons);
+        // Les boîtes mesurent leurs textes avec ces polices (repli du système compris).
+        dialogs::set_measure_fonts(res.fonts.clone());
         let mut shell = Shell {
             client,
             res,
@@ -246,14 +254,15 @@ impl Shell {
 
     /// Change la taille de la zone de dessin (pixels logiques).
     pub fn set_viewport(&mut self, size: Size) {
-        // Boîtes ouvertes avant que la taille soit connue (premier lancement) : recentrées une fois.
-        if !self.viewport_known {
-            self.viewport_known = true;
-            for (_, d) in &mut self.modals.dialogs {
-                d.center_in(Rect::new(0, 0, size.w, size.h));
-            }
-        }
+        // Les boîtes restent dans la fenêtre : celles que l'utilisateur n'a pas déplacées restent centrées (et
+        // celles ouvertes avant que la taille soit connue, au premier lancement, sont centrées), les autres y sont
+        // ramenées.
+        let changed = !self.viewport_known || size != self.viewport;
+        self.viewport_known = true;
         self.viewport = size;
+        if changed {
+            self.modals.keep_inside(Rect::new(0, 0, size.w, size.h));
+        }
     }
 
     pub fn viewport(&self) -> Size {
@@ -360,17 +369,15 @@ impl Shell {
                 self.client.on_connected(conn, now)
             }
             NetEvent::Line { conn, bytes } => self.client.on_line(conn, &bytes, now),
-            NetEvent::Closed { conn, error } => self.client.on_closed(conn, error.as_deref(), now),
+            NetEvent::Closed { conn, error } => self.client.on_closed(conn, error.as_ref(), now),
             NetEvent::Failed { conn, error, cert_sha256 } => {
-                // Certificat refusé : boîte « faire confiance » (avant que le moteur passe au serveur suivant).
+                // Certificat refusé : boîte « faire confiance » (avant que le moteur passe au serveur suivant), avec
+                // la raison dans la langue de l'interface.
                 if let Some(fp) = &cert_sha256 {
-                    self.cert_failed(conn, &error, fp, p);
+                    let reason = self.client.cert_reason_text(&error);
+                    self.cert_failed(conn, &reason, fp, p);
                 }
-                let msg = match cert_sha256 {
-                    Some(fp) => format!("{error} [SHA-256 {fp}]"),
-                    None => error,
-                };
-                self.client.on_connect_failed(conn, &msg, now)
+                self.client.on_connect_failed(conn, &error, cert_sha256.as_deref(), now)
             }
             NetEvent::Accepted { .. } | NetEvent::ListenerClosed { .. } => {}
             ev @ (NetEvent::DccConnected { .. } | NetEvent::DccLine { .. } | NetEvent::DccProgress { .. } | NetEvent::DccEnded { .. }) => {
@@ -446,6 +453,7 @@ impl Shell {
             }
             Effect::Beep => p.beep(),
             Effect::PlaySound(path) => p.play_sound(&path),
+            Effect::StopSound => p.stop_sound(),
             Effect::Flash { .. } => {
                 if !self.app_focused {
                     p.flash();
@@ -669,8 +677,6 @@ impl Shell {
             switchbar: d.switchbar != "off",
             treebar: d.treebar,
             nicklist: d.nicklist,
-            // Le nom du réglage (`dark`, `sombre`), pas celui du thème affiché (« Sombre »).
-            dark: matches!(d.theme.to_lowercase().as_str(), "dark" | "sombre"),
             connected: self.client.conns().iter().any(|c| self.client.conn_info(*c).is_some_and(|i| i.state != ConnState::Disconnected)),
             away: self.active_away(),
             native: self.native_menus,
@@ -758,15 +764,24 @@ impl Shell {
                 s.display.nicklist = !s.display.nicklist;
                 self.settings_changed(p);
             }
+            // Thème choisi avec sa palette et ses couleurs, comme dans Options › Affichage.
             ids::THEME_CLASSIC | ids::THEME_DARK => {
-                self.client.settings_mut().display.theme = if id == ids::THEME_DARK { "dark".into() } else { "classic".into() };
+                self.client.settings_mut().display.select_theme(if id == ids::THEME_DARK { "dark" } else { "classic" });
                 self.settings_changed(p);
             }
+            id if (ids::THEME_BASE..ids::THEME_BASE + ids::THEME_MAX).contains(&id) => {
+                let d = &mut self.client.settings_mut().display;
+                if let Some(name) = d.user_themes.get((id - ids::THEME_BASE) as usize).map(|u| u.name.clone()) {
+                    d.select_theme(&name);
+                    self.settings_changed(p);
+                }
+            }
+            // Pas des tailles proposées par Options › Affichage : multiples de 16 pour les polices pixel intégrées
+            // (nettes), 1 ou 2 pixels pour les autres.
             ids::FONT_BIGGER | ids::FONT_SMALLER => {
-                let s = self.client.settings_mut();
-                let z = (s.display.chat_font_size / 16).clamp(1, 4);
-                let z = if id == ids::FONT_BIGGER { (z + 1).min(4) } else { z.saturating_sub(1).max(1) };
-                s.display.chat_font_size = z * 16;
+                let pixel = self.res.fonts.spec(alpirc_ui::FontKind::Chat).grid.is_some();
+                let d = &mut self.client.settings_mut().display;
+                d.chat_font_size = dialogs::options::step_font_size(d.chat_font_size, pixel, id == ids::FONT_BIGGER);
                 self.settings_changed(p);
             }
             ids::FIND => {
@@ -883,7 +898,8 @@ impl Shell {
             "/away".to_string()
         } else {
             let msg = self.client.settings().away.default_message.trim().to_string();
-            format!("/away {}", if msg.is_empty() { "Away" } else { &msg })
+            let fallback = alpirc_core::i18n::tr(self.client.language(), alpirc_core::i18n::Key::DefaultAway);
+            format!("/away {}", if msg.is_empty() { fallback } else { &msg })
         };
         self.client.command(win, &cmd, now);
     }
@@ -906,11 +922,10 @@ impl Shell {
         if let Some(lw) = lw {
             self.sync_windows();
             if let Some(v) = self.views.get_mut(&lw) {
-                // Colonnes : nom, personnes, sujet ; les plus peuplés d'abord.
+                // Colonnes : nom, personnes, sujet ; les plus peuplés d'abord (la nouvelle liste, vide, se remplit
+                // dans cet ordre).
                 v.list.sort = Some(if q.by_users { (1, false) } else { (0, true) });
-                // Vidée : la vue ne recopie la liste du moteur que si le nombre de canaux change, et la nouvelle
-                // liste peut en avoir autant que l'ancienne.
-                v.list.set_rows(Vec::new());
+                v.list.sort_rows();
             }
         }
         self.list_query = q;
@@ -1227,6 +1242,13 @@ impl Shell {
     }
 
     fn open_window_menu(&mut self, win: WinId, at: Point) {
+        let items = self.desktop_window_menu_items(win);
+        let menu = Menu::popup(items, at, self.dialog_bounds(), &self.res);
+        self.popup = Some((menu, PopupSrc::Window(win)));
+    }
+
+    /// Le menu d'une fenêtre (switchbar, treebar, icône de la fenêtre agrandie).
+    fn desktop_window_menu_items(&self, win: WinId) -> Vec<MenuItem> {
         let lang = self.language();
         let st = self.mdi.child(win as u64).map(|c| c.state);
         let mut items = vec![
@@ -1245,8 +1267,7 @@ impl Shell {
             Some(alpirc_ui::WindowState::Maximized) => items[2].enabled = false,
             None => {}
         }
-        let menu = Menu::popup(items, at, self.dialog_bounds(), &self.res);
-        self.popup = Some((menu, PopupSrc::Window(win)));
+        items
     }
 
     fn popup_activated(&mut self, id: u32, src: PopupSrc, p: &mut dyn ShellPlatform) {

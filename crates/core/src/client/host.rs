@@ -410,6 +410,11 @@ impl Host for State {
         self.print(target, LineKind::Error, text.to_string());
     }
 
+    /// Les messages du moteur (erreurs, `* Timer 1 activated`…) dans la langue de l'interface.
+    fn message_text(&self, msg: &alpirc_script::Msg) -> String {
+        crate::script_text::msg_text(self.lang, msg)
+    }
+
     fn now_ms(&self) -> i64 {
         self.now
     }

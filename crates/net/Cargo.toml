@@ -7,6 +7,8 @@ rust-version.workspace = true
 description = "Couche réseau d'AlpIRC : connexions TCP et TLS (client et serveur), sans C"
 
 [dependencies]
+# Description des échecs (`alpirc_proto::neterror`), partagée avec le moteur qui la rédige.
+alpirc-proto.workspace = true
 log.workspace = true
 base64.workspace = true
 # `fs` : fichiers des transferts DCC.

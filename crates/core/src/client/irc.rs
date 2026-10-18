@@ -1678,6 +1678,7 @@ impl super::state::State {
         if let Some(l) = self.chanlists.get_mut(&w) {
             l.entries.clear();
             l.complete = false;
+            l.generation += 1;
         }
         if let Some(x) = self.win_mut(w) {
             x.touch();
@@ -1714,7 +1715,9 @@ impl super::state::State {
     /// Prépare la fenêtre de `/list` (filtre côté client).
     pub(crate) fn chanlist_prepare(&mut self, conn: ConnId, filter: Option<String>, min: Option<u32>, max: Option<u32>) -> WinId {
         let w = self.list_window(conn);
-        self.chanlists.insert(w, ChanList { entries: Vec::new(), complete: false, filter, min_users: min, max_users: max, names_only: false });
+        let generation = self.chanlists.get(&w).map_or(0, |l| l.generation) + 1;
+        let l = ChanList { filter, min_users: min, max_users: max, generation, ..Default::default() };
+        self.chanlists.insert(w, l);
         w
     }
 }

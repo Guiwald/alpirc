@@ -7,7 +7,7 @@ use crate::calc::{fmt_num, parse_num, parse_num_prefix};
 use crate::exec::{R, split_word, switch_num, switches};
 use crate::source::strip_n;
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host};
+use crate::{Ctx, Engine, Host, Msg};
 
 /// Incrémentation automatique chaque seconde (`inc -c`, `set -z`).
 #[derive(Debug, Clone)]
@@ -249,7 +249,7 @@ impl Engine {
                 vraw = r.trim_start();
             }
             if !name.starts_with('%') || name.len() < 2 {
-                return Err(self.err("/var: invalid parameters"));
+                return Err(self.err(Msg::InvalidParams { cmd: "var".into() }));
             }
             let mut value = self.eval_value(h, ctx, vraw)?;
             if !sw.contains('p') {
@@ -265,7 +265,7 @@ impl Engine {
                 f.locals.insert(name.to_lowercase(), (name.to_string(), value.clone()));
             }
             if sw.contains('s') && !quiet {
-                self.info(h, ctx, &format!("* Set {name} to {value}"));
+                self.info(h, ctx, Msg::VarSet { name: name.to_string(), value: value.to_string() });
             }
         }
         Ok(())
@@ -281,7 +281,7 @@ impl Engine {
             "unsetall" => {
                 self.vars.clear();
                 if show {
-                    self.info(h, ctx, "* Unset all variables");
+                    self.info(h, ctx, Msg::VarUnsetAll);
                 }
             }
             "unset" => {
@@ -309,7 +309,7 @@ impl Engine {
                     }
                     if show {
                         for n in names {
-                            self.info(h, ctx, &format!("* Unset {n}"));
+                            self.info(h, ctx, Msg::VarUnset { name: n.to_string() });
                         }
                     }
                 }
@@ -317,7 +317,7 @@ impl Engine {
             "set" => {
                 let (name, vraw) = split_word(rest);
                 if !name.starts_with('%') || name.len() < 2 {
-                    return Err(self.err("/set: invalid parameters"));
+                    return Err(self.err(Msg::InvalidParams { cmd: "set".into() }));
                 }
                 let mut value = self.eval_value(h, ctx, vraw)?;
                 value = value.trim_matches(' ').to_string();
@@ -336,14 +336,14 @@ impl Engine {
                     v.cont = Some(Cont { step: -1.0, last: now, to_zero: true });
                 }
                 if show {
-                    self.info(h, ctx, &format!("* Set {name} to {value}"));
+                    self.info(h, ctx, Msg::VarSet { name: name.to_string(), value: value.to_string() });
                 }
             }
             _ => {
                 // inc / dec
                 let (name, vraw) = split_word(rest);
                 if !name.starts_with('%') || name.len() < 2 {
-                    return Err(self.err(format!("/{cmd}: invalid parameters")));
+                    return Err(self.err(Msg::InvalidParams { cmd: cmd.to_string() }));
                 }
                 let by = if vraw.trim().is_empty() {
                     1.0
@@ -367,8 +367,9 @@ impl Engine {
                     }
                 }
                 if show {
-                    let w = if cmd == "dec" { "Dec" } else { "Inc" };
-                    self.info(h, ctx, &format!("* {w} {name} to {value}"));
+                    let (name, value) = (name.to_string(), value.to_string());
+                    let m = if cmd == "dec" { Msg::VarDec { name, value } } else { Msg::VarInc { name, value } };
+                    self.info(h, ctx, m);
                 }
             }
         }

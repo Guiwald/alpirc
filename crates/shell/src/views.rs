@@ -57,6 +57,8 @@ pub struct WinView {
     pub focus: ViewFocus,
     /// Version de la fenêtre lors de la dernière mise à jour de la liste des pseudos / de la liste.
     synced: u64,
+    /// Liste des canaux montrée : son numéro (`ChanList::generation`) et le nombre d'entrées déjà recopiées.
+    chanlist_seen: Option<(u64, usize)>,
     /// Glisser de la séparation discussion / pseudos en cours (x de départ, largeur de départ).
     pub split_drag: Option<(i32, i32)>,
 }
@@ -99,6 +101,7 @@ impl WinView {
             nick_width: 130,
             focus,
             synced: u64::MAX,
+            chanlist_seen: None,
             split_drag: None,
         }
     }
@@ -127,29 +130,38 @@ impl WinView {
                 }
             }
             WinKind::ChanList => {
+                // Nouvelle liste (même avec autant de canaux que l'ancienne) : tout est recopié ; sinon seules les
+                // entrées arrivées depuis, mises à leur place dans l'ordre choisi.
                 if let Some(cl) = client.chanlist(win.id) {
-                    if cl.entries.len() != self.list.rows.len() {
-                        let rows: Vec<ListRow> = cl
-                            .entries
-                            .iter()
-                            .map(|e| ListRow::new(&[e.name.clone(), e.users.to_string(), alpirc_proto::format::strip(&e.topic)]))
-                            .collect();
-                        self.list.set_rows(rows);
-                        if self.list.sort.is_some() {
+                    let row = |e: &alpirc_core::ChanEntry| {
+                        ListRow::new(&[e.name.clone(), e.users.to_string(), alpirc_proto::format::strip(&e.topic)])
+                    };
+                    match self.chanlist_seen {
+                        Some((g, n)) if g == cl.generation && n <= cl.entries.len() => {
+                            if n < cl.entries.len() {
+                                self.list.add_rows(cl.entries[n..].iter().map(row).collect());
+                            }
+                        }
+                        _ => {
+                            self.list.set_rows(cl.entries.iter().map(row).collect());
                             self.list.sort_rows();
                         }
                     }
+                    self.chanlist_seen = Some((cl.generation, cl.entries.len()));
                 }
             }
             WinKind::Urls => {
                 let urls = client.urls();
-                if urls.len() != self.list.rows.len() {
-                    let rows: Vec<ListRow> = urls
-                        .iter()
-                        .rev()
-                        .map(|u| ListRow::new(&[u.url.clone(), u.nick.clone(), u.window.clone(), alpirc_core::timeutil::format_time(u.time_ms, utc_offset, "dd/mm HH:nn")]))
-                        .collect();
-                    self.list.set_rows(rows);
+                let row = |u: &alpirc_core::CaughtUrl| {
+                    let time = alpirc_core::timeutil::format_time(u.time_ms, utc_offset, "dd/mm HH:nn");
+                    ListRow::new(&[u.url.clone(), u.nick.clone(), u.window.clone(), time])
+                };
+                // Les plus récentes d'abord. Une adresse attrapée de nouveau remonte en tête, et la plus ancienne
+                // part quand la liste est pleine : le nombre ne change pas toujours, la première ligne si.
+                let newest = urls.last().map(row);
+                let first = self.list.rows.first().map(|r| &r.cells);
+                if urls.len() != self.list.rows.len() || newest.as_ref().map(|r| &r.cells) != first {
+                    self.list.set_rows(urls.iter().rev().map(row).collect());
                 }
             }
             WinKind::Notify => {

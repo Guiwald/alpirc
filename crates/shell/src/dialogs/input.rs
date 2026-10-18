@@ -71,7 +71,7 @@ impl DialogCtl for InputDialog {
         let tx = if icon.is_some() { MARGIN + 4 + 32 + 12 } else { MARGIN + 4 };
         let tw = W - tx - MARGIN - 4;
         let prompt = if self.q.prompt.is_empty() { t(lang, "in.default_prompt") } else { self.q.prompt.clone() };
-        let th = text_rows(&prompt, tw) * 16;
+        let th = text_height(&prompt, tw);
         let mut c: Vec<ControlSpec> = Vec::new();
         if let Some(name) = icon {
             let mut i = ControlSpec::new(9, ControlKind::Icon, (MARGIN + 4, MARGIN + 4, 32, 32), name);

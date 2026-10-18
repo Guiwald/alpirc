@@ -13,7 +13,7 @@ use crate::exec::{Abort, Frame, R, words};
 use crate::idents::push_regml;
 use crate::source::{Handler, event_name};
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, EventInfo, EventKind, FireResult, Host};
+use crate::{Ctx, Engine, EventInfo, EventKind, FireResult, Host, Msg};
 
 /// Exécution différée faute d'hôte.
 #[derive(Debug, Clone)]
@@ -300,7 +300,7 @@ impl Engine {
                     Ok(None) => continue,
                     Err(e) => {
                         if let Some(msg) = e.message() {
-                            h.script_error(ctx, &msg);
+                            crate::exec::report(h, ctx, &msg);
                         }
                         continue;
                     }
@@ -321,7 +321,7 @@ impl Engine {
                     Err(e) => {
                         haltdef |= flagged;
                         if let Some(msg) = e.message() {
-                            h.script_error(ctx, &msg);
+                            crate::exec::report(h, ctx, &msg);
                         }
                     }
                 }
@@ -375,7 +375,7 @@ impl Engine {
                     if let Err(e) = self.top(host, |e, h| e.run_routine(h, &ctx, frame, &body))
                         && let Some(m) = e.message()
                     {
-                        host.script_error(&ctx, &m);
+                        crate::exec::report(host, &ctx, &m);
                     }
                 }
             }
@@ -392,7 +392,7 @@ impl Engine {
         let (_, rest) = crate::exec::switches(args);
         let (name, params) = crate::exec::split_word(rest);
         if name.is_empty() {
-            return Err(self.err("/signal: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "signal".into() }));
         }
         let ev = EventInfo { kind: Some(EventKind::Signal), conn: ctx.conn, what: name.to_string(), text: params.to_string(), ..EventInfo::default() };
         let mut c = ctx.clone();

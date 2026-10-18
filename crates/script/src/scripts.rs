@@ -9,7 +9,7 @@ use crate::exec::{R, split_word, switches};
 use crate::files::{decode, take_filename};
 use crate::source::{self, Alias, Parsed};
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, EventInfo, EventKind, Host, LoadedScript, ScriptError, ScriptKind};
+use crate::{Ctx, Engine, EventInfo, EventKind, Host, LoadedScript, Msg, ScriptError, ScriptKind};
 
 /// Un script chargé, avec son texte et ce qu'on en a lu.
 #[derive(Debug)]
@@ -122,7 +122,10 @@ impl Engine {
                 Err(_) => return Err(ScriptError::Sandbox(path.display().to_string())),
             }
         };
-        let bytes = std::fs::read(&real).map_err(|_| ScriptError::Message(format!("* /load: unable to open '{}'", path.display())))?;
+        let bytes = std::fs::read(&real)
+            .map_err(|_| {
+                ScriptError::Message(Msg::CannotOpen { cmd: "load".into(), file: path.display().to_string() })
+            })?;
         Ok((real, decode(&bytes)))
     }
 
@@ -245,10 +248,11 @@ impl Engine {
         let (sw, rest) = switches(args);
         let (file, _) = take_filename(rest);
         if file.is_empty() {
-            return Err(self.err("/load: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "load".into() }));
         }
         let path = self.sandbox_path(&file)?;
-        let bytes = std::fs::read(&path).map_err(|_| self.err(format!("/load: unable to open '{file}'")))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|_| self.err(Msg::CannotOpen { cmd: "load".into(), file: file.to_string() }))?;
         let mut text = decode(&bytes);
         let name = self.name_for(&path);
         let r = if sw.contains('r') && sw.contains('u') {
@@ -286,7 +290,7 @@ impl Engine {
             }
             r
         };
-        r.map_err(|e| self.err(e.to_string()))?;
+        r.map_err(|e| self.err_script(e))?;
         self.flush_pending_nested(h);
         Ok(())
     }
@@ -312,7 +316,7 @@ impl Engine {
         let (_, rest) = switches(args);
         let (file, _) = take_filename(rest);
         if !self.unload(&file) {
-            return Err(self.err(format!("/unload: no such script '{file}'")));
+            return Err(self.err(Msg::NoSuchScript { cmd: "unload".into(), name: file.to_string() }));
         }
         // `on UNLOAD` tout de suite (l'hôte est là).
         let list = std::mem::take(&mut self.pending);
@@ -323,7 +327,7 @@ impl Engine {
                 if let Err(e) = self.run_routine(h, &ctx, frame, &body)
                     && let Some(m) = e.message()
                 {
-                    h.script_error(&ctx, &m);
+                    crate::exec::report(h, &ctx, &m);
                 }
             } else {
                 self.pending.push(p);
@@ -340,11 +344,12 @@ impl Engine {
             Some(p) => p,
             None => self.sandbox_path(&file)?,
         };
-        let bytes = std::fs::read(&path).map_err(|_| self.err(format!("/reload: unable to open '{file}'")))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|_| self.err(Msg::CannotOpen { cmd: "reload".into(), file: file.to_string() }))?;
         let text = decode(&bytes);
         let name = self.name_for(&path);
         let kind = self.find_script(&name).map(|i| self.scripts[i].kind).unwrap_or_else(|| detect_kind(&text));
-        self.install(&name, Some(path), kind, &text, false).map_err(|e| self.err(e.to_string()))
+        self.install(&name, Some(path), kind, &text, false).map_err(|e| self.err_script(e))
     }
 
     /// `/alias [-l] nom commandes` (sans commandes : retire l'alias).
@@ -353,7 +358,7 @@ impl Engine {
         let (name, cmds) = split_word(rest);
         let name = name.trim_start_matches('/').to_ascii_lowercase();
         if name.is_empty() {
-            return Err(self.err("/alias: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "alias".into() }));
         }
         self.dyn_aliases.retain(|a| a.name != name);
         if !cmds.trim().is_empty() {

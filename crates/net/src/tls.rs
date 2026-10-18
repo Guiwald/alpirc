@@ -10,7 +10,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::{CertificateError, DigitallySignedStruct, SignatureScheme};
 
-use crate::{ServerTls, TlsInfo, Verify};
+use crate::{CertProblem, NetError, PemProblem, ServerTls, TlsInfo, Verify};
 
 /// Versions de TLS acceptées : 1.3 de préférence, 1.2 pour les serveurs plus anciens.
 static VERSIONS: &[&rustls::SupportedProtocolVersion] = &[&rustls::version::TLS13, &rustls::version::TLS12];
@@ -39,12 +39,12 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 }
 
 /// Normalise une empreinte saisie (majuscules, `:` ou espaces acceptés) en 64 chiffres hexadécimaux minuscules.
-pub(crate) fn parse_pin(s: &str) -> Result<String, String> {
+pub(crate) fn parse_pin(s: &str) -> Result<String, NetError> {
     let hex: String = s.chars().filter(|c| *c != ':' && !c.is_whitespace()).map(|c| c.to_ascii_lowercase()).collect();
     if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         Ok(hex)
     } else {
-        Err(format!("empreinte SHA-256 invalide « {s} » (64 chiffres hexadécimaux attendus)"))
+        Err(NetError::BadPin { pin: s.to_string() })
     }
 }
 
@@ -81,12 +81,12 @@ fn root_store() -> rustls::RootCertStore {
 }
 
 /// Vérificateur webpki standard (construit une fois : charger les racines du système prend du temps).
-fn webpki_verifier() -> Result<Arc<WebPkiServerVerifier>, String> {
-    static V: OnceLock<Result<Arc<WebPkiServerVerifier>, String>> = OnceLock::new();
+fn webpki_verifier() -> Result<Arc<WebPkiServerVerifier>, NetError> {
+    static V: OnceLock<Result<Arc<WebPkiServerVerifier>, NetError>> = OnceLock::new();
     V.get_or_init(|| {
         WebPkiServerVerifier::builder_with_provider(Arc::new(root_store()), provider())
             .build()
-            .map_err(|e| format!("racines de confiance : {e}"))
+            .map_err(|e| NetError::TlsSetup { detail: format!("trusted roots: {e}") })
     })
     .clone()
 }
@@ -154,19 +154,19 @@ impl ServerCertVerifier for CertVerifier {
 }
 
 /// Lit une chaîne de certificats PEM.
-pub(crate) fn load_chain(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, String> {
+pub(crate) fn load_chain(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, PemProblem> {
     let certs = CertificateDer::pem_slice_iter(pem)
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("certificat PEM illisible : {e}"))?;
+        .map_err(|e| PemProblem::BadCert(e.to_string()))?;
     if certs.is_empty() {
-        return Err("aucun certificat dans le fichier PEM".into());
+        return Err(PemProblem::NoCert);
     }
     Ok(certs)
 }
 
 /// Lit une clé privée PEM (PKCS#8, SEC1 « EC PRIVATE KEY » ou PKCS#1 « RSA PRIVATE KEY »).
-pub(crate) fn load_key(pem: &[u8]) -> Result<PrivateKeyDer<'static>, String> {
-    PrivateKeyDer::from_pem_slice(pem).map_err(|e| format!("clé privée PEM illisible : {e}"))
+pub(crate) fn load_key(pem: &[u8]) -> Result<PrivateKeyDer<'static>, PemProblem> {
+    PrivateKeyDer::from_pem_slice(pem).map_err(|e| PemProblem::BadKey(e.to_string()))
 }
 
 /// Configuration client ; `seen` reçoit l'empreinte du certificat présenté par le serveur.
@@ -174,7 +174,7 @@ pub(crate) fn build_client_config(
     verify: &Verify,
     client_cert: Option<(&[u8], &[u8])>,
     seen: Option<Arc<Mutex<Option<String>>>>,
-) -> Result<Arc<rustls::ClientConfig>, String> {
+) -> Result<Arc<rustls::ClientConfig>, NetError> {
     let mode = match verify {
         Verify::Full => Mode::Full(webpki_verifier()?),
         Verify::AcceptInvalid => Mode::AcceptAny,
@@ -184,7 +184,7 @@ pub(crate) fn build_client_config(
     let verifier = Arc::new(CertVerifier { mode, algs: prov.signature_verification_algorithms, seen });
     let builder = rustls::ClientConfig::builder_with_provider(prov)
         .with_protocol_versions(VERSIONS)
-        .map_err(|e| format!("TLS : {e}"))?
+        .map_err(|e| NetError::TlsSetup { detail: e.to_string() })?
         .dangerous()
         .with_custom_certificate_verifier(verifier);
     // Pas d'ALPN : IRC n'en définit pas. La reprise de session reste propre à cette configuration, pour
@@ -192,18 +192,21 @@ pub(crate) fn build_client_config(
     let cfg = match client_cert {
         None => builder.with_no_client_auth(),
         Some((chain, key)) => {
-            let certs = load_chain(chain).map_err(|e| format!("certificat client : {e}"))?;
-            let key = load_key(key).map_err(|e| format!("certificat client : {e}"))?;
-            builder.with_client_auth_cert(certs, key).map_err(|e| format!("certificat client : {e}"))?
+            let certs = load_chain(chain).map_err(NetError::ClientCert)?;
+            let key = load_key(key).map_err(NetError::ClientCert)?;
+            builder
+                .with_client_auth_cert(certs, key)
+                .map_err(|e| NetError::ClientCert(PemProblem::Rejected(e.to_string())))?
         }
     };
     Ok(Arc::new(cfg))
 }
 
-/// Configuration serveur (relais) à partir d'un certificat et d'une clé PEM.
+/// Configuration serveur (relais) à partir d'un certificat et d'une clé PEM. Le texte de l'erreur sert aux
+/// journaux du relais.
 pub(crate) fn server_config(tls: &ServerTls) -> Result<Arc<rustls::ServerConfig>, String> {
-    let certs = load_chain(&tls.cert_chain_pem)?;
-    let key = load_key(&tls.key_pem)?;
+    let certs = load_chain(&tls.cert_chain_pem).map_err(|e| format!("certificat du serveur : {e}"))?;
+    let key = load_key(&tls.key_pem).map_err(|e| format!("certificat du serveur : {e}"))?;
     let cfg = rustls::ServerConfig::builder_with_provider(provider())
         .with_protocol_versions(VERSIONS)
         .map_err(|e| format!("TLS : {e}"))?
@@ -230,50 +233,46 @@ pub(crate) fn tls_info(state: &rustls::CommonState, verified: bool) -> TlsInfo {
     TlsInfo { protocol, cipher, cert_sha256, verified }
 }
 
-/// Message clair pour une erreur TLS.
-pub(crate) fn describe_tls_error(e: &rustls::Error, host: &str) -> String {
+/// L'échec d'une négociation TLS, décrit par ses données.
+pub(crate) fn tls_failure(e: &rustls::Error, host: &str) -> NetError {
     match e {
-        rustls::Error::InvalidCertificate(ce) => format!("certificat refusé : {}", describe_cert_error(ce, host)),
-        rustls::Error::AlertReceived(a) => format!("le serveur a interrompu la négociation TLS (alerte {a:?})"),
-        rustls::Error::NoCertificatesPresented => "le serveur n'a présenté aucun certificat".into(),
-        other => format!("négociation TLS : {other}"),
+        rustls::Error::InvalidCertificate(ce) => {
+            NetError::CertRejected { host: host.to_string(), problem: cert_problem(ce) }
+        }
+        rustls::Error::AlertReceived(a) => NetError::TlsAlert { alert: format!("{a:?}") },
+        rustls::Error::NoCertificatesPresented => NetError::NoServerCert,
+        other => NetError::Tls { detail: other.to_string() },
     }
 }
 
 #[allow(deprecated)] // `UnsupportedSignatureAlgorithm` : variante ancienne, encore possible.
-fn describe_cert_error(ce: &CertificateError, host: &str) -> String {
+fn cert_problem(ce: &CertificateError) -> CertProblem {
     match ce {
-        CertificateError::Expired => "certificat expiré".into(),
+        CertificateError::Expired => CertProblem::Expired { not_after: None },
         CertificateError::ExpiredContext { not_after, .. } => {
-            format!("certificat expiré (valable jusqu'au {})", crate::cert::french_date(not_after.as_secs() as i64))
+            CertProblem::Expired { not_after: Some(not_after.as_secs() as i64) }
         }
-        CertificateError::NotValidYet => "certificat pas encore valable".into(),
+        CertificateError::NotValidYet => CertProblem::NotValidYet { not_before: None },
         CertificateError::NotValidYetContext { not_before, .. } => {
-            format!(
-                "certificat pas encore valable (valable à partir du {})",
-                crate::cert::french_date(not_before.as_secs() as i64)
-            )
+            CertProblem::NotValidYet { not_before: Some(not_before.as_secs() as i64) }
         }
-        CertificateError::UnknownIssuer => "émetteur inconnu (certificat autosigné ou autorité non reconnue)".into(),
-        CertificateError::NotValidForName => format!("le certificat ne correspond pas au nom « {host} »"),
+        CertificateError::UnknownIssuer => CertProblem::UnknownIssuer,
+        CertificateError::NotValidForName => CertProblem::NameMismatch { presented: Vec::new() },
         CertificateError::NotValidForNameContext { presented, .. } => {
-            format!("le certificat ne correspond pas au nom « {host} » (noms du certificat : {})", presented.join(", "))
+            CertProblem::NameMismatch { presented: presented.clone() }
         }
-        CertificateError::BadSignature => "signature du certificat invalide".into(),
-        CertificateError::Revoked => "certificat révoqué".into(),
-        CertificateError::BadEncoding => "certificat mal formé".into(),
-        CertificateError::InvalidPurpose | CertificateError::InvalidPurposeContext { .. } => {
-            "certificat non prévu pour un serveur".into()
-        }
+        CertificateError::BadSignature => CertProblem::BadSignature,
+        CertificateError::Revoked => CertProblem::Revoked,
+        CertificateError::BadEncoding => CertProblem::BadEncoding,
+        CertificateError::InvalidPurpose | CertificateError::InvalidPurposeContext { .. } => CertProblem::WrongPurpose,
         CertificateError::UnsupportedSignatureAlgorithm
         | CertificateError::UnsupportedSignatureAlgorithmContext { .. }
         | CertificateError::UnsupportedSignatureAlgorithmForPublicKeyContext { .. } => {
-            "algorithme de signature du certificat non pris en charge".into()
+            CertProblem::UnsupportedAlgorithm
         }
-        CertificateError::ApplicationVerificationFailure => {
-            "l'empreinte du certificat ne correspond pas à l'empreinte retenue".into()
-        }
-        other => format!("{other:?}"),
+        // Seul notre vérificateur épinglé produit cette erreur.
+        CertificateError::ApplicationVerificationFailure => CertProblem::PinMismatch,
+        other => CertProblem::Other(format!("{other:?}")),
     }
 }
 

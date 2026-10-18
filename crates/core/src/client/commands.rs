@@ -662,6 +662,8 @@ impl State {
             "notify" => self.cmd_notify(conn, win, args)?,
             // Demande de son (CTCP SOUND) : voir `sounds.rs`.
             "sound" => self.cmd_sound(conn, win, args, quiet)?,
+            // `/splay stop` (mIRC) : arrête le son en cours.
+            "splay" if switches(args).1.trim().eq_ignore_ascii_case("stop") => self.effects.push(Effect::StopSound),
             "splay" => {
                 let (_, file) = switches(args);
                 if file.is_empty() {
@@ -1395,7 +1397,7 @@ impl State {
             return;
         }
         let msg = match self.settings.away.default_message.trim() {
-            "" => "Away".to_string(),
+            "" => self.t(Key::DefaultAway, &[]),
             m => m.to_string(),
         };
         let ids: Vec<ConnId> = self

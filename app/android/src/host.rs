@@ -95,6 +95,10 @@ pub trait Host {
     fn play_sound(&mut self, path: &Path) {
         log::info!("son : {}", path.display());
     }
+    /// Arrête les sons en cours (`/splay stop`).
+    fn stop_sound(&mut self) {
+        log::info!("son arrêté");
+    }
     /// Bip court du système (quand il n'y a pas de `sounds/beep.wav`).
     fn beep_tone(&mut self) {
         log::info!("bip");

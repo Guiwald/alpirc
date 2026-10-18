@@ -98,7 +98,9 @@ pub use dialog::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogUnits, D
 
 /// Ressources de dessin partagées : polices, thème, icônes.
 pub struct Res {
-    pub fonts: Fonts,
+    /// Les polices, partageables (`Rc`) avec ce qui doit mesurer des textes sans tenir les ressources (taille des
+    /// boîtes de dialogue décrites d'avance, par exemple).
+    pub fonts: std::rc::Rc<Fonts>,
     pub theme: Theme,
     pub icons: Icons,
     /// Hauteur minimale des lignes des listes (listes simples, listes à colonnes, arbres), en pixels logiques :
@@ -109,7 +111,7 @@ pub struct Res {
 impl Res {
     /// Ressources avec le thème classique et les icônes de secours dessinées par programme.
     pub fn new(fonts: Fonts) -> Res {
-        Res { fonts, theme: Theme::classic(), icons: Icons::with_fallbacks(), min_row_h: 0 }
+        Res { fonts: std::rc::Rc::new(fonts), theme: Theme::classic(), icons: Icons::with_fallbacks(), min_row_h: 0 }
     }
 
     /// Hauteur d'une ligne de texte de l'interface.

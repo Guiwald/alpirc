@@ -11,6 +11,7 @@ use alpirc_core::dcc::DccIo;
 use alpirc_core::settings::{DccChatAction, DccExists, DccSendAction};
 use alpirc_core::{DccAnswer, DccId, DccType, DccUi, Effect, Settings, TransferState, WinKind};
 use alpirc_script::ScriptKind;
+use alpirc_proto::neterror::{IoKind, NetError};
 use common::*;
 
 /// Réglages des essais : dossier de réception à part.
@@ -457,7 +458,7 @@ fn close_and_list_commands() {
     assert_eq!(h.c.dcc_entry(id).unwrap().state, TransferState::Cancelled);
     assert!(h.status_lines().iter().any(|l| l == "getfail Pat"));
     // La fin annoncée ensuite par l'hôte est ignorée.
-    h.c.on_dcc_ended(id, 25, Some("annulé"), h.now);
+    h.c.on_dcc_ended(id, 25, Some(&NetError::Cancelled), h.now);
     assert_eq!(h.c.dcc_entry(id).unwrap().state, TransferState::Cancelled);
     h.input(h.status, "/dcc close send Nobody");
     assert!(h.last(h.status).contains("no such DCC send with Nobody"));
@@ -498,7 +499,7 @@ fn send_without_file_asks_ui_and_errors() {
     assert_eq!(h.c.dcc_entry(id).unwrap().size, Some(3));
     assert!(h.sends()[0].starts_with("PRIVMSG Pat :\x01DCC SEND c.txt 3232235786 0 3 "));
     // Renvoi après échec.
-    h.c.on_dcc_ended(id, 0, Some("connexion refusée"), h.now);
+    h.c.on_dcc_ended(id, 0, Some(&NetError::Io(IoKind::Refused)), h.now);
     h.c.dcc_resend(id, h.now).unwrap();
     assert_eq!(h.c.transfers().len(), 2);
 }

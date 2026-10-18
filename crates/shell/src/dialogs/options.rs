@@ -291,9 +291,20 @@ pub struct Options {
 /// Polices intégrées, sous leur nom dans les réglages : Fixedsys Excelsior (par défaut) et Pixel Operator.
 pub(crate) const BUILTIN_FONTS: [&str; 2] = ["Fixedsys Excelsior", "Pixel Operator"];
 
-/// Tailles proposées : polices pixel (nettes aux multiples de 16) et polices vectorielles.
+/// Tailles proposées : polices pixel (nettes aux multiples de 16) et polices vectorielles (de pixel en pixel jusqu'à
+/// 16, puis de 2 en 2). Les menus Affichage › Agrandir / Réduire la police suivent les mêmes pas.
 const PIXEL_SIZES: [u32; 4] = [16, 32, 48, 64];
-const VECTOR_SIZES: [u32; 16] = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36];
+const VECTOR_SIZES: [u32; 19] = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36];
+
+/// Taille suivante (`bigger`) ou précédente de la police des discussions, parmi celles d'Options › Affichage. Pour
+/// une police pixel, la taille est d'abord ramenée au multiple de 16 qui s'affiche. Au bout de la liste, rien ne
+/// change.
+pub(crate) fn step_font_size(size: u32, pixel: bool, bigger: bool) -> u32 {
+    let sizes: &[u32] = if pixel { &PIXEL_SIZES } else { &VECTOR_SIZES };
+    let size = if pixel { size.saturating_add(8).div_euclid(16).clamp(1, 4) * 16 } else { size };
+    let next = if bigger { sizes.iter().find(|&&s| s > size) } else { sizes.iter().rev().find(|&&s| s < size) };
+    next.copied().unwrap_or(size)
+}
 
 /// Polices proposées (nom, police pixel), tenues à jour par l'appli (`Shell::apply_settings`) : la boîte n'a pas
 /// accès aux polices elle-même.
@@ -1100,9 +1111,9 @@ impl DialogCtl for Options {
         c.push(radio(SEND_IGNORE, (ix, 72, half - 24, CHECK_H), &tr("opt.dcc.ignore")));
         c.push(group(1305, (gx + half + 8, MARGIN, half, 96), &tr("opt.dcc.chat_group")));
         let rx = gx + half + 20;
-        c.push(radio(CHAT_ASK, (rx, 28, half - 24, CHECK_H), &tr("opt.dcc.ask")));
+        c.push(radio(CHAT_ASK, (rx, 28, half - 24, CHECK_H), &tr("opt.dcc.chat_ask")));
         c.push(radio(CHAT_AUTO, (rx, 50, half - 24, CHECK_H), &tr("opt.dcc.auto_accept")));
-        c.push(radio(CHAT_IGNORE, (rx, 72, half - 24, CHECK_H), &tr("opt.dcc.ignore")));
+        c.push(radio(CHAT_IGNORE, (rx, 72, half - 24, CHECK_H), &tr("opt.dcc.chat_ignore")));
         c.push(group(1309, (gx, 112, PW, 284), &tr("opt.dcc.options_group")));
         c.push(ck(1310, (ix, 132, cw, CHECK_H)));
         c.push(ck(1311, (ix, 154, cw, CHECK_H)));
@@ -1683,6 +1694,27 @@ mod tests {
         v.set_selection(FONTS, &[0]);
         k.send(&mut o, &mut v, DialogMsg::SelectionChanged(FONTS));
         assert_eq!((v.items(FONT_SIZE).len(), o.size_sel(&v)), (4, 16));
+    }
+
+    #[test]
+    fn font_size_steps() {
+        // Police pixel : multiples de 16 ; une taille entre deux est d'abord ramenée à celle qui s'affiche.
+        assert_eq!(step_font_size(16, true, true), 32);
+        assert_eq!(step_font_size(64, true, true), 64);
+        assert_eq!(step_font_size(16, true, false), 16);
+        assert_eq!(step_font_size(20, true, true), 32);
+        assert_eq!(step_font_size(30, true, false), 16);
+        // Police vectorielle : de 1 en 1 jusqu'à 16, puis de 2 en 2 jusqu'à 36.
+        assert_eq!(step_font_size(12, false, true), 13);
+        assert_eq!(step_font_size(16, false, true), 18);
+        assert_eq!(step_font_size(18, false, false), 16);
+        assert_eq!(step_font_size(36, false, true), 36);
+        assert_eq!(step_font_size(8, false, false), 8);
+        assert_eq!(step_font_size(25, false, true), 26);
+        assert_eq!(step_font_size(48, false, false), 36);
+        for w in VECTOR_SIZES.windows(2) {
+            assert!((1..=2).contains(&(w[1] - w[0])), "pas de 1 ou 2 pixels");
+        }
     }
 
     #[test]

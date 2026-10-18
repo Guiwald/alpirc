@@ -10,7 +10,7 @@
 use crate::exec::{R, split_word};
 use crate::idents::tf;
 use crate::wild::wildmatch;
-use crate::{Control, ControlKind, Ctx, Dialog, DialogEvent, Engine, EventInfo, EventKind, Host};
+use crate::{Control, ControlKind, Ctx, Dialog, DialogEvent, Engine, EventInfo, EventKind, Host, Msg};
 
 /// État interne d'un dialogue ouvert.
 #[derive(Debug, Clone, Default)]
@@ -221,7 +221,7 @@ impl Engine {
     /// Ouvre un dialogue à partir d'une table et déclenche `init`.
     fn open_dialog(&mut self, h: &mut dyn Host, ctx: &Ctx, name: &str, table: &str, modal: bool) -> R<()> {
         if self.dialog_index(name).is_some() {
-            return Err(self.err(format!("/dialog: '{name}' name in use")));
+            return Err(self.err(Msg::NameInUse { cmd: "dialog".into(), name: name.to_string() }));
         }
         let cur = self.frame().script.clone();
         let lt = table.to_ascii_lowercase();
@@ -231,7 +231,7 @@ impl Engine {
             .flat_map(|s| s.p.dialogs.iter().map(move |t| (s.name.clone(), t.clone())))
             .find(|(sn, t)| t.name == lt && (!t.local || cur.as_deref() == Some(sn.as_str())));
         let Some((_, t)) = found else {
-            return Err(self.err(format!("/dialog: no such table '{table}'")));
+            return Err(self.err(Msg::NoSuchTable { cmd: "dialog".into(), name: table.to_string() }));
         };
         let mut d = build_dialog(name, table, &t.lines);
         d.modal = modal;
@@ -269,7 +269,7 @@ impl Engine {
         let (sw, rest) = crate::exec::switches(args);
         let (name, rest) = split_word(rest);
         if name.is_empty() {
-            return Err(self.err("/dialog: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "dialog".into() }));
         }
         if sw.contains('m') {
             let (table, _) = split_word(rest);
@@ -277,7 +277,7 @@ impl Engine {
             return self.open_dialog(h, ctx, name, table, false);
         }
         let Some(i) = self.dialog_index(name) else {
-            return Err(self.err(format!("/dialog: no such dialog '{name}'")));
+            return Err(self.err(Msg::NoSuchDialog { cmd: "dialog".into(), name: name.to_string() }));
         };
         if sw.contains('x') {
             self.close_dialog(name);
@@ -312,11 +312,11 @@ impl Engine {
         let (name, rest) = split_word(rest);
         let (ids, rest) = split_word(rest);
         let Some(di) = self.dialog_index(name) else {
-            return Err(self.err(format!("/did: no such dialog '{name}'")));
+            return Err(self.err(Msg::NoSuchDialog { cmd: "did".into(), name: name.to_string() }));
         };
         let ids = parse_ids(ids);
         if ids.is_empty() {
-            return Err(self.err("/did: invalid parameters"));
+            return Err(self.err(Msg::InvalidParams { cmd: "did".into() }));
         }
         // Numéro de ligne pour -i -o -d -c -u -k.
         let (mut line, mut text) = (None, rest.to_string());

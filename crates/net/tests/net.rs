@@ -6,8 +6,8 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use alpirc_net::{
-    FIRST_ACCEPTED_ID, MAX_LINE, Net, NetEvent, ServerTls, Target, Verify, client_config, fingerprint,
-    generate_self_signed,
+    CertProblem, FIRST_ACCEPTED_ID, IoKind, MAX_LINE, Net, NetError, NetEvent, PemProblem, ServerTls, Target, Verify,
+    client_config, fingerprint, generate_self_signed,
 };
 
 const WAIT: Duration = Duration::from_secs(10);
@@ -59,14 +59,14 @@ impl Probe {
         }
     }
 
-    fn closed(&self, conn: u32) -> Option<String> {
+    fn closed(&self, conn: u32) -> Option<NetError> {
         match self.next() {
             NetEvent::Closed { conn: c, error } if c == conn => error,
             ev => panic!("Closed attendu sur {conn}, reçu {ev:?}"),
         }
     }
 
-    fn failed(&self, conn: u32) -> (String, Option<String>) {
+    fn failed(&self, conn: u32) -> (NetError, Option<String>) {
         match self.next() {
             NetEvent::Failed { conn: c, error, cert_sha256 } if c == conn => (error, cert_sha256),
             ev => panic!("Failed attendu sur {conn}, reçu {ev:?}"),
@@ -222,7 +222,8 @@ fn peer_reset_is_reported() {
     socket2::SockRef::from(&s).set_linger(Some(Duration::ZERO)).unwrap();
     drop(s);
     let err = cli.closed(1);
-    assert!(err.as_deref().is_some_and(|e| e.contains("réinitialisée")), "{err:?}");
+    assert_eq!(err, Some(NetError::Io(IoKind::Reset)));
+    assert_eq!(err.unwrap().to_string(), "connection reset by peer");
 }
 
 #[test]
@@ -236,7 +237,9 @@ fn connect_refused_fails_quickly() {
     cli.net.connect(9, Target::new("127.0.0.1", port, false));
     let (err, cert) = cli.failed(9);
     assert!(t0.elapsed() < Duration::from_secs(3));
-    assert!(err.contains("refusée"), "{err}");
+    let addr = Some(SocketAddr::new("127.0.0.1".parse().unwrap(), port));
+    assert_eq!(err, NetError::Unreachable { host: "127.0.0.1".into(), port, addr, cause: IoKind::Refused });
+    assert_eq!(err.to_string(), format!("127.0.0.1:{port}: connection refused"));
     assert!(cert.is_none());
     assert!(!cli.net.is_connected(9));
     // Les envois sur une connexion échouée sont ignorés.
@@ -251,7 +254,11 @@ fn unresolvable_host_fails() {
     t.connect_timeout = Duration::from_secs(3);
     cli.net.connect(1, t);
     let (err, _) = cli.failed(1);
-    assert!(err.contains("introuvable") || err.contains("délai"), "{err}");
+    assert!(
+        matches!(&err, NetError::Dns { host, .. } if host == "nonexistent.invalid")
+            || matches!(err, NetError::ConnectTimeout { .. }),
+        "{err:?}"
+    );
 }
 
 #[test]
@@ -261,7 +268,7 @@ fn bind_family_mismatch_fails() {
     t.bind = Some("::1".parse().unwrap());
     cli.net.connect(1, t);
     let (err, _) = cli.failed(1);
-    assert!(err.contains("famille"), "{err}");
+    assert_eq!(err, NetError::NoAddressForBind { host: "127.0.0.1".into(), bind: "::1".parse().unwrap() });
 }
 
 #[test]
@@ -291,8 +298,8 @@ fn tls_handshake_timeout() {
     let (err, cert) = cli.failed(4);
     assert!(t0.elapsed() >= Duration::from_millis(500), "{:?}", t0.elapsed());
     assert!(t0.elapsed() < Duration::from_secs(5));
-    assert!(err.contains("délai"), "{err}");
-    assert!(err.contains("0,6 s"), "{err}");
+    assert_eq!(err, NetError::TlsTimeout { ms: 600 });
+    assert_eq!(err.to_string(), "TLS handshake timed out (0.6 s)");
     assert!(cert.is_none());
     drop(raw);
 }
@@ -474,7 +481,7 @@ fn tls_full_verification_rejects_self_signed_with_fingerprint() {
     for (id, host) in [(1, "localhost"), (2, "127.0.0.1")] {
         cli.net.connect(id, tls_target(host, s.port, Verify::Full));
         let (err, cert) = cli.failed(id);
-        assert!(err.contains("émetteur inconnu"), "{err}");
+        assert_eq!(err, NetError::CertRejected { host: host.into(), problem: CertProblem::UnknownIssuer });
         assert_eq!(cert.as_deref(), Some(s.fp.as_str()));
     }
     // Le serveur n'a vu aucune connexion aboutir.
@@ -487,12 +494,12 @@ fn tls_wrong_pin_fails_with_fingerprint() {
     let cli = Probe::new();
     cli.net.connect(1, tls_target("localhost", s.port, Verify::Pinned("00".repeat(32))));
     let (err, cert) = cli.failed(1);
-    assert!(err.contains("empreinte"), "{err}");
+    assert_eq!(err, NetError::CertRejected { host: "localhost".into(), problem: CertProblem::PinMismatch });
     assert_eq!(cert.as_deref(), Some(s.fp.as_str()));
     // Empreinte mal saisie : échec immédiat, sans connexion.
     cli.net.connect(2, tls_target("localhost", s.port, Verify::Pinned("abc".into())));
     let (err, cert) = cli.failed(2);
-    assert!(err.contains("empreinte SHA-256 invalide"), "{err}");
+    assert_eq!(err, NetError::BadPin { pin: "abc".into() });
     assert!(cert.is_none());
 }
 
@@ -508,7 +515,8 @@ fn tls_to_plain_server_fails() {
     srv.net.send(sconn, b"NOTICE * :not tls".to_vec());
     srv.net.close(sconn);
     let (err, cert) = cli.failed(1);
-    assert!(err.contains("TLS"), "{err}");
+    assert!(matches!(err, NetError::Tls { .. } | NetError::TlsIo(_) | NetError::TlsAlert { .. }), "{err:?}");
+    assert!(err.to_string().contains("TLS"), "{err}");
     assert!(cert.is_none());
 }
 
@@ -552,7 +560,8 @@ fn client_config_modes() {
     let (cert, key, _) = generate_self_signed(&["me".into()]).unwrap();
     assert!(client_config(&Verify::Full, Some((&cert, &key))).is_ok());
     let err = client_config(&Verify::Full, Some((&cert, b"garbage"))).unwrap_err();
-    assert!(err.contains("certificat client"), "{err}");
+    assert!(matches!(err, NetError::ClientCert(PemProblem::BadKey(_))), "{err:?}");
+    assert!(err.to_string().starts_with("client certificate: "), "{err}");
 }
 
 /// Certificat client (SASL EXTERNAL / CertFP) : un serveur rustls qui exige un certificat client reçoit

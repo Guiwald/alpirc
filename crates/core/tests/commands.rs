@@ -402,6 +402,25 @@ fn list_window_collects_channels() {
 }
 
 #[test]
+fn each_new_list_has_a_new_generation() {
+    let (mut h, w) = chan();
+    h.input(w, "/list");
+    let lw = h.c.find_window(Some(h.conn), "Channels List").unwrap();
+    let generation = |h: &H| h.c.chanlist(lw).unwrap().generation;
+    let g0 = generation(&h);
+    h.feed(":irc.test.net 321 Guiwald Channel :Users  Name");
+    let g1 = generation(&h);
+    assert!(g1 > g0, "le serveur recommence la liste");
+    h.feed(":irc.test.net 322 Guiwald #lyon 42 :Lyon");
+    h.feed(":irc.test.net 323 Guiwald :End of /LIST");
+    assert_eq!(generation(&h), g1, "les entrées s'ajoutent sans changer de liste");
+    // Un `/list` tapé à nouveau, même s'il rend autant de canaux.
+    h.input(w, "/list");
+    assert!(generation(&h) > g1);
+    assert!(h.c.chanlist(lw).unwrap().entries.is_empty());
+}
+
+#[test]
 fn lag_command() {
     let (mut h, w) = chan();
     h.input(w, "/lag");
@@ -487,6 +506,18 @@ fn sounds_beep_flash_url() {
     assert_eq!(fx.iter().filter(|e| **e == Effect::Beep).count(), 2);
     assert!(fx.contains(&Effect::Flash { win: w }));
     assert!(fx.contains(&Effect::OpenUrl("https://alpirc.org".into())));
+}
+
+#[test]
+fn splay_stop() {
+    let (mut h, w) = chan();
+    h.effects();
+    h.input(w, "/splay stop");
+    h.input(w, "/splay -w STOP ");
+    let fx = h.effects();
+    assert_eq!(fx.iter().filter(|e| **e == Effect::StopSound).count(), 2);
+    assert!(!fx.iter().any(|e| matches!(e, Effect::PlaySound(_))));
+    assert!(!h.last(w).contains("not found"), "« stop » n'est pas un fichier");
 }
 
 #[test]

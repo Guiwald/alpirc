@@ -33,6 +33,7 @@ impl ShellPlatform for P {
     }
     fn beep(&mut self) {}
     fn play_sound(&mut self, _path: &Path) {}
+    fn stop_sound(&mut self) {}
     fn flash(&mut self) {}
     fn open_url(&mut self, url: &str) {
         println!("ouvrir {url}");

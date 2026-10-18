@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use alpirc_net::{DccJob, Net, NetEvent};
+use alpirc_net::{DccJob, IoKind, Net, NetError, NetEvent};
 
 const WAIT: Duration = Duration::from_secs(20);
 const LOCAL: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
@@ -27,7 +27,7 @@ impl Probe {
     }
 
     /// Attend la fin de `id` ; rend (position finale, erreur, nombre d'événements d'avancement, connecté ?).
-    fn wait_end(&self, id: u32) -> (u64, Option<String>, usize, bool) {
+    fn wait_end(&self, id: u32) -> (u64, Option<NetError>, usize, bool) {
         let deadline = Instant::now() + WAIT;
         let (mut progress, mut connected) = (0, false);
         loop {
@@ -166,7 +166,7 @@ fn cancel_sender_and_receiver() {
     let t0 = Instant::now();
     a.net.dcc_close(1);
     let (_, e, _, _) = a.wait_end(1);
-    assert_eq!(e.as_deref(), Some("annulé"));
+    assert_eq!(e.as_ref(), Some(&NetError::Cancelled));
     assert!(t0.elapsed() < Duration::from_secs(3));
 
     // Un envoyeur muet : le destinataire attend, puis est annulé.
@@ -178,7 +178,7 @@ fn cancel_sender_and_receiver() {
     b.wait_connected(2);
     b.net.dcc_close(2);
     let (pos, e, _, _) = b.wait_end(2);
-    assert_eq!((pos, e.as_deref()), (0, Some("annulé")));
+    assert_eq!((pos, e.as_ref()), (0, Some(&NetError::Cancelled)));
 }
 
 #[test]
@@ -209,13 +209,13 @@ fn listen_timeout_and_refused_connect() {
     a.net.dcc_listen(1, LOCAL, (0, 0), DccJob::Chat, Duration::from_millis(300)).unwrap();
     let (_, e, _, c) = a.wait_end(1);
     assert!(!c);
-    assert!(e.unwrap().starts_with("délai dépassé"));
+    assert_eq!(e, Some(NetError::Timeout { ms: 300 }));
     assert!(t0.elapsed() < Duration::from_secs(3));
     // Port fermé : refus.
     let port = StdListener::bind((LOCAL, 0)).unwrap().local_addr().unwrap().port();
     a.net.dcc_connect(2, SocketAddr::new(LOCAL, port), DccJob::Chat, T);
     let (_, e, _, _) = a.wait_end(2);
-    assert_eq!(e.as_deref(), Some("connexion refusée"));
+    assert_eq!(e, Some(NetError::Io(IoKind::Refused)));
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn port_range() {
     let addr = a.net.dcc_listen(1, LOCAL, (busy, busy.saturating_add(20)), DccJob::Chat, T).unwrap();
     assert!(addr.port() > busy && addr.port() <= busy + 20);
     a.net.dcc_close(1);
-    assert_eq!(a.wait_end(1).1.as_deref(), Some("annulé"));
+    assert_eq!(a.wait_end(1).1.as_ref(), Some(&NetError::Cancelled));
 }
 
 /// Destinataire « à la main » : lit tout et vérifie les accusés (4 octets, ordre réseau, position absolue).
@@ -282,7 +282,7 @@ fn interrupted_transfer_fails() {
     drop(s);
     let (bytes, e, _, _) = b.wait_end(2);
     assert_eq!(bytes, 4000);
-    assert!(e.unwrap().contains("4000"));
+    assert_eq!(e, Some(NetError::PeerClosed { pos: 4000, size: 10_000 }));
 }
 
 /// Destinataire qui n'accuse rien et ferme après avoir tout lu : l'envoi est réussi.

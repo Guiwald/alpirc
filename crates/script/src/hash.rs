@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::calc::{fmt_num, parse_num, parse_num_prefix};
 use crate::exec::{R, split_word, switch_num, switches};
 use crate::wild::wildmatch;
-use crate::{Ctx, Engine, Host};
+use crate::{Ctx, Engine, Host, Msg};
 
 #[derive(Debug, Clone)]
 struct Item {
@@ -129,7 +129,7 @@ impl Tables {
 
 impl Engine {
     fn no_table(&self, cmd: &str, name: &str) -> crate::exec::Abort {
-        self.err(format!("/{cmd}: no such table '{name}'"))
+        self.err(Msg::NoSuchTable { cmd: cmd.to_string(), name: name.to_string() })
     }
 
     /// `/hmake [-s] nom [N]`.
@@ -137,14 +137,14 @@ impl Engine {
         let (sw, rest) = switches(args);
         let (name, size) = split_word(rest);
         if name.is_empty() {
-            return Err(self.err("/hmake: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "hmake".into() }));
         }
         let size = size.trim().parse().unwrap_or(100);
         if !self.tables.make(name, size) {
-            return Err(self.err(format!("/hmake: table '{name}' exists")));
+            return Err(self.err(Msg::TableExists { cmd: "hmake".into(), name: name.to_string() }));
         }
         if sw.contains('s') && !quiet {
-            self.info(h, ctx, &format!("* Made hash table '{name}' ({size})"));
+            self.info(h, ctx, Msg::MadeTable { name: name.to_string(), size });
         }
         Ok(())
     }
@@ -155,7 +155,7 @@ impl Engine {
         let (name, rest) = split_word(rest);
         let (item, data) = split_word(rest);
         if item.is_empty() {
-            return Err(self.err("/hadd: insufficient parameters"));
+            return Err(self.err(Msg::InsufficientParams { cmd: "hadd".into() }));
         }
         if sw.contains('m') {
             self.tables.make(name, 100);
@@ -166,7 +166,7 @@ impl Engine {
         };
         t.set(item, data.to_string(), exp);
         if sw.contains('s') {
-            self.info(h, ctx, &format!("* Added item '{item}' to hash table '{name}'"));
+            self.info(h, ctx, Msg::AddedItem { item: item.to_string(), table: name.to_string() });
         }
         Ok(())
     }
@@ -241,7 +241,8 @@ impl Engine {
         let (name, rest) = split_word(rest);
         let (file, section) = crate::files::take_filename(rest);
         let path = self.sandbox_path(&file)?;
-        let text = std::fs::read(&path).map_err(|_| self.err(format!("/hload: unable to open '{file}'")))?;
+        let text = std::fs::read(&path)
+            .map_err(|_| self.err(Msg::CannotOpen { cmd: "hload".into(), file: file.to_string() }))?;
         let text = crate::files::decode(&text);
         if sw.contains('m') {
             self.tables.make(name, 100);
@@ -316,7 +317,7 @@ impl Engine {
         } else {
             std::fs::write(&path, out)
         };
-        r.map_err(|_| self.err(format!("/hsave: unable to write '{file}'")))
+        r.map_err(|_| self.err(Msg::CannotWrite { cmd: "hsave".into(), file: file.to_string() }))
     }
 
     /// `$hget(nom)`, `$hget(N)`, `$hget(nom).size`, `$hget(nom, élément)`, `$hget(nom, N).item|.data`.

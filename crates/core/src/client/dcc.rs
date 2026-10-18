@@ -18,6 +18,7 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 use alpirc_proto::ctcp;
+use alpirc_proto::neterror::NetError;
 use alpirc_proto::encoding::Encoding;
 use alpirc_script::EventKind;
 
@@ -2094,9 +2095,10 @@ impl Client {
 
     /// Fin d'une connexion directe (ou échec de l'écoute, de la connexion) : `error` vaut `None` pour un
     /// transfert complet ou une discussion terminée normalement.
-    pub fn on_dcc_ended(&mut self, id: DccId, bytes: u64, error: Option<&str>, now_ms: i64) {
+    pub fn on_dcc_ended(&mut self, id: DccId, bytes: u64, error: Option<&NetError>, now_ms: i64) {
         self.st.now = now_ms;
-        self.st.dcc_ended(id, bytes, error);
+        let text = error.map(|e| self.net_error_text(e));
+        self.st.dcc_ended(id, bytes, text.as_deref());
         self.finish();
     }
 }

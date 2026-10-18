@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use alpirc_script::{Ctx, Engine, Host, ScriptKind};
+use alpirc_script::{Ctx, Engine, Host, Msg, ScriptKind};
 
 pub struct FakeHost {
     /// (commande, arguments, connexion)
@@ -20,6 +20,8 @@ pub struct FakeHost {
     /// pseudo en minuscules → adresse complète
     pub addresses: HashMap<String, String>,
     pub offset: i32,
+    /// Rédaction des messages du moteur (par défaut : l'anglais du moteur).
+    pub render: Option<fn(&Msg) -> String>,
 }
 
 impl FakeHost {
@@ -42,6 +44,7 @@ impl FakeHost {
             idents,
             addresses,
             offset: 0,
+            render: None,
         }
     }
 
@@ -119,6 +122,13 @@ impl Host for FakeHost {
 
     fn script_error(&mut self, _ctx: &Ctx, text: &str) {
         self.errors.push(text.to_string());
+    }
+
+    fn message_text(&self, msg: &Msg) -> String {
+        match self.render {
+            Some(f) => f(msg),
+            None => msg.to_string(),
+        }
     }
 
     fn now_ms(&self) -> i64 {
