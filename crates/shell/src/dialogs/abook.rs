@@ -24,6 +24,9 @@ const TAB_IGNORE: u32 = 11;
 const TAB_CONTROL: u32 = 12;
 const TAB_INFO: u32 = 13;
 
+/// Interrupteurs des listes Control (`/aop on|off`…) : (case, sorte).
+const CTL_ON: [(u32, CtlKind); 3] = [(136, CtlKind::Autoop), (137, CtlKind::Autovoice), (138, CtlKind::Protect)];
+
 /// Les quatre listes : (onglet, liste, ajouter, modifier, retirer, note).
 const LISTS: [(u32, u32, u32, u32, u32, u32); 4] = [
     (TAB_INFO, 140, 141, 142, 143, 144),
@@ -350,6 +353,10 @@ impl DialogCtl for AddressBook {
             c.push(button(rem, (bx, 94, 96, BTN_H), &tr("dlg.remove")).in_tab(tab));
             c.push(text(note, (x0, 298, W - 2 * x0, 36), &tr(notes[k])).in_tab(tab));
         }
+        c.push(text(135, (bx, 130, 96, LABEL_H), &tr("ab.ctl.active")).style("nowrap").in_tab(TAB_CONTROL));
+        for (k, (id, kind)) in CTL_ON.iter().enumerate() {
+            c.push(check(*id, (bx, 150 + k as i32 * 22, 96, CHECK_H), &tr(kind_key(*kind))).in_tab(TAB_CONTROL));
+        }
         c.extend(ok_cancel(lang, W, H, OK, CANCEL, None));
         spec(&tr("ab.title"), W, H, c)
     }
@@ -363,6 +370,10 @@ impl DialogCtl for AddressBook {
         view.set_columns(130, &[(tr("ab.col.kind"), 86), (tr("ab.col.mask"), 124), (tr("ab.col.channels"), 90), (tr("ab.col.network"), 68)]);
         for (_, list, ..) in LISTS {
             self.fill(view, lang, list, Some(0));
+        }
+        let book = &self.st.borrow().book;
+        for (id, kind) in CTL_ON {
+            view.set_checked(id, book.control_on(kind));
         }
     }
 
@@ -387,6 +398,11 @@ impl DialogCtl for AddressBook {
                 {
                     self.edit(l.1, Some(i), cx);
                 }
+                Outcome::Keep
+            }
+            DialogMsg::Clicked(id) if CTL_ON.iter().any(|c| c.0 == id) => {
+                let kind = CTL_ON.iter().find(|c| c.0 == id).map(|c| c.1).unwrap_or_default();
+                self.st.borrow_mut().book.set_control_on(kind, view.checked(id));
                 Outcome::Keep
             }
             DialogMsg::Clicked(id) => {
@@ -472,12 +488,26 @@ mod tests {
         assert_eq!((b.notify[0].nick.as_str(), b.notify[0].note.as_str()), ("Elisa", "de Lyon"));
         assert!(b.ignore[0].codes && b.ignore[0].private);
         assert_eq!(b.control[0].kind, CtlKind::Autovoice);
+        assert!(b.autoop_on && b.autovoice_on && b.protect_on);
         assert_eq!(b.control[0].channels, vec!["#lyon", "#grenoble"]);
         // Les commandes partent vers le serveur (ISON ou MONITOR).
         k.run(actions);
         k.client.tick(k.now + 1);
         let sent = k.sent();
         assert!(sent.iter().any(|l| l.starts_with("ISON") && l.contains("Elisa") && !l.contains("Zaza")), "{sent:?}");
+    }
+
+    #[test]
+    fn control_lists_can_be_switched_off() {
+        let mut k = Kit::new("abook-ctl");
+        let mut ab = AddressBook::new(&k.client);
+        let (mut v, _) = k.open(&mut ab);
+        assert!(v.checked(136) && v.checked(137) && v.checked(138));
+        v.set_checked(137, false);
+        k.send(&mut ab, &mut v, DialogMsg::Clicked(137));
+        k.send(&mut ab, &mut v, DialogMsg::Ok(OK));
+        let b = &k.client.settings().address_book;
+        assert!(b.autoop_on && !b.autovoice_on && b.protect_on);
     }
 
     #[test]

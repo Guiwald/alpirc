@@ -163,7 +163,41 @@ keys! {
     UnknownCommand => "/{cmd}: unknown command", "/{cmd} : commande inconnue";
     NoSuchWindow => "/{cmd}: no such window '{name}'", "/{cmd} : pas de fenêtre « {name} »";
     RunDisabled => "* /run is disabled in AlpIRC", "* /run est désactivé dans AlpIRC";
-    DnsUnsupported => "* /dns is not supported by AlpIRC", "* /dns n'est pas pris en charge par AlpIRC";
+    DebugOn => "* Debug output to {target}", "* Débogage vers {target}";
+    DebugOff => "* Debug output is off", "* Débogage arrêté";
+    DnsResolving => "* Dns resolving {host}", "* DNS : recherche de {host}";
+    DnsResolved => "* Dns resolved {host} to {addr}", "* DNS : {host} a pour adresse {addr}";
+    DnsFailed => "* Dns unable to resolve {host}", "* DNS : impossible de trouver l'adresse de {host}";
+    DnsNoReverse => "* Dns: looking up the name of an IP address is not available ({ip})",
+        "* DNS : retrouver le nom d'une adresse IP n'est pas possible ({ip})";
+    AltNickSet => "* Alternate nickname: {nick}", "* Pseudo de secours : {nick}";
+    MainNickSet => "* Main nickname: {nick}", "* Pseudo principal : {nick}";
+    FullnameSet => "* Full name: {name}", "* Nom complet : {name}";
+    AjinviteOn => "* Auto-join on invite is on", "* Rejoindre sur invitation : activé";
+    AjinviteOff => "* Auto-join on invite is off", "* Rejoindre sur invitation : désactivé";
+    CreqAsk => "* DCC Chat: ask before accepting", "* Discussions DCC : demander avant d'accepter";
+    CreqAuto => "* DCC Chat: accept automatically", "* Discussions DCC : accepter automatiquement";
+    CreqIgnore => "* DCC Chat: ignore requests", "* Discussions DCC : ignorer les demandes";
+    SreqAsk => "* DCC Send: ask before accepting", "* Envois de fichiers DCC : demander avant d'accepter";
+    SreqAuto => "* DCC Send: accept automatically (risky files are still asked)", "* Envois de fichiers DCC : accepter automatiquement (sauf les fichiers à risque, toujours demandés)";
+    SreqIgnore => "* DCC Send: ignore requests", "* Envois de fichiers DCC : ignorer les demandes";
+    RemoteOn => "* Scripts are on", "* Scripts activés";
+    RemoteOff => "* Scripts are off", "* Scripts désactivés";
+    BufferSaved => "* Saved {n} lines to {file}", "* {n} lignes enregistrées dans {file}";
+    ControlAdded => "* Added {mask} to the {list} list", "* {mask} ajouté à la liste {list}";
+    ControlRemoved => "* Removed {mask} from the {list} list", "* {mask} retiré de la liste {list}";
+    ControlNotFound => "* {mask} is not in the {list} list", "* {mask} n'est pas dans la liste {list}";
+    ControlOn => "* {list} is on", "* {list} : activé";
+    ControlOff => "* {list} is off", "* {list} : désactivé";
+    ControlListHead => "* {list} list ({state}):", "* Liste {list} ({state}) :";
+    ControlListLine => "*   {mask} {channels} {network}", "*   {mask} {channels} {network}";
+    StateOn => "on", "activée";
+    StateOff => "off", "désactivée";
+    AllNetworks => "(all networks)", "(tous les réseaux)";
+    AllChannels => "(all channels)", "(tous les canaux)";
+    ListAutoOp => "auto-op", "auto-op";
+    ListAutoVoice => "auto-voice", "auto-voice";
+    ListProtect => "protect", "protection";
     LoggingOn => "* Logging is on for {win}", "* Journal activé pour {win}";
     LoggingOff => "* Logging is off for {win}", "* Journal désactivé pour {win}";
     Help => "* AlpIRC help: {url}", "* Aide d'AlpIRC : {url}";
@@ -934,13 +968,343 @@ const OTHER: &[(Key, [&str; 5])] = &[
         ],
     ),
     (
-        Key::DnsUnsupported,
+        Key::DebugOn,
         [
-            "* AlpIRC no admite /dns",
-            "* /dns wird von AlpIRC nicht unterstützt",
-            "* /dns non è supportato da AlpIRC",
-            "* AlpIRC no admet /dns",
-            "* Ní thacaíonn AlpIRC le /dns",
+            "* Depuración hacia {target}",
+            "* Debug-Ausgabe nach {target}",
+            "* Debug verso {target}",
+            "* Depuració cap a {target}",
+            "* Dífhabhtú chuig {target}",
+        ],
+    ),
+    (
+        Key::DebugOff,
+        [
+            "* Depuración desactivada",
+            "* Debug-Ausgabe aus",
+            "* Debug disattivato",
+            "* Depuració desactivada",
+            "* Dífhabhtú múchta",
+        ],
+    ),
+    (
+        Key::DnsResolving,
+        [
+            "* DNS: buscando {host}",
+            "* DNS: suche {host}",
+            "* DNS: ricerca di {host}",
+            "* DNS: s'està buscant {host}",
+            "* DNS: ag cuardach {host}",
+        ],
+    ),
+    (
+        Key::DnsResolved,
+        [
+            "* DNS: la dirección de {host} es {addr}",
+            "* DNS: {host} hat die Adresse {addr}",
+            "* DNS: l'indirizzo di {host} è {addr}",
+            "* DNS: l'adreça de {host} és {addr}",
+            "* DNS: is é {addr} seoladh {host}",
+        ],
+    ),
+    (
+        Key::DnsFailed,
+        [
+            "* DNS: no se encuentra la dirección de {host}",
+            "* DNS: Adresse von {host} nicht gefunden",
+            "* DNS: indirizzo di {host} non trovato",
+            "* DNS: no es troba l'adreça de {host}",
+            "* DNS: níor aimsíodh seoladh {host}",
+        ],
+    ),
+    (
+        Key::DnsNoReverse,
+        [
+            "* DNS: no se puede buscar el nombre de una dirección IP ({ip})",
+            "* DNS: der Name einer IP-Adresse kann nicht gesucht werden ({ip})",
+            "* DNS: non si può cercare il nome di un indirizzo IP ({ip})",
+            "* DNS: no es pot buscar el nom d'una adreça IP ({ip})",
+            "* DNS: ní féidir ainm seoladh IP a chuardach ({ip})",
+        ],
+    ),
+    (
+        Key::AltNickSet,
+        [
+            "* Nick alternativo: {nick}",
+            "* Ausweich-Nickname: {nick}",
+            "* Nick alternativo: {nick}",
+            "* Sobrenom alternatiu: {nick}",
+            "* Leasainm malartach: {nick}",
+        ],
+    ),
+    (
+        Key::MainNickSet,
+        [
+            "* Nick principal: {nick}",
+            "* Haupt-Nickname: {nick}",
+            "* Nick principale: {nick}",
+            "* Sobrenom principal: {nick}",
+            "* Príomhleasainm: {nick}",
+        ],
+    ),
+    (
+        Key::FullnameSet,
+        [
+            "* Nombre completo: {name}",
+            "* Vollständiger Name: {name}",
+            "* Nome completo: {name}",
+            "* Nom complet: {name}",
+            "* Ainm iomlán: {name}",
+        ],
+    ),
+    (
+        Key::AjinviteOn,
+        [
+            "* Entrar al ser invitado: activado",
+            "* Bei Einladung betreten: an",
+            "* Entra su invito: attivato",
+            "* Entrar en ser convidat: activat",
+            "* Dul isteach ar chuireadh: ar siúl",
+        ],
+    ),
+    (
+        Key::AjinviteOff,
+        [
+            "* Entrar al ser invitado: desactivado",
+            "* Bei Einladung betreten: aus",
+            "* Entra su invito: disattivato",
+            "* Entrar en ser convidat: desactivat",
+            "* Dul isteach ar chuireadh: múchta",
+        ],
+    ),
+    (
+        Key::CreqAsk,
+        [
+            "* Chat DCC: preguntar antes de aceptar",
+            "* DCC-Chat: vor dem Annehmen fragen",
+            "* Chat DCC: chiedi prima di accettare",
+            "* Xat DCC: preguntar abans d'acceptar",
+            "* Comhrá DCC: fiafraigh roimh ghlacadh",
+        ],
+    ),
+    (
+        Key::CreqAuto,
+        [
+            "* Chat DCC: aceptar automáticamente",
+            "* DCC-Chat: automatisch annehmen",
+            "* Chat DCC: accetta automaticamente",
+            "* Xat DCC: acceptar automàticament",
+            "* Comhrá DCC: glac go huathoibríoch",
+        ],
+    ),
+    (
+        Key::CreqIgnore,
+        [
+            "* Chat DCC: ignorar las peticiones",
+            "* DCC-Chat: Anfragen ignorieren",
+            "* Chat DCC: ignora le richieste",
+            "* Xat DCC: ignorar les peticions",
+            "* Comhrá DCC: déan neamhaird d'iarratais",
+        ],
+    ),
+    (
+        Key::SreqAsk,
+        [
+            "* Envíos DCC: preguntar antes de aceptar",
+            "* DCC-Dateien: vor dem Annehmen fragen",
+            "* Invii DCC: chiedi prima di accettare",
+            "* Enviaments DCC: preguntar abans d'acceptar",
+            "* Comhaid DCC: fiafraigh roimh ghlacadh",
+        ],
+    ),
+    (
+        Key::SreqAuto,
+        [
+            "* Envíos DCC: aceptar automáticamente (los archivos de riesgo se siguen preguntando)",
+            "* DCC-Dateien: automatisch annehmen (riskante Dateien werden weiter erfragt)",
+            "* Invii DCC: accetta automaticamente (i file a rischio vengono sempre chiesti)",
+            "* Enviaments DCC: acceptar automàticament (els fitxers de risc sempre es pregunten)",
+            "* Comhaid DCC: glac go huathoibríoch (fiafraítear fós faoi chomhaid chontúirteacha)",
+        ],
+    ),
+    (
+        Key::SreqIgnore,
+        [
+            "* Envíos DCC: ignorar las peticiones",
+            "* DCC-Dateien: Anfragen ignorieren",
+            "* Invii DCC: ignora le richieste",
+            "* Enviaments DCC: ignorar les peticions",
+            "* Comhaid DCC: déan neamhaird d'iarratais",
+        ],
+    ),
+    (
+        Key::RemoteOn,
+        [
+            "* Scripts activados",
+            "* Scripts an",
+            "* Script attivati",
+            "* Scripts activats",
+            "* Scripteanna ar siúl",
+        ],
+    ),
+    (
+        Key::RemoteOff,
+        [
+            "* Scripts desactivados",
+            "* Scripts aus",
+            "* Script disattivati",
+            "* Scripts desactivats",
+            "* Scripteanna múchta",
+        ],
+    ),
+    (
+        Key::BufferSaved,
+        [
+            "* {n} líneas guardadas en {file}",
+            "* {n} Zeilen in {file} gespeichert",
+            "* {n} righe salvate in {file}",
+            "* {n} línies guardades en {file}",
+            "* {n} líne sábháilte i {file}",
+        ],
+    ),
+    (
+        Key::ControlAdded,
+        [
+            "* {mask} añadido a la lista {list}",
+            "* {mask} zur Liste {list} hinzugefügt",
+            "* {mask} aggiunto alla lista {list}",
+            "* {mask} afegit a la llista {list}",
+            "* Cuireadh {mask} le liosta {list}",
+        ],
+    ),
+    (
+        Key::ControlRemoved,
+        [
+            "* {mask} quitado de la lista {list}",
+            "* {mask} aus der Liste {list} entfernt",
+            "* {mask} rimosso dalla lista {list}",
+            "* {mask} llevat de la llista {list}",
+            "* Baineadh {mask} de liosta {list}",
+        ],
+    ),
+    (
+        Key::ControlNotFound,
+        [
+            "* {mask} no está en la lista {list}",
+            "* {mask} ist nicht in der Liste {list}",
+            "* {mask} non è nella lista {list}",
+            "* {mask} no és a la llista {list}",
+            "* Níl {mask} i liosta {list}",
+        ],
+    ),
+    (
+        Key::ControlOn,
+        [
+            "* {list}: activado",
+            "* {list}: an",
+            "* {list}: attivato",
+            "* {list}: activat",
+            "* {list}: ar siúl",
+        ],
+    ),
+    (
+        Key::ControlOff,
+        [
+            "* {list}: desactivado",
+            "* {list}: aus",
+            "* {list}: disattivato",
+            "* {list}: desactivat",
+            "* {list}: múchta",
+        ],
+    ),
+    (
+        Key::ControlListHead,
+        [
+            "* Lista {list} ({state}):",
+            "* Liste {list} ({state}):",
+            "* Lista {list} ({state}):",
+            "* Llista {list} ({state}):",
+            "* Liosta {list} ({state}):",
+        ],
+    ),
+    (
+        Key::ControlListLine,
+        [
+            "*   {mask} {channels} {network}",
+            "*   {mask} {channels} {network}",
+            "*   {mask} {channels} {network}",
+            "*   {mask} {channels} {network}",
+            "*   {mask} {channels} {network}",
+        ],
+    ),
+    (
+        Key::StateOn,
+        [
+            "activada",
+            "an",
+            "attivata",
+            "activada",
+            "ar siúl",
+        ],
+    ),
+    (
+        Key::StateOff,
+        [
+            "desactivada",
+            "aus",
+            "disattivata",
+            "desactivada",
+            "múchta",
+        ],
+    ),
+    (
+        Key::AllNetworks,
+        [
+            "(todas las redes)",
+            "(alle Netzwerke)",
+            "(tutte le reti)",
+            "(totes les xarxes)",
+            "(gach líonra)",
+        ],
+    ),
+    (
+        Key::AllChannels,
+        [
+            "(todos los canales)",
+            "(alle Channels)",
+            "(tutti i canali)",
+            "(tots els canals)",
+            "(gach cainéal)",
+        ],
+    ),
+    (
+        Key::ListAutoOp,
+        [
+            "auto-op",
+            "Auto-Op",
+            "auto-op",
+            "auto-op",
+            "uath-op",
+        ],
+    ),
+    (
+        Key::ListAutoVoice,
+        [
+            "auto-voz",
+            "Auto-Voice",
+            "auto-voice",
+            "auto-veu",
+            "uath-ghuth",
+        ],
+    ),
+    (
+        Key::ListProtect,
+        [
+            "protección",
+            "Schutz",
+            "protezione",
+            "protecció",
+            "cosaint",
         ],
     ),
     (
@@ -2180,8 +2544,15 @@ mod tests {
     }
 
     /// Clés qui restent identiques à l'anglais dans toutes les langues (rien que des marques et des signes).
-    const SAME_AS_ENGLISH: &[Key] =
-        &[Key::MsgSent, Key::NoticeSent, Key::CtcpSent, Key::NetUnreachable, Key::NetUnreachableVia, Key::ScrParse];
+    const SAME_AS_ENGLISH: &[Key] = &[
+        Key::MsgSent,
+        Key::NoticeSent,
+        Key::CtcpSent,
+        Key::NetUnreachable,
+        Key::NetUnreachableVia,
+        Key::ScrParse,
+        Key::ControlListLine,
+    ];
 
     // Toute nouvelle clé doit être traduite dans les 7 langues (voir l'ADR 0012).
     #[test]

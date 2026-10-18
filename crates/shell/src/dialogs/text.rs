@@ -2832,6 +2832,7 @@ pub(super) const TR: crate::tr::Table = &[
     ),
     ("ab.ign.dcc", ["&DCC", "&DCC", "&DCC", "&DCC", "&DCC", "&DCC", "&DCC"]),
     ("ab.ctl.kind", ["&Type:", "&Type :", "&Tipo:", "&Typ:", "&Tipo:", "&Tipus:", "C&ineál:"]),
+    ("ab.ctl.active", ["Active lists:", "Listes actives :", "Listas activas:", "Aktive Listen:", "Liste attive:", "Llistes actives:", "Liostaí gníomhacha:"]),
     ("ab.ctl.autoop", ["Auto-op", "Auto-op", "Auto-op", "Auto-Op", "Auto-op", "Auto-op", "Uath-op"]),
     (
         "ab.ctl.autovoice",

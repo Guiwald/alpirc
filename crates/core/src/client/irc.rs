@@ -446,7 +446,10 @@ impl super::state::State {
             SE::ListEnd { channel, .. } => self.touch_channels(conn, &[channel]),
             SE::WhoEnd { mask, .. } => self.touch_channels(conn, &[mask]),
             SE::WhoReply { .. } => {}
-            SE::Userhost { entries, .. } => self.resolve_bans(conn, &entries),
+            SE::Userhost { entries, .. } => {
+                self.resolve_bans(conn, &entries);
+                self.dns_userhost(conn, &entries);
+            }
             SE::Ison { nicks, auto } => {
                 if auto {
                     self.on_ison(conn, &nicks);
@@ -772,6 +775,9 @@ impl super::state::State {
 
     fn control_matches(&self, conn: ConnId, chan: &str, nick: &str, address: &str, kind: ControlKind) -> bool {
         let Some(c) = self.conns.get(&conn) else { return false };
+        if !self.settings.address_book.control_on(kind) {
+            return false;
+        }
         let cm = c.session.casemapping();
         let full = format!("{nick}!{address}");
         let net = self.conn_network(conn);

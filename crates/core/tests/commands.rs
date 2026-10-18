@@ -323,8 +323,6 @@ fn refused_and_unavailable_commands() {
     assert!(h.last(w).starts_with("* /run"), "{}", h.last(w));
     h.input(w, "/dcc send Bob x.txt");
     assert_eq!(h.last(w), "* /dcc send: no such file: x.txt");
-    h.input(w, "/dns example.org");
-    assert_eq!(h.last(w), "* /dns is not supported by AlpIRC");
     assert!(h.sends().is_empty());
 }
 
@@ -604,4 +602,149 @@ fn partall_and_disconnect() {
     h.input(b, "/disconnect");
     assert_eq!(h.sends(), vec!["QUIT :AlpIRC — https://github.com/Guiwald/alpirc"]);
     assert!(h.effects().contains(&Effect::Close { conn: h.conn }));
+}
+
+#[test]
+fn mirc_identity_and_option_commands() {
+    let mut h = H::new();
+    h.up();
+    let st = h.status;
+    h.input(st, "/anick Guiwald_2");
+    assert_eq!(h.last(st), "* Alternate nickname: Guiwald_2");
+    h.input(st, "/mnick Guillaume");
+    assert_eq!(h.last(st), "* Main nickname: Guillaume");
+    assert!(h.sends().is_empty(), "/mnick ne change pas le pseudo du moment");
+    h.input(st, "/fullname Guillaume de Lyon");
+    assert_eq!(h.last(st), "* Full name: Guillaume de Lyon");
+    let id = &h.c.settings().identity;
+    assert_eq!((id.alt_nick.as_str(), id.nick.as_str(), id.realname.as_str()), ("Guiwald_2", "Guillaume", "Guillaume de Lyon"));
+    assert!(h.effects().contains(&Effect::SaveSettings));
+    // /tnick : comme /nick (temporaire).
+    h.input(st, "/tnick Gui");
+    assert_eq!(h.sends(), vec!["NICK Gui"]);
+    // Interrupteurs.
+    h.input(st, "/ajinvite on");
+    assert!(h.c.settings().irc.join_on_invite);
+    assert_eq!(h.last(st), "* Auto-join on invite is on");
+    h.input(st, "/creq +m auto");
+    assert_eq!(h.c.settings().dcc.on_chat, alpirc_core::settings::DccChatAction::AutoAccept);
+    h.input(st, "/sreq ignore");
+    assert_eq!(h.c.settings().dcc.on_send, alpirc_core::settings::DccSendAction::Ignore);
+    assert_eq!(h.last(st), "* DCC Send: ignore requests");
+    h.input(st, "/switchbar off");
+    h.input(st, "/toolbar off");
+    assert_eq!((h.c.settings().display.switchbar.as_str(), h.c.settings().display.toolbar), ("off", false));
+    h.input(st, "/switchbar on");
+    assert_eq!(h.c.settings().display.switchbar, "top");
+    h.input(st, "/remote off");
+    assert!(!h.c.settings().scripts.enabled);
+    // Messages à tous les privés de la connexion.
+    h.feed(":Bob!b@h PRIVMSG Guiwald :salut");
+    h.feed(":Pat!p@h PRIVMSG Guiwald :yo");
+    h.clear();
+    h.input(st, "/qmsg je reviens");
+    let mut sent = h.sends();
+    sent.sort();
+    assert_eq!(sent, vec!["PRIVMSG Bob :je reviens", "PRIVMSG Pat :je reviens"]);
+    // Presse-papiers.
+    h.input(st, "/clipboard -a coucou");
+    assert!(h.effects().contains(&Effect::Clipboard { text: "coucou".into(), append: true }));
+}
+
+#[test]
+fn mirc_control_list_commands() {
+    let mut h = H::new();
+    h.up();
+    let w = h.join("#lyon", "@Guiwald Bob");
+    h.feed(":irc.test.net 352 Guiwald #lyon bob bob.host irc.test.net Bob H :0 Bob");
+    h.input(w, "/aop Bob #lyon,#grenoble 2");
+    assert_eq!(h.last(w), "* Added *!*@bob.host to the auto-op list");
+    let e = h.c.settings().address_book.control[0].clone();
+    assert_eq!((e.mask.as_str(), e.channels.clone(), e.network.as_deref()), ("*!*@bob.host", vec!["#lyon".to_string(), "#grenoble".to_string()], Some("TestNet")));
+    h.input(w, "/avoice -w Pat");
+    assert_eq!(h.c.settings().address_book.control[1].network, None, "-w : tous les réseaux");
+    h.input(w, "/aop -l");
+    assert!(h.lines(w).iter().any(|l| l.contains("*!*@bob.host #lyon,#grenoble TestNet")), "{:?}", h.lines(w));
+    // Éteinte : plus d'auto-op.
+    h.input(w, "/aop off");
+    assert_eq!(h.last(w), "* auto-op is off");
+    assert!(!h.c.settings().address_book.autoop_on);
+    h.clear();
+    h.feed(":Bob!bob@bob.host JOIN #lyon");
+    h.advance(5_000);
+    assert!(!h.sends().iter().any(|l| l.starts_with("MODE #lyon +o")));
+    h.input(w, "/aop on");
+    h.input(w, "/aop -r *!*@bob.host");
+    assert_eq!(h.last(w), "* Removed *!*@bob.host from the auto-op list");
+    h.input(w, "/aop -r Personne");
+    assert_eq!(h.last(w), "* Personne is not in the auto-op list");
+}
+
+#[test]
+fn savebuf_writes_in_the_scripts_folder() {
+    let dir = tmpdir();
+    let mut h = H::with_dir(settings(), dir.clone());
+    h.up();
+    let w = h.join("#lyon", "Guiwald Bob");
+    h.feed(":Bob!b@h PRIVMSG #lyon :\u{3}4rouge\u{3} et noir");
+    h.input(w, "/savebuf 1 #lyon lyon.txt");
+    assert_eq!(h.last(w), "* Saved 1 lines to lyon.txt");
+    let text = std::fs::read_to_string(dir.join("scripts/lyon.txt")).unwrap();
+    assert!(text.ends_with("<Bob> rouge et noir\n"), "{text:?}");
+    h.input(w, "/savebuf -a #lyon lyon.txt");
+    assert!(std::fs::read_to_string(dir.join("scripts/lyon.txt")).unwrap().len() > text.len());
+    // Hors du dossier des scripts : refusé.
+    h.input(w, "/savebuf #lyon ../evasion.txt");
+    assert!(h.last(w).contains("unable to write"), "{}", h.last(w));
+    assert!(!dir.join("evasion.txt").exists());
+}
+
+#[test]
+fn dns_host_nick_and_ip() {
+    let mut h = H::new();
+    h.up();
+    let st = h.status;
+    h.input(st, "/dns irc.undernet.org");
+    assert_eq!(h.last(st), "* Dns resolving irc.undernet.org");
+    let id = h.effects().iter().find_map(|e| match e {
+        Effect::Resolve { id, host } if host == "irc.undernet.org" => Some(*id),
+        _ => None,
+    });
+    let id = id.expect("recherche demandée à l'hôte");
+    h.c.on_resolved(id, Ok(vec!["192.0.2.1".parse().unwrap(), "2001:db8::1".parse().unwrap()]), h.now);
+    assert_eq!(h.last(st), "* Dns resolved irc.undernet.org to 192.0.2.1, 2001:db8::1");
+    // Un pseudo dont l'adresse n'est pas connue : USERHOST d'abord, sans rien afficher de la réponse.
+    h.input(st, "/dns Bob");
+    assert_eq!(h.sends(), vec!["USERHOST Bob"]);
+    h.feed(":irc.test.net 302 Guiwald :Bob=+bob@bob.example.org");
+    assert_eq!(h.last(st), "* Dns resolving bob.example.org");
+    let id = h.effects().iter().find_map(|e| match e {
+        Effect::Resolve { id, .. } => Some(*id),
+        _ => None,
+    });
+    h.c.on_resolved(id.unwrap(), Err(&alpirc_core::NetError::NoAddress { host: "bob.example.org".into() }), h.now);
+    assert_eq!(h.last(st), "* Dns unable to resolve bob.example.org");
+    // Une adresse IP : pas de recherche inverse.
+    h.input(st, "/dns 192.0.2.7");
+    assert!(h.last(st).contains("192.0.2.7") && h.last(st).contains("not available"));
+}
+
+#[test]
+fn debug_window_shows_both_directions() {
+    let mut h = H::new();
+    h.up();
+    let st = h.status;
+    h.input(st, "/debug @raw");
+    assert_eq!(h.last(st), "* Debug output to @raw");
+    let raw = h.win("@raw");
+    h.input(st, "/msg Bob coucou");
+    h.pull();
+    h.feed(":Bob!b@h PRIVMSG Guiwald :salut");
+    let l = h.lines(raw);
+    assert!(l.iter().any(|x| x.ends_with("-> PRIVMSG Bob :coucou")), "{l:?}");
+    assert!(l.iter().any(|x| x.ends_with("<- :Bob!b@h PRIVMSG Guiwald :salut")), "{l:?}");
+    h.input(st, "/debug off");
+    assert_eq!(h.last(st), "* Debug output is off");
+    h.feed(":Bob!b@h PRIVMSG Guiwald :encore");
+    assert_eq!(h.lines(raw).len(), l.len());
 }

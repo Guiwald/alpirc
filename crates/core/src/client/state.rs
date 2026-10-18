@@ -157,6 +157,10 @@ pub(crate) struct Conn {
     pub whois_win: Option<WinId>,
     /// Fiches whois (pseudo replié → fiche), pour User Central.
     pub whois: HashMap<String, super::whois::WhoisInfo>,
+    /// `/dns pseudo` en attente de l'adresse du pseudo (USERHOST) : (pseudo, fenêtre).
+    pub pending_dns: Vec<(String, WinId)>,
+    /// `/debug` : les lignes échangées avec le serveur vont dans cette fenêtre `@` ou ce fichier.
+    pub debug: Option<super::mirc_cmds::DebugTarget>,
     pub list_win: Option<WinId>,
     /// Réponse STS à appliquer : reconnexion chiffrée sur ce port.
     pub sts_upgrade: Option<u16>,
@@ -213,6 +217,8 @@ impl Conn {
             timed_unbans: Vec::new(),
             whois_win: None,
             whois: HashMap::new(),
+            pending_dns: Vec::new(),
+            debug: None,
             list_win: None,
             sts_upgrade: None,
             ready: false,
@@ -267,6 +273,9 @@ pub(crate) struct State {
     pub input: super::prompt::InputState,
     /// Sons des événements : dernier son joué de chacun (voir `sounds.rs`).
     pub sounds: super::sounds::SoundState,
+    /// Recherches `/dns` en cours : numéro → (fenêtre, nom cherché) ; numéro de la suivante.
+    pub dns: HashMap<u32, (WinId, String)>,
+    pub next_dns: u32,
 }
 
 impl State {
@@ -654,6 +663,11 @@ impl State {
             }
             for l in c.flood.drain(now, fl.enabled, fl.burst, fl.rate_ms) {
                 sends.push(Effect::Send { conn: c.id, line: l });
+            }
+        }
+        for e in &sends {
+            if let Effect::Send { conn, line } = e {
+                self.debug_line(*conn, false, line);
             }
         }
         self.effects.extend(sends);

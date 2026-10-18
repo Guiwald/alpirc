@@ -55,6 +55,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "ajinvite",
+        [
+            "/ajinvite [on|off] — join a channel when invited, on or off",
+            "/ajinvite [on|off] — rejoindre un canal quand on y est invité, oui ou non",
+            "/ajinvite [on|off] — entrar en un canal cuando te invitan, sí o no",
+            "/ajinvite [on|off] — bei Einladung einen Channel betreten, an oder aus",
+            "/ajinvite [on|off] — entrare in un canale quando si è invitati, sì o no",
+            "/ajinvite [on|off] — entrar en un canal quan us conviden, sí o no",
+            "/ajinvite [on|off] — dul isteach i gcainéal nuair a thugtar cuireadh, ar siúl nó múchta",
+        ],
+    ),
+    (
         "alias",
         [
             "/alias [-l] name commands — add an alias (without commands: remove it)",
@@ -100,6 +112,42 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/amsg text — messaggio in tutti i tuoi canali",
             "/amsg text — missatge en tots els vostres canals",
             "/amsg text — teachtaireacht ar do chainéil go léir",
+        ],
+    ),
+    (
+        "anick",
+        [
+            "/anick nick — set the alternate nickname",
+            "/anick pseudo — choisir le pseudo de secours",
+            "/anick nick — elegir el nick alternativo",
+            "/anick nick — den Ausweich-Nickname festlegen",
+            "/anick nick — scegliere il nick alternativo",
+            "/anick nick — triar el sobrenom alternatiu",
+            "/anick nick — an leasainm malartach a shocrú",
+        ],
+    ),
+    (
+        "aop",
+        [
+            "/aop [-lrw] <on|off|nick|address> [#channels] [type] [network] — auto-op list: add (-r remove, -l list, -w any network)",
+            "/aop [-lrw] <on|off|pseudo|adresse> [#canaux] [type] [réseau] — liste d'auto-op : ajouter (-r retirer, -l montrer, -w tous les réseaux)",
+            "/aop [-lrw] <on|off|nick|address> [#channels] [type] [network] — lista de auto-op: añadir (-r quitar, -l mostrar, -w todas las redes)",
+            "/aop [-lrw] <on|off|nick|address> [#channels] [type] [network] — Auto-Op-Liste: hinzufügen (-r entfernen, -l zeigen, -w alle Netzwerke)",
+            "/aop [-lrw] <on|off|nick|address> [#channels] [type] [network] — lista auto-op: aggiungere (-r togliere, -l mostrare, -w tutte le reti)",
+            "/aop [-lrw] <on|off|nick|address> [#channels] [type] [network] — llista d'auto-op: afegir (-r llevar, -l mostrar, -w totes les xarxes)",
+            "/aop [-lrw] <on|off|nick|address> [#channels] [type] [network] — liosta uath-op: cuir leis (-r bain, -l taispeáin, -w gach líonra)",
+        ],
+    ),
+    (
+        "avoice",
+        [
+            "/avoice [-lrw] <on|off|nick|address> [#channels] [type] [network] — auto-voice list, like /aop",
+            "/avoice [-lrw] <on|off|pseudo|adresse> [#canaux] [type] [réseau] — liste d'auto-voice, comme /aop",
+            "/avoice [-lrw] <on|off|nick|address> [#channels] [type] [network] — lista de auto-voz, como /aop",
+            "/avoice [-lrw] <on|off|nick|address> [#channels] [type] [network] — Auto-Voice-Liste, wie /aop",
+            "/avoice [-lrw] <on|off|nick|address> [#channels] [type] [network] — lista auto-voice, come /aop",
+            "/avoice [-lrw] <on|off|nick|address> [#channels] [type] [network] — llista d'auto-veu, com /aop",
+            "/avoice [-lrw] <on|off|nick|address> [#channels] [type] [network] — liosta uath-ghutha, cosúil le /aop",
         ],
     ),
     (
@@ -199,6 +247,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "clipboard",
+        [
+            "/clipboard [-an] text — copy text to the clipboard (-a append, -n new line)",
+            "/clipboard [-an] texte — copier un texte dans le presse-papiers (-a à la suite, -n retour à la ligne)",
+            "/clipboard [-an] text — copiar un texto al portapapeles (-a añadir, -n salto de línea)",
+            "/clipboard [-an] text — Text in die Zwischenablage kopieren (-a anhängen, -n Zeilenumbruch)",
+            "/clipboard [-an] text — copiare un testo negli appunti (-a in coda, -n a capo)",
+            "/clipboard [-an] text — copiar un text al porta-retalls (-a a continuació, -n salt de línia)",
+            "/clipboard [-an] text — téacs a chóipeáil chuig an ngearrthaisce (-a ag an deireadh, -n líne nua)",
+        ],
+    ),
+    (
         "close",
         [
             "/close [-m|-c|-@] [names] — close windows (queries, chats, custom)",
@@ -232,6 +292,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/colors — apri la finestra dei colori",
             "/colors — obrir el quadre de colors",
             "/colors — oscail bosca na ndathanna",
+        ],
+    ),
+    (
+        "creq",
+        [
+            "/creq [ask|auto|ignore] — what to do with DCC chat requests",
+            "/creq [ask|auto|ignore] — que faire des demandes de discussion DCC",
+            "/creq [ask|auto|ignore] — qué hacer con las peticiones de chat DCC",
+            "/creq [ask|auto|ignore] — was mit DCC-Chat-Anfragen geschieht",
+            "/creq [ask|auto|ignore] — cosa fare delle richieste di chat DCC",
+            "/creq [ask|auto|ignore] — què fer amb les peticions de xat DCC",
+            "/creq [ask|auto|ignore] — cad a dhéanamh le hiarratais chomhrá DCC",
         ],
     ),
     (
@@ -372,15 +444,27 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "debug",
+        [
+            "/debug [-c] [on|off|@window|file] — show the lines exchanged with the server (passwords hidden)",
+            "/debug [-c] [on|off|@fenêtre|fichier] — voir les lignes échangées avec le serveur (mots de passe cachés)",
+            "/debug [-c] [on|off|@window|file] — ver las líneas intercambiadas con el servidor (contraseñas ocultas)",
+            "/debug [-c] [on|off|@window|file] — die mit dem Server ausgetauschten Zeilen zeigen (Passwörter verborgen)",
+            "/debug [-c] [on|off|@window|file] — vedere le righe scambiate con il server (password nascoste)",
+            "/debug [-c] [on|off|@window|file] — veure les línies intercanviades amb el servidor (contrasenyes amagades)",
+            "/debug [-c] [on|off|@window|file] — na línte a mhalartaítear leis an bhfreastalaí a fheiceáil (pasfhocail i bhfolach)",
+        ],
+    ),
+    (
         "dns",
         [
-            "/dns — not supported by AlpIRC",
-            "/dns — non pris en charge par AlpIRC",
-            "/dns — no admitido por AlpIRC",
-            "/dns — von AlpIRC nicht unterstützt",
-            "/dns — non supportato da AlpIRC",
-            "/dns — no admés per AlpIRC",
-            "/dns — ní thacaíonn AlpIRC leis",
+            "/dns host|nick — find the IP address of a host or of someone",
+            "/dns hôte|pseudo — trouver l'adresse IP d'un hôte ou de quelqu'un",
+            "/dns host|nick — encontrar la dirección IP de un host o de alguien",
+            "/dns host|nick — die IP-Adresse eines Hosts oder einer Person finden",
+            "/dns host|nick — trovare l'indirizzo IP di un host o di qualcuno",
+            "/dns host|nick — trobar l'adreça IP d'un host o d'algú",
+            "/dns host|nick — seoladh IP óstaigh nó duine a aimsiú",
         ],
     ),
     (
@@ -453,6 +537,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/font — opzioni di aspetto (carattere)",
             "/font — opcions d'aparença (lletra)",
             "/font — roghanna taispeána (cló)",
+        ],
+    ),
+    (
+        "fullname",
+        [
+            "/fullname name — set your full name (next connection)",
+            "/fullname nom — choisir votre nom complet (prochaine connexion)",
+            "/fullname name — elegir tu nombre completo (próxima conexión)",
+            "/fullname name — Ihren vollständigen Namen festlegen (nächste Verbindung)",
+            "/fullname name — scegliere il tuo nome completo (prossima connessione)",
+            "/fullname name — triar el vostre nom complet (pròxima connexió)",
+            "/fullname name — d'ainm iomlán a shocrú (an chéad cheangal eile)",
         ],
     ),
     (
@@ -720,6 +816,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "mnick",
+        [
+            "/mnick nick — set the main nickname without changing the current one",
+            "/mnick pseudo — choisir le pseudo principal sans changer celui du moment",
+            "/mnick nick — elegir el nick principal sin cambiar el actual",
+            "/mnick nick — den Haupt-Nickname festlegen, ohne den aktuellen zu ändern",
+            "/mnick nick — scegliere il nick principale senza cambiare quello attuale",
+            "/mnick nick — triar el sobrenom principal sense canviar l'actual",
+            "/mnick nick — an príomhleasainm a shocrú gan an ceann reatha a athrú",
+        ],
+    ),
+    (
         "mode",
         [
             "/mode [#channel|nick] modes [parameters] — change modes",
@@ -888,6 +996,42 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "protect",
+        [
+            "/protect [-lrw] <on|off|nick|address> [#channels] [type] [network] — protect list, like /aop",
+            "/protect [-lrw] <on|off|pseudo|adresse> [#canaux] [type] [réseau] — liste de protection, comme /aop",
+            "/protect [-lrw] <on|off|nick|address> [#channels] [type] [network] — lista de protección, como /aop",
+            "/protect [-lrw] <on|off|nick|address> [#channels] [type] [network] — Schutzliste, wie /aop",
+            "/protect [-lrw] <on|off|nick|address> [#channels] [type] [network] — lista di protezione, come /aop",
+            "/protect [-lrw] <on|off|nick|address> [#channels] [type] [network] — llista de protecció, com /aop",
+            "/protect [-lrw] <on|off|nick|address> [#channels] [type] [network] — liosta cosanta, cosúil le /aop",
+        ],
+    ),
+    (
+        "qme",
+        [
+            "/qme action — action in every private window",
+            "/qme action — action dans toutes les fenêtres privées",
+            "/qme action — acción en todas las ventanas privadas",
+            "/qme action — Aktion in allen privaten Fenstern",
+            "/qme action — azione in tutte le finestre private",
+            "/qme action — acció en totes les finestres privades",
+            "/qme action — gníomh i ngach fuinneog phríobháideach",
+        ],
+    ),
+    (
+        "qmsg",
+        [
+            "/qmsg message — message in every private window",
+            "/qmsg message — message dans toutes les fenêtres privées",
+            "/qmsg message — mensaje en todas las ventanas privadas",
+            "/qmsg message — Nachricht in allen privaten Fenstern",
+            "/qmsg message — messaggio in tutte le finestre private",
+            "/qmsg message — missatge en totes les finestres privades",
+            "/qmsg message — teachtaireacht i ngach fuinneog phríobháideach",
+        ],
+    ),
+    (
         "query",
         [
             "/query nick [text] — open a query window",
@@ -948,6 +1092,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "remote",
+        [
+            "/remote [on|off] — turn scripts on or off",
+            "/remote [on|off] — activer ou désactiver les scripts",
+            "/remote [on|off] — activar o desactivar los scripts",
+            "/remote [on|off] — Scripts ein- oder ausschalten",
+            "/remote [on|off] — attivare o disattivare gli script",
+            "/remote [on|off] — activar o desactivar els scripts",
+            "/remote [on|off] — scripteanna a chur ar siúl nó a mhúchadh",
+        ],
+    ),
+    (
         "rline",
         [
             "/rline [-l] [colour] @window N text — replace a line of a custom window",
@@ -969,6 +1125,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/run — disattivato in AlpIRC",
             "/run — desactivat en AlpIRC",
             "/run — díchumasaithe in AlpIRC",
+        ],
+    ),
+    (
+        "savebuf",
+        [
+            "/savebuf [-as] [lines] window file — save a window's text to a file of the scripts folder",
+            "/savebuf [-as] [lignes] fenêtre fichier — enregistrer le texte d'une fenêtre dans un fichier du dossier des scripts",
+            "/savebuf [-as] [lines] window file — guardar el texto de una ventana en un archivo de la carpeta de scripts",
+            "/savebuf [-as] [lines] window file — den Text eines Fensters in eine Datei des Script-Ordners speichern",
+            "/savebuf [-as] [lines] window file — salvare il testo di una finestra in un file della cartella degli script",
+            "/savebuf [-as] [lines] window file — guardar el text d'una finestra en un fitxer de la carpeta dels scripts",
+            "/savebuf [-as] [lines] window file — téacs fuinneoige a shábháil i gcomhad i bhfillteán na scripteanna",
         ],
     ),
     (
@@ -1075,6 +1243,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "sreq",
+        [
+            "/sreq [ask|auto|ignore] — what to do with DCC file offers",
+            "/sreq [ask|auto|ignore] — que faire des envois de fichiers DCC",
+            "/sreq [ask|auto|ignore] — qué hacer con los envíos de archivos DCC",
+            "/sreq [ask|auto|ignore] — was mit DCC-Dateiangeboten geschieht",
+            "/sreq [ask|auto|ignore] — cosa fare degli invii di file DCC",
+            "/sreq [ask|auto|ignore] — què fer amb els enviaments de fitxers DCC",
+            "/sreq [ask|auto|ignore] — cad a dhéanamh le comhaid DCC a thairgtear",
+        ],
+    ),
+    (
         "stats",
         [
             "/stats letter [server] — server statistics",
@@ -1084,6 +1264,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/stats letter [server] — statistiche del server",
             "/stats letter [server] — estadístiques del servidor",
             "/stats letter [server] — staitisticí an fhreastalaí",
+        ],
+    ),
+    (
+        "switchbar",
+        [
+            "/switchbar <on|off> — show or hide the switchbar",
+            "/switchbar <on|off> — montrer ou cacher la switchbar",
+            "/switchbar <on|off> — mostrar u ocultar la switchbar",
+            "/switchbar <on|off> — die Switchbar ein- oder ausblenden",
+            "/switchbar <on|off> — mostrare o nascondere la switchbar",
+            "/switchbar <on|off> — mostrar o amagar la switchbar",
+            "/switchbar <on|off> — an switchbar a thaispeáint nó a fholú",
         ],
     ),
     (
@@ -1135,6 +1327,30 @@ pub const HELP: &[(&str, [&str; 7])] = &[
         ],
     ),
     (
+        "tnick",
+        [
+            "/tnick nick — change nickname for this connection only",
+            "/tnick pseudo — changer de pseudo pour cette connexion seulement",
+            "/tnick nick — cambiar de nick solo para esta conexión",
+            "/tnick nick — Nickname nur für diese Verbindung ändern",
+            "/tnick nick — cambiare nick solo per questa connessione",
+            "/tnick nick — canviar de sobrenom només per a esta connexió",
+            "/tnick nick — leasainm a athrú don cheangal seo amháin",
+        ],
+    ),
+    (
+        "toolbar",
+        [
+            "/toolbar <on|off> — show or hide the toolbar",
+            "/toolbar <on|off> — montrer ou cacher la barre d'outils",
+            "/toolbar <on|off> — mostrar u ocultar la barra de herramientas",
+            "/toolbar <on|off> — die Symbolleiste ein- oder ausblenden",
+            "/toolbar <on|off> — mostrare o nascondere la barra degli strumenti",
+            "/toolbar <on|off> — mostrar o amagar la barra d'eines",
+            "/toolbar <on|off> — an barra uirlisí a thaispeáint nó a fholú",
+        ],
+    ),
+    (
         "topic",
         [
             "/topic [#channel] [text] — show or change the topic",
@@ -1144,6 +1360,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/topic [#channel] [text] — mostra o cambia il topic",
             "/topic [#channel] [text] — veure o canviar el tema",
             "/topic [#channel] [text] — taispeáin nó athraigh an t-ábhar",
+        ],
+    ),
+    (
+        "treebar",
+        [
+            "/treebar <on|off> — show or hide the treebar",
+            "/treebar <on|off> — montrer ou cacher la treebar",
+            "/treebar <on|off> — mostrar u ocultar la treebar",
+            "/treebar <on|off> — die Treebar ein- oder ausblenden",
+            "/treebar <on|off> — mostrare o nascondere la treebar",
+            "/treebar <on|off> — mostrar o amagar la treebar",
+            "/treebar <on|off> — an treebar a thaispeáint nó a fholú",
         ],
     ),
     (

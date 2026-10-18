@@ -63,20 +63,23 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | Commande | Rôle dans mIRC | État |
 |---|---|---|
 | `/uwho` | boîte User Central (ici : fiche whois + carnet d'adresses) | **fait (0.11.0)** (faisait un `/whois`) |
-| `/anick`, `/mnick`, `/tnick` | pseudo de secours ; pseudo principal sans changer l'actuel ; pseudo temporaire | absent → lot « commandes » |
-| `/fullname`, `/emailaddr` | nom complet ; adresse e-mail (l'identifiant en vient) | absent → lot « commandes » (`/fullname`) ; `/emailaddr` : AlpIRC a un identifiant, pas d'e-mail |
-| `/ajinvite` | rejoindre sur invitation, on/off | absent → lot « commandes » |
-| `/aop`, `/avoice`, `/protect` | listes d'auto-op, d'auto-voice, de protection | absent (la liste Control existe, pas les commandes) → lot « commandes » |
-| `/creq`, `/sreq`, `/pdcc` | réponse aux demandes de DCC CHAT, de DCC SEND ; DCC passif | absent (réglages présents dans Options › DCC) → lot « commandes » |
-| `/toolbar`, `/switchbar`, `/treebar` | montrer ou cacher les barres | absent (menu Affichage présent) → lot « commandes » |
-| `/qmsg`, `/qme` | message ou action dans tous les privés | absent → lot « commandes » |
-| `/savebuf` | enregistrer le texte d'une fenêtre dans un fichier | absent → lot « commandes » |
-| `/findtext` | rechercher dans la fenêtre | absent (`/find` d'AlpIRC) → lot « commandes » |
-| `/dns` | adresse IP d'un hôte ou d'un pseudo | **différent** : répondait « non pris en charge » → lot « commandes » |
-| `/debug` | journal des lignes échangées avec le serveur | absent → lot « commandes » |
-| `/remote`, `/ctcps`, `/events`, `/ebeeps` | interrupteurs (scripts, CTCP des scripts, événements, sons) | absent → à voir (petits) |
+| `/anick`, `/mnick`, `/tnick` | pseudo de secours ; pseudo principal sans changer l'actuel ; pseudo temporaire | **fait (0.13.0)** |
+| `/fullname`, `/emailaddr` | nom complet ; adresse e-mail (l'identifiant en vient) | `/fullname` : **fait (0.13.0)** ; `/emailaddr` : absent (AlpIRC a un identifiant, pas d'e-mail) |
+| `/ajinvite` | rejoindre sur invitation, on/off | **fait (0.13.0)** |
+| `/aop`, `/avoice`, `/protect` | listes d'auto-op, d'auto-voice, de protection (`on`/`off`, `-l`, `-r`, `-w`, type de masque) | **fait (0.13.0)**, avec les cases « Listes actives » de l'onglet Control |
+| `/creq`, `/sreq` | réponse aux demandes de DCC CHAT, de DCC SEND | **fait (0.13.0)** |
+| `/pdcc` | envoyer les blocs DCC sans attendre les accusés de réception | sans objet : AlpIRC le fait toujours |
+| `/toolbar`, `/switchbar`, `/treebar` | montrer ou cacher les barres | **fait (0.13.0)** |
+| `/qmsg`, `/qme` | message ou action dans tous les privés | **fait (0.13.0)** |
+| `/savebuf` | enregistrer le texte d'une fenêtre dans un fichier | **fait (0.13.0)** (dans le dossier des scripts, comme `/write`) |
+| `/findtext` | rechercher dans la fenêtre | différent : `/find` ouvre la boîte de recherche |
+| `/dns` | adresse IP d'un hôte ou d'un pseudo ; nom d'une adresse IP | **fait (0.13.0)** pour l'hôte et le pseudo (répondait « non pris en charge ») ; le nom d'une adresse IP reste impossible (pas de résolution inverse sans bibliothèque C) |
+| `/debug` | journal des lignes échangées avec le serveur | **fait (0.13.0)** : fenêtre `@` ou fichier du dossier des journaux ; les mots de passe sont masqués |
+| `/remote` | scripts on/off | **fait (0.13.0)** |
+| `/ctcps`, `/events`, `/ebeeps` | interrupteurs (CTCP des scripts, événements, sons) | absent, peu utiles |
 | `/flood`, `/strip`, `/color`, `/cnick` | réglages en ligne de commande | absent ; `/cnick` dépend des couleurs de pseudos du carnet (voir plus bas) |
-| `/clipboard`, `/editbox` | presse-papiers ; texte de la ligne de saisie (scripts) | absent → à voir |
+| `/clipboard` | copier dans le presse-papiers | **fait (0.13.0)** |
+| `/editbox` | texte de la ligne de saisie (scripts) | absent |
 | `/play` | lire un fichier texte dans un canal, ligne à ligne | absent → question 4 |
 | `/dqwindow`, `/fsend`, `/localinfo`, `/titlebar`, `/updatenl`, `/groups`, `/ulist` | fenêtre de messages unique ; envoi DCC rapide ; adresse locale ; titre ; liste des pseudos ; groupes et utilisateurs des scripts | absent, peu utile |
 | fichiers binaires (`/bread`…), fichiers ouverts (`/fopen`…), images (`/draw…`), `/filter`, `/loadbuf`, `/speak`, `/vol`… | scripts avancés | absent : hors ADR 0007 pour la 1.0 (question 5) |
@@ -100,7 +103,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | Other › Lock | | hors périmètre (le bac à sable des scripts remplace le verrou) |
 | DCC (demandes, dossier, ports, passif, délais) | Options › DCC | présent |
 | DCC › Folders (un dossier par type de fichier) | un seul dossier | absent, peu utile |
-| DCC › Ignore (types de fichiers refusés : `*.exe *.com *.bat *.dll *.ini *.mrc *.vbs *.js *.pif *.scr *.lnk *.pl *.shs *.htm *.html`) | rien | absent → lot « fenêtres et DCC » |
+| DCC › Ignore (types de fichiers refusés : `*.exe *.com *.bat *.dll *.ini *.mrc *.vbs *.js *.pif *.scr *.lnk *.pl *.shs *.htm *.html`) | une liste fixe de types à risque, toujours demandés même en acceptation automatique | différent (suffit) |
 | DCC › Server, Fserve | | hors périmètre |
 
 ## Carnet d'adresses
@@ -137,7 +140,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | DCC CHAT, SEND/GET, reprise, passif | | | présent |
 | Boîtes d'envoi et de discussion, fenêtre des transferts | | | présent |
 | Demande d'accord à la réception, choix si le fichier existe | | | présent |
-| Types de fichiers ignorés (`/dcc ignore`) | | `/dcc ignore` refuse une offre, pas de liste | absent → lot « fenêtres et DCC » |
+| Types de fichiers ignorés (`/dcc ignore`) | | `/dcc ignore` refuse une offre ; types à risque toujours demandés | différent (suffit) |
 | DCC Server, Fserve | | | hors périmètre |
 
 ## Fenêtres
@@ -156,6 +159,9 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
   Android, menus par défaut qui suivent la langue.
 - **0.12.0** : menu Commandes, Control avec Ignorer / Ne plus ignorer, CTCP dans le menu d'un privé, dossier des
   canaux ouvert à la connexion, notification du service qui compte les réseaux.
+- **0.13.0** : `/anick`, `/mnick`, `/tnick`, `/fullname`, `/ajinvite`, `/aop`, `/avoice`, `/protect` (et les cases
+  « Listes actives »), `/creq`, `/sreq`, `/remote`, `/toolbar`, `/switchbar`, `/treebar`, `/qmsg`, `/qme`,
+  `/clipboard`, `/savebuf`, `/dns`, `/debug`.
 
 ## Questions pour Guillaume
 

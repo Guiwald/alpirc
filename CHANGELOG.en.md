@@ -7,6 +7,21 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-19
+
+> Rollout: nothing to do, install over 0.12.0 (settings are kept).
+
+### Added
+- Missing mIRC commands: `/anick` (alternate nickname), `/mnick` (main nickname, without changing the current
+  one), `/tnick` (nickname for this time), `/fullname` (full name), `/ajinvite on|off`, `/creq` and `/sreq` (what
+  to do with DCC requests), `/remote on|off`, `/toolbar`, `/switchbar` and `/treebar on|off`, `/qmsg` and `/qme`
+  (in every private window), `/clipboard`, `/savebuf` (a window's text into a file of the scripts folder).
+- Commands: `/aop`, `/avoice` and `/protect`, as in mIRC (add, `-r` remove, `-l` list, `-w` any network, mask type,
+  `on`/`off`); the Address Book has "Active lists" boxes in the Control tab.
+- Commands: `/dns host` or `/dns nick` gives the IP address (it used to answer "not supported").
+- Commands: `/debug @window` (or a file of the logs folder) shows the lines exchanged with the server, passwords
+  hidden; `/debug off` stops it.
+
 ## [0.12.0] - 2026-10-19
 
 > Rollout: nothing to do, install over 0.11.0 (settings are kept). On the Mac and Linux, the Channels Folder now

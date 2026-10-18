@@ -218,7 +218,7 @@ async fn tcp_connect(host: &str, port: u16, bind: Option<IpAddr>, deadline: Inst
 
 /// Échec de la résolution : passager (pas de réseau, serveur DNS injoignable) ou nom inconnu. Le texte du
 /// système est gardé pour les journaux.
-fn dns_failure(host: &str, e: &io::Error) -> NetError {
+pub(crate) fn dns_failure(host: &str, e: &io::Error) -> NetError {
     let detail = e.to_string();
     // getaddrinfo (EAI_AGAIN) : « Temporary failure in name resolution » sous Linux et Android, « temporary
     // failure in name resolution » sous macOS.

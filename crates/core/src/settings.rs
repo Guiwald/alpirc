@@ -1124,7 +1124,7 @@ impl PersonEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AddressBook {
     /// Les personnes (onglet « Infos »).
@@ -1132,9 +1132,45 @@ pub struct AddressBook {
     pub notify: Vec<NotifyEntry>,
     pub ignore: Vec<IgnoreEntry>,
     pub control: Vec<ControlEntry>,
+    /// Interrupteurs des listes Control (`/aop on|off`, `/avoice`, `/protect`), comme dans mIRC.
+    pub autoop_on: bool,
+    pub autovoice_on: bool,
+    pub protect_on: bool,
+}
+
+impl Default for AddressBook {
+    fn default() -> AddressBook {
+        AddressBook {
+            people: Vec::new(),
+            notify: Vec::new(),
+            ignore: Vec::new(),
+            control: Vec::new(),
+            autoop_on: true,
+            autovoice_on: true,
+            protect_on: true,
+        }
+    }
 }
 
 impl AddressBook {
+    /// La liste Control d'une sorte est-elle active ?
+    pub fn control_on(&self, kind: ControlKind) -> bool {
+        match kind {
+            ControlKind::Autoop => self.autoop_on,
+            ControlKind::Autovoice => self.autovoice_on,
+            ControlKind::Protect => self.protect_on,
+        }
+    }
+
+    /// Allume ou éteint la liste Control d'une sorte.
+    pub fn set_control_on(&mut self, kind: ControlKind, on: bool) {
+        match kind {
+            ControlKind::Autoop => self.autoop_on = on,
+            ControlKind::Autovoice => self.autovoice_on = on,
+            ControlKind::Protect => self.protect_on = on,
+        }
+    }
+
     /// La fiche d'une personne, par son pseudo (sans tenir compte de la casse).
     pub fn person(&self, nick: &str) -> Option<&PersonEntry> {
         self.people.iter().find(|p| p.nick.eq_ignore_ascii_case(nick))

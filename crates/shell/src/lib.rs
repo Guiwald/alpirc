@@ -385,6 +385,7 @@ impl Shell {
                 self.client.on_connect_failed(conn, &error, cert_sha256.as_deref(), now)
             }
             NetEvent::Accepted { .. } | NetEvent::ListenerClosed { .. } => {}
+            NetEvent::Resolved { id, result, .. } => self.client.on_resolved(id, result.as_ref().map(Vec::clone), now),
             ev @ (NetEvent::DccConnected { .. } | NetEvent::DccLine { .. } | NetEvent::DccProgress { .. } | NetEvent::DccEnded { .. }) => {
                 self.dcc_net(ev, now)
             }
@@ -485,6 +486,11 @@ impl Shell {
                 self.activate(w, now);
             }
             Effect::OpenDialog(d) => self.open_ui_dialog(d, p),
+            Effect::Resolve { id, host } => self.net.resolve(id, host),
+            Effect::Clipboard { text, append } => {
+                let text = if append { format!("{}{text}", p.clipboard_get().unwrap_or_default()) } else { text };
+                p.clipboard_set(&text);
+            }
             Effect::Exit => self.exit_now(p),
             Effect::ScriptDialogsChanged => self.sync_script_dialogs(p),
             e @ (Effect::DccListen { .. }

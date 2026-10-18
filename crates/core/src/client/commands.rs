@@ -16,14 +16,15 @@ use crate::settings::{IgnoreEntry, NotifyEntry, Server};
 
 /// Noms des commandes intégrées (complétion Tab).
 pub const BUILTINS: &[&str] = &[
-    "abook", "about", "action", "admin", "aline", "ame", "amsg", "away", "back", "ban", "beep", "channel", "clear",
-    "clearall", "cline", "close", "closemsg", "colors", "ctcp", "ctcpreply", "cycle", "dcc", "dehalfop", "deop",
-    "describe", "devoice", "disconnect", "dline", "dns", "echo", "exit", "flash", "folder", "font", "halfop", "help",
-    "hop", "ial", "ignore", "iline", "info", "invite", "join", "kick", "lag", "linesep", "links", "list", "log",
-    "lusers", "me", "mode", "motd", "msg", "names", "nick", "notice", "notify", "omsg", "onotice", "op", "options",
-    "part", "partall", "ping", "query", "quit", "quote", "raw", "rline", "run", "say", "scripts", "server", "setname",
-    "sline", "sound", "splay", "stats", "time", "timestamp", "topic", "url", "uwho", "version", "voice", "who",
-    "whois", "whowas", "window",
+    "abook", "about", "action", "admin", "ajinvite", "aline", "ame", "amsg", "anick", "aop", "avoice", "away", "back",
+    "ban", "beep", "channel", "clear", "clearall", "clipboard", "cline", "close", "closemsg", "colors", "creq", "ctcp",
+    "ctcpreply", "cycle", "dcc", "debug", "dehalfop", "deop", "describe", "devoice", "disconnect", "dline", "dns", "echo",
+    "exit", "flash", "folder", "font", "fullname", "halfop", "help", "hop", "ial", "ignore", "iline", "info", "invite",
+    "join", "kick", "lag", "linesep", "links", "list", "log", "lusers", "me", "mnick", "mode", "motd", "msg", "names",
+    "nick", "notice", "notify", "omsg", "onotice", "op", "options", "part", "partall", "ping", "protect", "qme",
+    "qmsg", "query", "quit", "quote", "raw", "remote", "rline", "run", "say", "savebuf", "scripts", "server",
+    "setname", "sline", "sound", "splay", "sreq", "stats", "switchbar", "time", "timestamp", "tnick", "toolbar",
+    "topic", "treebar", "url", "uwho", "version", "voice", "who", "whois", "whowas", "window",
 ];
 
 /// `PRIVMSG cible :texte` : le texte toujours en dernier paramètre, comme le font les clients IRC.
@@ -85,11 +86,11 @@ impl State {
         (conn, win)
     }
 
-    fn insufficient(&self, cmd: &str) -> String {
+    pub(crate) fn insufficient(&self, cmd: &str) -> String {
         self.t(Key::InsufficientParams, &[("cmd", cmd)])
     }
 
-    fn need_conn(&self, conn: Option<ConnId>) -> Result<ConnId, String> {
+    pub(crate) fn need_conn(&self, conn: Option<ConnId>) -> Result<ConnId, String> {
         match conn.and_then(|c| self.conns.get(&c)) {
             Some(c) if c.connected() => Ok(c.id),
             _ => Err(self.t(Key::NotConnected, &[])),
@@ -435,7 +436,8 @@ impl State {
                     None => self.send_msg(c, Message::new("JOIN", [chan])),
                 }
             }
-            "nick" => {
+            // `/tnick` (mIRC) : changement de pseudo pour cette fois, comme `/nick` dans AlpIRC.
+            "nick" | "tnick" => {
                 let (nick, _) = split_word(args);
                 if nick.is_empty() {
                     return Err(self.insufficient(&name));
@@ -713,7 +715,8 @@ impl State {
                 }
             }
             "run" => return Err(self.t(Key::RunDisabled, &[])),
-            "dns" => return Err(self.t(Key::DnsUnsupported, &[])),
+            "dns" => self.cmd_dns(conn, win, args, quiet)?,
+            "debug" => self.cmd_debug(conn, win, args, quiet)?,
             "dcc" => self.cmd_dcc(conn, win, args)?,
             "log" => {
                 let (onoff, rest) = split_word(args);
@@ -782,6 +785,9 @@ impl State {
             }
             "flush" => {}
             _ => {
+                if let Some(r) = self.mirc_command(&name, conn, win, args, quiet) {
+                    return r;
+                }
                 // Commande inconnue : envoyée au serveur telle quelle, comme dans mIRC.
                 let line = if args.is_empty() { name.to_ascii_uppercase() } else { format!("{} {args}", name.to_ascii_uppercase()) };
                 self.raw_to_server(conn, &line).map_err(|_| self.t(Key::UnknownCommand, &[("cmd", &name)]))?;

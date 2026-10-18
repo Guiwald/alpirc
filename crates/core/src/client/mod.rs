@@ -20,6 +20,7 @@ mod help;
 mod host;
 mod irc;
 pub mod logging;
+mod mirc_cmds;
 pub mod prompt;
 mod sounds;
 mod state;
@@ -123,6 +124,10 @@ pub enum Effect {
     OpenDialog(UiDialog),
     /// Quitter l'application (`/exit`).
     Exit,
+    /// Copier un texte dans le presse-papiers (`/clipboard`), à la suite de ce qui s'y trouve si `append`.
+    Clipboard { text: String, append: bool },
+    /// Chercher les adresses d'un nom (`/dns`) ; l'hôte répond par [`Client::on_resolved`].
+    Resolve { id: u32, host: String },
     /// Les dialogues des scripts ont changé : l'interface les redessine.
     ScriptDialogsChanged,
     /// DCC : écouter pour `id` (port pris dans `ports`, `(0, 0)` : choisi par le système), puis ouvrir le flux
@@ -278,6 +283,8 @@ impl Client {
             auto_away: Vec::new(),
             input: Default::default(),
             sounds: Default::default(),
+            dns: Default::default(),
+            next_dns: 1,
         };
         let mut c = Client { st, engine };
         c.st.system_locale = locale.map(str::to_string);
@@ -580,6 +587,7 @@ impl Client {
         }
         c.last_rx = now_ms;
         let text = c.encoding.decode(bytes).into_owned();
+        self.st.debug_line(conn, true, text.trim_end_matches(['\r', '\n']));
         let Ok(msg) = Message::parse(&text) else { return };
         let mut halted = false;
         if self.st.settings.scripts.enabled {
@@ -873,6 +881,13 @@ impl Client {
     /// Session IRC d'une connexion (lecture de l'état du protocole).
     pub fn session(&self, conn: ConnId) -> Option<&crate::session::Session> {
         self.st.conns.get(&conn).map(|c| &c.session)
+    }
+
+    /// Réponse à [`Effect::Resolve`] (`/dns`) : les adresses trouvées, ou l'échec.
+    pub fn on_resolved(&mut self, id: u32, result: Result<Vec<std::net::IpAddr>, &NetError>, now_ms: i64) {
+        self.st.now = now_ms;
+        self.st.dns_answer(id, result.map(|v| v.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ")));
+        self.finish();
     }
 
     /// Fiche whois d'un pseudo sur une connexion (User Central), si une recherche a eu lieu.

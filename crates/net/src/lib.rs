@@ -150,6 +150,8 @@ pub enum NetEvent {
     /// DCC : fin, toujours exactement une par identifiant : `error` vaut `None` pour un transfert complet ou
     /// une discussion terminée normalement ; `bytes` : position finale.
     DccEnded { id: u32, bytes: u64, error: Option<NetError> },
+    /// Réponse à [`Net::resolve`] : les adresses de `host` (sans doublon, dans l'ordre du système).
+    Resolved { id: u32, host: String, result: Result<Vec<std::net::IpAddr>, NetError> },
 }
 
 impl NetEvent {
@@ -161,7 +163,7 @@ impl NetEvent {
             | NetEvent::Closed { conn, .. }
             | NetEvent::Failed { conn, .. }
             | NetEvent::Accepted { conn, .. } => Some(*conn),
-            NetEvent::ListenerClosed { .. } => None,
+            NetEvent::ListenerClosed { .. } | NetEvent::Resolved { .. } => None,
             // Les identifiants DCC sont à part (voir `Net::dcc_listen`).
             NetEvent::DccConnected { .. } | NetEvent::DccLine { .. } | NetEvent::DccProgress { .. } | NetEvent::DccEnded { .. } => None,
         }
@@ -381,6 +383,29 @@ impl Net {
         let task = inner.handle.spawn(conn::client_task(inner.clone(), handles, target, previous));
         entry.task = Some(task);
         conns.insert(conn, entry);
+    }
+
+    /// Cherche les adresses d'un nom (`/dns`), sans bloquer : la réponse arrive par [`NetEvent::Resolved`].
+    pub fn resolve(&self, id: u32, host: String) {
+        let inner = self.inner.clone();
+        if inner.stopping.load(Ordering::Acquire) {
+            return;
+        }
+        self.inner.handle.spawn(async move {
+            let result = match tokio::net::lookup_host((host.as_str(), 0)).await {
+                Ok(addrs) => {
+                    let mut v: Vec<std::net::IpAddr> = Vec::new();
+                    for a in addrs {
+                        if !v.contains(&a.ip()) {
+                            v.push(a.ip());
+                        }
+                    }
+                    if v.is_empty() { Err(NetError::NoAddress { host: host.clone() }) } else { Ok(v) }
+                }
+                Err(e) => Err(conn::dns_failure(&host, &e)),
+            };
+            (inner.notify)(NetEvent::Resolved { id, host, result });
+        });
     }
 
     /// Met une ligne en file (Net ajoute CRLF). Les lignes partent dans l'ordre ; pendant la tentative de

@@ -7,6 +7,22 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.13.0] - 2026-10-19
+
+> Mise en service : rien à faire, installer par-dessus la 0.12.0 (réglages conservés).
+
+### Ajouté
+- Commandes de mIRC qui manquaient : `/anick` (pseudo de secours), `/mnick` (pseudo principal, sans changer celui
+  du moment), `/tnick` (pseudo pour cette fois), `/fullname` (nom complet), `/ajinvite on|off`, `/creq` et `/sreq`
+  (que faire des demandes de DCC), `/remote on|off`, `/toolbar`, `/switchbar` et `/treebar on|off`, `/qmsg` et
+  `/qme` (dans tous les privés), `/clipboard`, `/savebuf` (le texte d'une fenêtre dans un fichier du dossier des
+  scripts).
+- Commandes : `/aop`, `/avoice` et `/protect`, comme dans mIRC (ajouter, `-r` retirer, `-l` montrer, `-w` tous les
+  réseaux, type de masque, `on`/`off`) ; le carnet d'adresses a les cases « Listes actives » dans l'onglet Control.
+- Commandes : `/dns hôte` ou `/dns pseudo` donne l'adresse IP (il répondait « non pris en charge »).
+- Commandes : `/debug @fenêtre` (ou un fichier du dossier des journaux) montre les lignes échangées avec le serveur,
+  mots de passe masqués ; `/debug off` l'arrête.
+
 ## [0.12.0] - 2026-10-19
 
 > Mise en service : rien à faire, installer par-dessus la 0.11.0 (réglages conservés). Sur Mac et Linux, le dossier
