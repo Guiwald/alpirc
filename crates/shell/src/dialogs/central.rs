@@ -65,6 +65,8 @@ pub struct ChannelCentral {
     dirty_topic: bool,
     dirty_modes: bool,
     op: bool,
+    /// Décalage horaire de l'appareil (secondes), pour les dates des listes.
+    utc_offset: i32,
 }
 
 /// Modes d'un canal tels que le moteur les connaît.
@@ -77,13 +79,10 @@ fn modes_of(cs: Option<&ChannelState>) -> Modes {
     Modes { flags, key: cs.has_mode('k').then(|| cs.key().unwrap_or("").to_string()), limit: cs.has_mode('l').then(|| cs.limit().unwrap_or(0)) }
 }
 
-/// Date d'une entrée de liste.
-fn date(secs: Option<i64>) -> String {
+/// Date d'une entrée de liste, à l'heure de l'appareil (`offset` en secondes).
+fn date(secs: Option<i64>, offset: i32) -> String {
     match secs {
-        Some(s) => {
-            let ms = s * 1000;
-            alpirc_core::timeutil::format_time(ms, alpirc_core::timeutil::local_offset(ms), "dd/mm/yyyy HH:nn")
-        }
+        Some(s) => alpirc_core::timeutil::format_time(s * 1000, offset, "dd/mm/yyyy HH:nn"),
         None => String::new(),
     }
 }
@@ -110,6 +109,7 @@ impl ChannelCentral {
             dirty_topic: false,
             dirty_modes: false,
             op: false,
+            utc_offset: 0,
         };
         c.read_state(client);
         Some(c)
@@ -153,7 +153,7 @@ impl ChannelCentral {
             .filter(|e| !removed(&e.mask))
             .map(|e| {
                 let by = e.setter.as_deref().map(|s| s.split('!').next().unwrap_or(s).to_string()).unwrap_or_default();
-                row(&[e.mask.clone(), by, date(e.time)])
+                row(&[e.mask.clone(), by, date(e.time, self.utc_offset)])
             })
             .collect();
         for (_, _, m) in st.pending.iter().filter(|(l, add, _)| *l == k && *add) {
@@ -196,7 +196,10 @@ impl ChannelCentral {
         view.set_text(TOPIC, &self.topic0);
         let cs = client.channel_state(self.win);
         let by = match (cs.and_then(|c| c.topic_setter.clone()), cs.and_then(|c| c.topic_time)) {
-            (Some(s), Some(tm)) => tf(lang, "cc.set_by", &[("nick", s.split('!').next().unwrap_or(&s)), ("date", &date(Some(tm)))]),
+            (Some(s), Some(tm)) => {
+                let date = date(Some(tm), self.utc_offset);
+                tf(lang, "cc.set_by", &[("nick", s.split('!').next().unwrap_or(&s)), ("date", &date)])
+            }
             (Some(s), None) => tf(lang, "cc.set_by", &[("nick", s.split('!').next().unwrap_or(&s)), ("date", "")]),
             _ => String::new(),
         };
@@ -230,13 +233,18 @@ impl ChannelCentral {
         Modes { flags, key, limit }
     }
 
-    /// Les commandes à envoyer pour passer de l'état montré à l'ouverture à celui de la boîte.
-    fn commands(&self, view: &DialogView) -> Vec<String> {
+    /// Les commandes intégrées (nom, arguments) à lancer pour passer de l'état montré à l'ouverture à celui de la
+    /// boîte. Elles passent par [`alpirc_core::Client::builtin`] : le sujet part tel quel (`|`, `{`, `}`, `$`).
+    fn commands(&self, view: &DialogView) -> Vec<(String, String)> {
         let mut out = Vec::new();
         let chan = &self.chan;
         let topic = text_of(view, TOPIC);
         if topic != self.topic0 && view.enabled(TOPIC) {
-            out.push(if topic.trim().is_empty() { format!("/raw TOPIC {chan} :") } else { format!("/topic {chan} {}", protect_args(&topic)) });
+            out.push(if topic.trim().is_empty() {
+                ("raw".to_string(), format!("TOPIC {chan} :"))
+            } else {
+                ("topic".to_string(), format!("{chan} {topic}"))
+            });
         }
         if !self.op {
             return out;
@@ -296,14 +304,15 @@ impl ChannelCentral {
                 }
             }
             let tail = if params.is_empty() { String::new() } else { format!(" {}", params.join(" ")) };
-            out.push(format!("/mode {chan} {s}{tail}"));
+            out.push(("mode".to_string(), format!("{chan} {s}{tail}")));
         }
         out
     }
 
     fn apply(&mut self, view: &mut DialogView, cx: &mut Cx) {
-        for c in self.commands(view) {
-            cx.actions.push(Action::Command(self.win, c));
+        for (name, args) in self.commands(view) {
+            // Une erreur s'affiche dans la fenêtre du canal, comme pour une commande tapée.
+            let _ = cx.client.builtin(self.win, &name, &args, cx.now);
         }
         // Ce qui est envoyé devient l'état de référence ; le serveur confirmera.
         self.topic0 = text_of(view, TOPIC);
@@ -393,6 +402,7 @@ impl DialogCtl for ChannelCentral {
 
     fn init(&mut self, view: &mut DialogView, cx: &mut Cx) {
         let lang = cx.lang;
+        self.utc_offset = cx.utc_offset;
         for (_, list, ..) in LISTS {
             view.set_columns(list, &[(t(lang, "cc.col.mask"), 200), (t(lang, "cc.col.by"), 90), (t(lang, "cc.col.date"), 116)]);
         }
@@ -482,6 +492,7 @@ impl DialogCtl for ChannelCentral {
 
     fn refresh(&mut self, view: &mut DialogView, cx: &mut Cx) {
         let lang = cx.lang;
+        self.utc_offset = cx.utc_offset;
         let lists = self.server_lists(cx.client);
         let v = self.st.borrow().version;
         if lists != self.lists || v != self.seen {
@@ -568,9 +579,10 @@ mod tests {
         k.refresh(&mut d, &mut v);
         assert_eq!(v.items(41).len(), 1);
         let cmds = d.commands(&v);
-        assert_eq!(cmds[0], "/topic #dlg-test Nouveau sujet");
-        assert_eq!(cmds[1], "/mode #dlg-test -t+m-k+kl sesame ouvre 42");
-        assert_eq!(cmds[2], "/mode #dlg-test -b+b *!*@spam.example *!*@troll.example");
+        let c = |n: &str, a: &str| (n.to_string(), a.to_string());
+        assert_eq!(cmds[0], c("topic", "#dlg-test Nouveau sujet"));
+        assert_eq!(cmds[1], c("mode", "#dlg-test -t+m-k+kl sesame ouvre 42"));
+        assert_eq!(cmds[2], c("mode", "#dlg-test -b+b *!*@spam.example *!*@troll.example"));
         let (o, a) = k.send(&mut d, &mut v, DialogMsg::Ok(OK));
         assert_eq!(o, Outcome::Close);
         k.run(a);
@@ -589,7 +601,7 @@ mod tests {
         let (_, a) = k.send(&mut d, &mut v, DialogMsg::Ok(OK));
         k.run(a);
         let sent = k.sent();
-        assert!(sent.iter().any(|l| l == "TOPIC #dlg-test :Lyon |\u{a0}Grenoble {\u{a0}$me }"), "{sent:?}");
+        assert!(sent.iter().any(|l| l == "TOPIC #dlg-test :Lyon | Grenoble { $me }"), "{sent:?}");
     }
 
     #[test]
@@ -604,5 +616,12 @@ mod tests {
         // Pas un canal : pas de boîte.
         let st = k.client.windows()[0].id;
         assert!(ChannelCentral::new(&k.client, st).is_none());
+    }
+
+    #[test]
+    fn dates_use_the_device_offset() {
+        // 1er janvier 2026, 12:00 UTC, affiché à l'heure de Paris (UTC+1 en hiver).
+        assert_eq!(date(Some(1_767_268_800), 3600), "01/01/2026 13:00");
+        assert_eq!(date(None, 3600), "");
     }
 }

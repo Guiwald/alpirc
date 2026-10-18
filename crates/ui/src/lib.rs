@@ -101,12 +101,15 @@ pub struct Res {
     pub fonts: Fonts,
     pub theme: Theme,
     pub icons: Icons,
+    /// Hauteur minimale des lignes des listes (listes simples, listes à colonnes, arbres), en pixels logiques :
+    /// 0 sur ordinateur ; plus haut sur un téléphone, pour des zones tactiles plus grandes.
+    pub min_row_h: i32,
 }
 
 impl Res {
     /// Ressources avec le thème classique et les icônes de secours dessinées par programme.
     pub fn new(fonts: Fonts) -> Res {
-        Res { fonts, theme: Theme::classic(), icons: Icons::with_fallbacks() }
+        Res { fonts, theme: Theme::classic(), icons: Icons::with_fallbacks(), min_row_h: 0 }
     }
 
     /// Hauteur d'une ligne de texte de l'interface.

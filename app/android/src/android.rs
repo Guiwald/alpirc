@@ -219,6 +219,14 @@ impl Host for AndroidHost {
         call_void("vibrate", "(I)V", &[JValue::Int(ms)]);
     }
 
+    fn play_sound(&mut self, path: &Path) {
+        call_with_strings("playSound", "(Ljava/lang/String;)V", &[], &[], &[&path.to_string_lossy()]);
+    }
+
+    fn beep_tone(&mut self) {
+        call_void("beep", "()V", &[]);
+    }
+
     fn open_url(&mut self, url: &str) {
         call_with_strings("openUrl", "(Ljava/lang/String;)V", &[], &[], &[url]);
     }
@@ -270,8 +278,8 @@ impl Host for AndroidHost {
         call_with_strings("setInputText", "(Ljava/lang/String;)V", &[], &[], &[text]);
     }
 
-    fn set_input_labels(&mut self, send: &str, tab: &str) {
-        call_with_strings("setInputLabels", "(Ljava/lang/String;Ljava/lang/String;)V", &[], &[], &[send, tab]);
+    fn set_input_labels(&mut self, send: &str, tab: &str, history: &str) {
+        call_with_strings("setInputLabels", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &[], &[], &[send, tab, history]);
     }
 
     fn show_keyboard(&mut self, show: bool) {
@@ -281,9 +289,9 @@ impl Host for AndroidHost {
     fn service(&mut self, s: &ServiceState) {
         call_with_strings(
             "service",
-            "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+            "(IZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
             &[s.active as i32],
-            &[],
+            &[s.note],
             &[&s.title, &s.text, &s.quit, &s.channel, &s.notify_channel],
         );
     }

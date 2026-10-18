@@ -9,9 +9,13 @@
 pub mod assets;
 pub mod dcc;
 pub mod dialogs;
+mod keys;
 mod layout;
 pub mod menus;
 mod mobile;
+mod notify;
+#[cfg(test)]
+mod shell_tests;
 pub mod tr;
 pub mod views;
 
@@ -95,6 +99,8 @@ enum PopupSrc {
     Script { kind: alpirc_script::PopupKind, win: WinId, selected: Vec<String>, tree: Vec<alpirc_script::MenuItem> },
     /// Menu d'une fenêtre (switchbar, icône de la fenêtre).
     Window(WinId),
+    /// Menu d'un pseudo de la fenêtre Notify (voir `notify.rs`).
+    Notify { win: WinId, nick: String },
 }
 
 /// Ids des entrées du menu d'une fenêtre (switchbar, icône).
@@ -144,6 +150,12 @@ pub struct Shell {
     pending_joins: Vec<(alpirc_core::ConnId, Vec<String>)>,
     /// DCC : adresses locales, fichiers demandés à la plateforme (voir `dcc.rs`).
     pub(crate) dcc: dcc::DccShell,
+    /// État d'absence de la connexion active montré par le menu et la barre d'outils.
+    away_seen: bool,
+    /// Derniers choix de la boîte « Liste des canaux ».
+    list_query: dialogs::chanlist::ListQuery,
+    /// La plateforme a donné la taille de la zone de dessin.
+    viewport_known: bool,
 }
 
 /// Paramètres de démarrage.
@@ -162,8 +174,12 @@ impl Shell {
     /// Crée l'application. `net` est créé par la plateforme, dont la fonction de rappel ramène chaque
     /// [`NetEvent`] dans [`Shell::on_net`] (dans le fil de l'interface).
     pub fn new(cfg: ShellConfig, net: Net) -> Shell {
+        // Sons fournis dans `<données>/sounds` (ceux qui manquent : jamais d'écrasement), avant que les réglages et
+        // `/splay` s'y réfèrent.
+        assets::install_sounds(&cfg.data_dir);
         let settings = Settings::load(&cfg.settings_path);
-        let mut client = Client::new(settings, cfg.data_dir.clone(), cfg.now_ms);
+        // La langue du système dès la création : les scripts par défaut du premier démarrage sont dans cette langue.
+        let mut client = Client::new_localized(settings, cfg.data_dir.clone(), cfg.now_ms, cfg.locale.as_deref());
         client.set_utc_offset(Some(cfg.utc_offset));
         if let Some(l) = &cfg.locale {
             client.set_system_locale(l);
@@ -201,6 +217,9 @@ impl Shell {
             pending_joins: Vec::new(),
             commands_tree: Vec::new(),
             dcc: Default::default(),
+            away_seen: false,
+            list_query: Default::default(),
+            viewport_known: false,
         };
         shell.apply_settings();
         shell.build_toolbar();
@@ -214,6 +233,10 @@ impl Shell {
         self.client.set_downloads_dir(p.downloads_dir());
         self.client.run_pending_scripts(now);
         self.client.connect_startup(now);
+        // Premier lancement (aucun réglage enregistré) : pseudo, langue, puis Undernet ou le choix du serveur.
+        if !self.settings_path.exists() {
+            self.open_dialog(Box::new(dialogs::welcome::Welcome::new(&self.client)), p);
+        }
         self.after(p);
     }
 
@@ -223,6 +246,13 @@ impl Shell {
 
     /// Change la taille de la zone de dessin (pixels logiques).
     pub fn set_viewport(&mut self, size: Size) {
+        // Boîtes ouvertes avant que la taille soit connue (premier lancement) : recentrées une fois.
+        if !self.viewport_known {
+            self.viewport_known = true;
+            for (_, d) in &mut self.modals.dialogs {
+                d.center_in(Rect::new(0, 0, size.w, size.h));
+            }
+        }
         self.viewport = size;
     }
 
@@ -247,19 +277,27 @@ impl Shell {
         if name != self.theme_name {
             self.theme_name = name.clone();
         }
-        self.res.theme = Theme::named(&name).unwrap_or_else(Theme::classic);
-        // Palette et couleurs des réglages (boîte Couleurs) : toujours en classique ; avec le thème sombre,
-        // seulement si elles ont été changées (sinon la palette inversée du thème sombre).
-        let custom = s.display.palette != alpirc_core::settings::MIRC_PALETTE || s.display.colors != alpirc_core::settings::EventColors::default();
-        if name != "dark" || custom {
-            let (c, th) = (&s.display.colors, &mut self.res.theme);
-            th.palette = s.display.palette;
-            (th.chat_bg, th.chat_fg) = (c.background, c.normal);
-            (th.nicklist_bg, th.nicklist_fg) = (c.listbox_bg, c.listbox_text);
-            (th.editbox_bg, th.editbox_fg) = (c.editbox_bg, c.editbox_text);
-        }
-        let zoom = (s.display.chat_font_size / 16).clamp(1, 4);
-        self.res.fonts.set_chat_zoom(zoom);
+        // Allure des fenêtres et des boîtes : le thème fourni choisi, ou la base d'un thème de l'utilisateur ; couleurs
+        // des discussions : celles des réglages (voir `DisplayOptions::effective_colors`).
+        let d = &s.display;
+        self.res.theme = Theme::named(d.theme_base()).unwrap_or_else(Theme::classic);
+        let (palette, c) = d.effective_colors();
+        let th = &mut self.res.theme;
+        th.palette = palette;
+        (th.chat_bg, th.chat_fg) = (c.background, c.normal);
+        (th.nicklist_bg, th.nicklist_fg) = (c.listbox_bg, c.listbox_text);
+        (th.editbox_bg, th.editbox_fg) = (c.editbox_bg, c.editbox_text);
+        // Police des discussions (Options › Affichage), celle de l'aperçu de la boîte Options, et la liste des
+        // polices proposées (intégrées, puis celles du système à chasse fixe).
+        let fonts = &self.res.fonts;
+        let chat = dialogs::options::chat_font_spec(fonts, &d.chat_font, d.chat_font_size);
+        fonts.set_spec_if_changed(alpirc_ui::FontKind::Chat, chat.clone());
+        let preview = match &d.font_preview {
+            Some((f, z)) => dialogs::options::chat_font_spec(fonts, f, *z),
+            None => chat,
+        };
+        fonts.set_spec_if_changed(alpirc_ui::FontKind::Preview, preview);
+        dialogs::options::set_font_choices(fonts);
         self.treebar.width = self.treebar.width.max(120);
         self.menubar_dirty = true;
     }
@@ -271,6 +309,7 @@ impl Shell {
         self.toolbar = Toolbar::new(vec![
             b(ids::CONNECT, "toolbar/connect", "tb.connect"),
             b(ids::DISCONNECT, "toolbar/disconnect", "tb.disconnect"),
+            ToolItem::toggle(ids::AWAY, icon(res, "toolbar/away"), &t(lang, "tb.away"), self.away_seen),
             ToolItem::separator(),
             b(ids::OPTIONS, "toolbar/options", "tb.options"),
             b(ids::FAV_FOLDER, "toolbar/favorites", "tb.favorites"),
@@ -362,6 +401,7 @@ impl Shell {
             }
         }
         self.flush_pending_joins();
+        self.sync_away();
         self.refresh_dialogs(p);
         self.sync_windows();
         self.update_title(p);
@@ -436,6 +476,19 @@ impl Shell {
             | Effect::DccPrompt(_)
             | Effect::DccPickFile { .. }
             | Effect::DccWindow(_)) => self.dcc_effect(e, p),
+            Effect::ConfirmScriptLoad { name, path } => {
+                self.open_dialog(Box::new(dialogs::editor::ConfirmScript { path, name }), p)
+            }
+            Effect::AskInput(q) => self.open_dialog(Box::new(dialogs::input::InputDialog::new(q)), p),
+            Effect::WindowState { win, state } => {
+                self.sync_windows();
+                let r = match state {
+                    alpirc_core::WinState::Minimize => self.mdi.minimize(win as u64),
+                    alpirc_core::WinState::Maximize => self.mdi.maximize(win as u64),
+                    alpirc_core::WinState::Restore => self.mdi.restore(win as u64),
+                };
+                self.mdi_responses(r, p);
+            }
         }
         self.menubar_dirty = true;
     }
@@ -616,8 +669,10 @@ impl Shell {
             switchbar: d.switchbar != "off",
             treebar: d.treebar,
             nicklist: d.nicklist,
-            dark: self.res.theme.name == "dark",
+            // Le nom du réglage (`dark`, `sombre`), pas celui du thème affiché (« Sombre »).
+            dark: matches!(d.theme.to_lowercase().as_str(), "dark" | "sombre"),
             connected: self.client.conns().iter().any(|c| self.client.conn_info(*c).is_some_and(|i| i.state != ConnState::Disconnected)),
+            away: self.active_away(),
             native: self.native_menus,
         }
     }
@@ -646,7 +701,6 @@ impl Shell {
     pub fn menu_action(&mut self, id: u32, p: &mut dyn ShellPlatform) {
         let now = p.now_ms();
         let active = self.client.active();
-        let lang = self.language();
         let status_of_active = active.and_then(|a| self.client.window(a)).and_then(|w| w.conn).and_then(|c| self.client.conn_info(c)).map(|c| c.status_window);
         match id {
             ids::NEW_STATUS => {
@@ -740,11 +794,7 @@ impl Shell {
             ids::ABOOK => self.open_ui_dialog(UiDialog::AddressBook, p),
             ids::COLORS => self.open_ui_dialog(UiDialog::Colors, p),
             ids::SCRIPTS => self.open_ui_dialog(UiDialog::ScriptEditor, p),
-            ids::CHANLIST => {
-                if let Some(w) = active {
-                    self.client.command(w, "/list", now);
-                }
-            }
+            ids::CHANLIST => self.open_dialog(Box::new(dialogs::chanlist::ListDialog::new(self.list_query.clone())), p),
             ids::URLS => {
                 if let Some(w) = active {
                     self.client.command(w, "/url", now);
@@ -756,21 +806,21 @@ impl Shell {
                 }
             }
             ids::DCC_SEND | ids::DCC_CHAT | ids::TRANSFERS => self.dcc_menu(id, p),
-            ids::LOGS => {
-                let mb = dialogs::coming_soon(lang, &t(lang, "tools.logs"));
-                self.open_dialog(Box::new(mb), p);
-            }
+            ids::AWAY => self.toggle_away(now),
+            ids::LOGS => self.open_dialog(Box::new(dialogs::logs::LogFiles::new(&self.client)), p),
             ids::CASCADE => {
                 let s = self.layout().mdi.size();
                 self.mdi.cascade(s);
             }
+            // Comme Windows (MDITILE_HORIZONTAL) et mIRC : horizontale = fenêtres empilées, larges ;
+            // verticale = côte à côte.
             ids::TILE_H => {
                 let s = self.layout().mdi.size();
-                self.mdi.tile_vertical(s);
+                self.mdi.tile_horizontal(s);
             }
             ids::TILE_V => {
                 let s = self.layout().mdi.size();
-                self.mdi.tile_horizontal(s);
+                self.mdi.tile_vertical(s);
             }
             ids::ARRANGE => {
                 let s = self.layout().mdi.size();
@@ -806,19 +856,81 @@ impl Shell {
         self.after(p);
     }
 
+    /// Connexion de la fenêtre active, sinon la première connectée.
+    fn active_conn(&self) -> Option<alpirc_core::ConnId> {
+        let active = self.client.active().and_then(|w| self.client.window(w)).and_then(|w| w.conn);
+        active.or_else(|| {
+            let mut conns = self.client.conns();
+            conns.sort_unstable();
+            conns.into_iter().find(|c| self.client.conn_info(*c).is_some_and(|i| i.state == ConnState::Connected))
+        })
+    }
+
+    /// La connexion active est marquée absente (réponse 306 du serveur).
+    fn active_away(&self) -> bool {
+        self.active_conn().and_then(|c| self.client.conn_info(c)).is_some_and(|i| i.away.is_some())
+    }
+
+    /// Absent ou de retour sur la connexion active : `/away <message par défaut>`, ou `/away` pour revenir.
+    fn toggle_away(&mut self, now: i64) {
+        let Some(ci) = self.active_conn().and_then(|c| self.client.conn_info(c)) else { return };
+        if ci.state != ConnState::Connected {
+            return;
+        }
+        // Dans la fenêtre active si elle est de cette connexion (la réponse du serveur s'y affiche), sinon Status.
+        let win = self.client.active().filter(|w| self.client.window(*w).is_some_and(|w| w.conn == Some(ci.id))).unwrap_or(ci.status_window);
+        let cmd = if ci.away.is_some() {
+            "/away".to_string()
+        } else {
+            let msg = self.client.settings().away.default_message.trim().to_string();
+            format!("/away {}", if msg.is_empty() { "Away" } else { &msg })
+        };
+        self.client.command(win, &cmd, now);
+    }
+
+    /// Coche « Absent » (menu) et enfonce le bouton de la barre d'outils selon l'état de la connexion active.
+    fn sync_away(&mut self) {
+        let away = self.active_away();
+        // Toujours : un clic sur le bouton l'a basculé avant la réponse du serveur.
+        self.toolbar.set_checked(ids::AWAY, away);
+        if away != self.away_seen {
+            self.away_seen = away;
+            self.menubar_dirty = true;
+        }
+    }
+
+    /// `/list` sur la connexion active avec les choix de la boîte « Liste des canaux », puis l'ordre de la liste.
+    fn list_channels(&mut self, q: dialogs::chanlist::ListQuery, now: i64) {
+        let Some(win) = self.client.active().or_else(|| dialogs::status_window(&self.client)) else { return };
+        let lw = self.client.list_channels(win, &q.pattern(), q.min, q.max, q.topics, now);
+        if let Some(lw) = lw {
+            self.sync_windows();
+            if let Some(v) = self.views.get_mut(&lw) {
+                // Colonnes : nom, personnes, sujet ; les plus peuplés d'abord.
+                v.list.sort = Some(if q.by_users { (1, false) } else { (0, true) });
+                // Vidée : la vue ne recopie la liste du moteur que si le nombre de canaux change, et la nouvelle
+                // liste peut en avoir autant que l'ancienne.
+                v.list.set_rows(Vec::new());
+            }
+        }
+        self.list_query = q;
+    }
+
     /// Rejoint un favori, sur une connexion à son réseau (ouverte au besoin).
     fn join_favorite(&mut self, f: &alpirc_core::settings::Favorite, now: i64) {
         let conn = self.client.conns().into_iter().find(|c| {
             self.client.conn_info(*c).is_some_and(|i| i.state != ConnState::Disconnected && (f.network.is_empty() || i.network.eq_ignore_ascii_case(&f.network)))
         });
-        let cmd = match &f.key {
-            Some(k) if !k.is_empty() => format!("/join {} {}", f.channel, k),
-            _ => format!("/join {}", f.channel),
+        let target = match &f.key {
+            Some(k) if !k.is_empty() => format!("{} {}", f.channel, k),
+            _ => f.channel.clone(),
         };
         match conn.and_then(|c| self.client.conn_info(c)) {
-            Some(ci) => self.client.command(ci.status_window, &cmd, now),
+            Some(ci) if ci.state == ConnState::Connected => self.client.command(ci.status_window, &format!("/join {target}"), now),
+            // Connexion en cours : le canal une fois enregistré (`/join` refuse avant).
+            Some(ci) => self.join_when_ready(ci.id, target),
             None if !f.network.is_empty() => {
-                // Pas encore connecté à ce réseau : nouvelle fenêtre, connexion, puis le canal en Perform implicite.
+                // Pas encore connecté à ce réseau : fenêtre Status libre (ou nouvelle), connexion, puis le canal.
                 let st = self
                     .client
                     .windows()
@@ -827,9 +939,23 @@ impl Shell {
                     .map(|w| w.id)
                     .unwrap_or_else(|| self.client.new_status(now));
                 self.client.connect(st, &f.network, None, now);
-                self.client.command(st, &cmd, now);
+                if let Some(conn) = self.client.window(st).and_then(|w| w.conn) {
+                    self.join_when_ready(conn, target);
+                }
             }
             None => {}
+        }
+    }
+
+    /// Canal (et clé) à rejoindre dès que la connexion est prête.
+    fn join_when_ready(&mut self, conn: alpirc_core::ConnId, chan: String) {
+        match self.pending_joins.iter_mut().find(|(c, _)| *c == conn) {
+            Some((_, v)) => {
+                if !v.contains(&chan) {
+                    v.push(chan);
+                }
+            }
+            None => self.pending_joins.push((conn, vec![chan])),
         }
     }
 
@@ -851,7 +977,7 @@ impl Shell {
         let spec = ctl.spec(lang);
         let mut view = DialogView::new(&spec, &self.res);
         let now = p.now_ms();
-        let mut cx = dialogs::Cx { client: &mut self.client, now, lang, actions: Vec::new() };
+        let mut cx = dialogs::Cx { client: &mut self.client, now, lang, utc_offset: self.utc_offset, actions: Vec::new() };
         ctl.init(&mut view, &mut cx);
         let actions = std::mem::take(&mut cx.actions);
         let key = self.next_key;
@@ -869,27 +995,7 @@ impl Shell {
 
     /// Une boîte de l'interface demandée par le moteur ou un menu.
     pub fn open_ui_dialog(&mut self, d: UiDialog, p: &mut dyn ShellPlatform) {
-        let lang = self.language();
-        let ctl: Box<dyn DialogCtl> = match d {
-            UiDialog::About => Box::new(dialogs::About),
-            UiDialog::Find(w) => Box::new(dialogs::FindDialog { win: w }),
-            other => match dialogs::build(other.clone(), &self.client) {
-                Some(c) => c,
-                None => {
-                    let what = match other {
-                        UiDialog::Options(_) => t(lang, "file.options"),
-                        UiDialog::AddressBook => t(lang, "tools.abook"),
-                        UiDialog::ChannelsFolder => t(lang, "fav.folder"),
-                        UiDialog::ChannelCentral(_) => "Channel Central".to_string(),
-                        UiDialog::ScriptEditor => t(lang, "tools.scripts"),
-                        UiDialog::Colors => t(lang, "tools.colors"),
-                        UiDialog::Connect => t(lang, "file.select_server"),
-                        _ => String::new(),
-                    };
-                    Box::new(dialogs::coming_soon(lang, &what))
-                }
-            },
-        };
+        let ctl = dialogs::build(d, &self.client);
         self.open_dialog(ctl, p);
     }
 
@@ -899,7 +1005,7 @@ impl Shell {
         let now = p.now_ms();
         let outcome = {
             let Some(view) = self.modals.get_mut(key) else { return };
-            let mut cx = dialogs::Cx { client: &mut self.client, now, lang, actions: Vec::new() };
+            let mut cx = dialogs::Cx { client: &mut self.client, now, lang, utc_offset: self.utc_offset, actions: Vec::new() };
             let o = ctl.on(msg, view, &mut cx);
             let actions = std::mem::take(&mut cx.actions);
             (o, actions)
@@ -932,6 +1038,8 @@ impl Shell {
                 Action::Exit => self.exit_now(p),
                 Action::JoinFavorite(f) => self.join_favorite(&f, now),
                 Action::PickFile { kind, save, suggested } => p.pick_file(dialogs::pick_request(&kind), save, suggested.as_deref()),
+                Action::OpenPath(path) => p.open_path(&path),
+                Action::ListChannels(q) => self.list_channels(q, now),
             }
         }
     }
@@ -952,7 +1060,7 @@ impl Shell {
                 }
             }
             if let Some(view) = self.modals.get_mut(key) {
-                let mut cx = dialogs::Cx { client: &mut self.client, now: 0, lang, actions: Vec::new() };
+                let mut cx = dialogs::Cx { client: &mut self.client, now: 0, lang, utc_offset: self.utc_offset, actions: Vec::new() };
                 ctl.refresh(view, &mut cx);
             }
         }
@@ -1166,6 +1274,7 @@ impl Shell {
                 };
                 self.mdi_responses(r, p);
             }
+            PopupSrc::Notify { win, nick } => self.notify_popup_run(id, win, &nick, p),
         }
         self.after(p);
     }

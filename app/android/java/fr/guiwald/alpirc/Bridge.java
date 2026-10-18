@@ -9,6 +9,10 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -79,9 +83,9 @@ public final class Bridge {
     }
 
     /** Libellés des boutons du champ natif (traduits par Rust). */
-    public static void setInputLabels(String send, String tab) {
+    public static void setInputLabels(String send, String tab, String history) {
         AlpircActivity a = activity;
-        if (a != null) a.runOnUiThread(() -> a.setInputLabels(send, tab));
+        if (a != null) a.runOnUiThread(() -> a.setInputLabels(send, tab, history));
     }
 
     /** Ouvre ou ferme le clavier pour un champ dessiné par Rust (boîtes de dialogue). */
@@ -127,6 +131,57 @@ public final class Bridge {
         } catch (Exception e) {
             post("log\tnotification : " + e);
         }
+    }
+
+    /** Sons en cours de lecture (au plus quelques-uns à la fois). */
+    static int playing;
+
+    /**
+     * Joue un fichier son (wav, mp3, ogg) une fois, au volume des notifications : muet en mode silencieux ou vibreur,
+     * comme les autres notifications du téléphone.
+     */
+    public static void playSound(String path) {
+        if (path == null) return;
+        main.post(() -> {
+            if (playing >= 4) return;
+            MediaPlayer mp = new MediaPlayer();
+            try {
+                mp.setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build());
+                mp.setDataSource(path);
+                playing++;
+                mp.setOnPreparedListener(MediaPlayer::start);
+                mp.setOnCompletionListener(m -> {
+                    playing--;
+                    m.release();
+                });
+                mp.setOnErrorListener((m, what, extra) -> {
+                    playing--;
+                    m.release();
+                    post("log\tson illisible : " + path + " (" + what + ")");
+                    return true;
+                });
+                mp.prepareAsync();
+            } catch (Exception e) {
+                mp.release();
+                post("log\tson : " + e);
+            }
+        });
+    }
+
+    /** Bip court du système (quand AlpIRC n'a pas de son de bip), au volume des notifications. */
+    public static void beep() {
+        main.post(() -> {
+            try {
+                ToneGenerator tg = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80);
+                tg.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
+                main.postDelayed(tg::release, 400);
+            } catch (Exception e) {
+                post("log\tbip : " + e);
+            }
+        });
     }
 
     /** Courte vibration (bip). */
@@ -187,12 +242,13 @@ public final class Bridge {
     }
 
     /**
-     * Service de connexion (notification permanente) : {@code active} connexions ouvertes, 0 pour l'arrêter.
-     * Les textes sont traduits par Rust.
+     * Service de connexion (notification permanente) : {@code active} connexions ouvertes, 0 pour l'arrêter ; avec
+     * {@code note}, l'arrêt laisse dans la notification le texte donné (déconnexion en arrière-plan). Les textes sont
+     * traduits par Rust.
      */
-    public static void service(int active, String title, String text, String quit, String channel, String notifyChannel) {
+    public static void service(int active, boolean note, String title, String text, String quit, String channel, String notifyChannel) {
         if (notifyChannel != null) notifyChannelDescription = notifyChannel;
-        ConnectionService.update(active, title, text, quit, channel);
+        ConnectionService.update(active, note, title, text, quit, channel);
     }
 
     /** L'appli passe derrière (bouton Retour hors des menus) : les connexions restent ouvertes. */

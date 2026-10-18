@@ -20,6 +20,37 @@ use crate::{UserEvent, keys, wall_ms};
 const CORE_TICK_MS: i64 = 250;
 /// Délai et distance du double-clic.
 const DOUBLE_CLICK_MS: u128 = 450;
+/// Défilement au pavé tactile (pixels logiques) : une ligne de discussion par tranche de cette hauteur.
+const TOUCHPAD_ROW_PX: f64 = 16.0;
+
+/// Défilement fin (pavé tactile du Mac, souris à défilement libre) : les petits déplacements s'additionnent jusqu'à
+/// faire des lignes entières. Les listes et la discussion arrondissent `dy × 3` en lignes : un événement de 2 ou 3
+/// pixels serait sinon perdu, et un défilement lent n'avancerait jamais.
+#[derive(Default)]
+struct WheelAcc {
+    x: f64,
+    y: f64,
+}
+
+impl WheelAcc {
+    /// Ajoute un déplacement en pixels logiques ; rend (dx, dy) au sens de `Input::Wheel` (un cran = 1, soit trois
+    /// lignes), en lignes entières, ou `None` s'il n'y a pas encore une ligne.
+    fn add(&mut self, px: f64, py: f64) -> Option<(f32, f32)> {
+        // Changement de sens : le reste de l'autre sens ne compte plus.
+        if px != 0.0 && px.signum() != self.x.signum() {
+            self.x = 0.0;
+        }
+        if py != 0.0 && py.signum() != self.y.signum() {
+            self.y = 0.0;
+        }
+        self.x += px / TOUCHPAD_ROW_PX;
+        self.y += py / TOUCHPAD_ROW_PX;
+        let (rx, ry) = (self.x.trunc(), self.y.trunc());
+        self.x -= rx;
+        self.y -= ry;
+        (rx != 0.0 || ry != 0.0).then(|| ((rx / 3.0) as f32, (ry / 3.0) as f32))
+    }
+}
 
 pub struct App {
     shell: Shell,
@@ -32,9 +63,11 @@ pub struct App {
     /// Position du pointeur (pixels logiques).
     pointer: Point,
     last_click: Option<(Instant, Point, MouseButton, u8)>,
+    wheel: WheelAcc,
     next_core_tick: i64,
     started: bool,
-    open_url: Option<String>,
+    /// Liens irc:// reçus avant le démarrage du shell (argument, Apple Event du lancement).
+    open_urls: Vec<String>,
     #[cfg(target_os = "macos")]
     menus: Option<crate::macmenu::NativeMenus>,
 }
@@ -43,16 +76,17 @@ impl App {
     pub fn new(shell: Shell, proxy: EventLoopProxy<UserEvent>, open_url: Option<String>) -> App {
         App {
             shell,
-            plat: DesktopPlatform::new(),
+            plat: DesktopPlatform::new(proxy.clone()),
             proxy,
             surface: None,
             canvas: None,
             mods: ModifiersState::default(),
             pointer: Point::new(0, 0),
             last_click: None,
+            wheel: WheelAcc::default(),
             next_core_tick: 0,
             started: false,
-            open_url,
+            open_urls: open_url.into_iter().collect(),
             #[cfg(target_os = "macos")]
             menus: None,
         }
@@ -111,6 +145,26 @@ impl App {
             let n = buf.len().min(canvas.pixels.len());
             buf[..n].copy_from_slice(&canvas.pixels[..n]);
             let _ = buf.present();
+        }
+    }
+
+    /// Ouvre un lien irc:// (connexion, canaux) et ramène la fenêtre devant.
+    fn open_url(&mut self, url: String) {
+        if !self.started {
+            self.open_urls.push(url);
+            return;
+        }
+        self.shell.open_irc_url(&url, &mut self.plat);
+        self.raise();
+    }
+
+    /// Fenêtre devant (au mieux : le gestionnaire de fenêtres peut se contenter de la signaler). Sous X11, montrer
+    /// la fenêtre (XMapWindow) la sort aussi de l'état réduit, même sans gestionnaire de fenêtres.
+    fn raise(&mut self) {
+        if let Some(w) = &self.plat.window {
+            w.set_minimized(false);
+            w.set_visible(true);
+            w.focus_window();
         }
     }
 
@@ -208,7 +262,7 @@ impl ApplicationHandler<UserEvent> for App {
         self.started = true;
         self.create_window(el);
         self.shell.start(&mut self.plat);
-        if let Some(url) = self.open_url.take() {
+        for url in std::mem::take(&mut self.open_urls) {
             self.shell.open_irc_url(&url, &mut self.plat);
         }
         self.after_events(el);
@@ -218,8 +272,18 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             UserEvent::Net(ev) => self.shell.on_net(ev, &mut self.plat),
             UserEvent::Menu => {}
+            UserEvent::OpenUrl(url) => self.open_url(url),
+            UserEvent::Raise => self.raise(),
         }
         self.after_events(el);
+    }
+
+    /// Fin de la boucle. Sur Mac, « Quitter » du Dock, la fermeture de session ou l'arrêt terminent l'appli sans
+    /// passer par le menu : on envoie quand même QUIT aux serveurs et on enregistre les réglages.
+    fn exiting(&mut self, _el: &ActiveEventLoop) {
+        if self.started && !self.plat.exit {
+            self.shell.exit_now(&mut self.plat);
+        }
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -266,21 +330,26 @@ impl ApplicationHandler<UserEvent> for App {
                     ElementState::Released => self.send(Input::MouseUp { pos, button: b, mods }),
                 }
             }
-            WindowEvent::MouseWheel { delta, .. } => {
-                let (dx, dy) = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => (x, y),
+            WindowEvent::MouseWheel { delta, phase, .. } => {
+                if phase == winit::event::TouchPhase::Started {
+                    self.wheel = WheelAcc::default();
+                }
+                let d = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => Some((x, y)),
                     MouseScrollDelta::PixelDelta(p) => {
                         let s = self.scale();
-                        ((p.x / s / 16.0) as f32, (p.y / s / 16.0) as f32)
+                        self.wheel.add(p.x / s, p.y / s)
                     }
                 };
-                let mods = keys::mods(self.mods);
-                self.send(Input::Wheel { pos: self.pointer, dx, dy, mods });
+                if let Some((dx, dy)) = d {
+                    let mods = keys::mods(self.mods);
+                    self.send(Input::Wheel { pos: self.pointer, dx, dy, mods });
+                }
             }
             WindowEvent::KeyboardInput { event, is_synthetic: false, .. } => {
                 if event.state == ElementState::Pressed {
                     let mods = keys::mods(self.mods);
-                    if let Some((key, text)) = keys::map(&event, mods) {
+                    if let Some((key, mods, text)) = keys::map(&event, mods) {
                         self.send(Input::Key { key, mods, text, repeat: event.repeat });
                     }
                 }
@@ -299,5 +368,34 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         self.after_events(el);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Lignes entières que la discussion tire d'un `dy` (comme `alpirc_ui::chat`).
+    fn rows(dy: f32) -> i32 {
+        (-dy * 3.0).round() as i32
+    }
+
+    #[test]
+    fn pave_tactile_lent() {
+        let mut w = WheelAcc::default();
+        // 2 px par événement : rien les 7 premières fois, puis une ligne à 16 px.
+        let got: Vec<i32> = (0..16).filter_map(|_| w.add(0.0, 2.0)).map(|(_, dy)| rows(dy)).collect();
+        assert_eq!(got, vec![-1, -1]);
+        // Rapide : plusieurs lignes d'un coup, le reste gardé pour la suite.
+        assert_eq!(w.add(0.0, -40.0).map(|(_, dy)| rows(dy)), Some(2));
+        assert_eq!(w.add(0.0, -8.0).map(|(_, dy)| rows(dy)), Some(1), "8 + 8 de reste");
+        // Changement de sens : le reste est oublié.
+        let mut w = WheelAcc::default();
+        assert!(w.add(0.0, 12.0).is_none());
+        assert!(w.add(0.0, -6.0).is_none());
+        assert!(w.add(0.0, -6.0).is_none());
+        assert_eq!(w.add(0.0, -6.0).map(|(_, dy)| rows(dy)), Some(1));
+        // Horizontal.
+        assert_eq!(w.add(-32.0, 0.0).map(|(dx, _)| rows(dx)), Some(2));
     }
 }

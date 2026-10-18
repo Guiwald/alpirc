@@ -358,6 +358,31 @@ impl Core {
             }
             self.now = now_ms();
             self.tick();
+            self.check_send_queues();
+        }
+    }
+
+    /// Coupe les appareils dont la file d'envoi dépasse la limite (`[clients] max_send_queue_kib`).
+    fn check_send_queues(&mut self) {
+        let limit = self.cfg.clients.max_send_queue_kib.saturating_mul(1024);
+        if limit == 0 {
+            return;
+        }
+        let late: Vec<(u32, usize)> = self
+            .downs
+            .values()
+            .filter(|d| !d.closing)
+            .map(|d| (d.id, self.net.pending_bytes(d.id)))
+            .filter(|(_, n)| *n > limit)
+            .collect();
+        for (id, n) in late {
+            let peer = self.downs.get(&id).map(|d| d.peer.to_string()).unwrap_or_default();
+            log::warn!(
+                "appareil {id} ({peer}) déconnecté : {} Kio en attente d'envoi (limite {} Kio)",
+                n / 1024,
+                limit / 1024
+            );
+            self.close_client(id, "Send queue exceeded (device too slow)");
         }
     }
 
@@ -687,9 +712,7 @@ impl Core {
                     if let Some(u) = self.users.get_mut(&key.user.to_ascii_lowercase()) {
                         u.store.set_nick(&key.net, new);
                     }
-                    let mut attrs = self.name_attr(key);
-                    attrs.push((s("nickname"), new.clone()));
-                    self.notify_network(&key.user, &key.net, Some(attrs));
+                    self.notify_network(&key.user, &key.net, Some(vec![(s("nickname"), new.clone())]));
                 }
             }
             SessionEvent::Error { message } => {
@@ -766,7 +789,6 @@ impl Core {
         if up.conn != Some(conn) {
             return;
         }
-        let chans: Vec<String> = up.session.channels().filter(|c| c.joined).map(|c| c.name.clone()).collect();
         let reason = error.or_else(|| up.close_reason.take()).unwrap_or_else(|| "Connection closed".into());
         up.conn = None;
         up.state = UpState::Disconnected;
@@ -792,16 +814,10 @@ impl Core {
             }
         }
         log::warn!("{}/{} : déconnecté ({reason})", key.user, up.net.name());
+        // Pas de PART : les appareils gardent leurs canaux (un PART fermerait les fenêtres d'AlpIRC) ; au retour,
+        // les JOIN et NAMES du réseau remettent tout à jour.
         let netname = up.net.name().to_string();
         for id in self.clients_of(key) {
-            let Some(d) = self.downs.get(&id) else { continue };
-            let me = d.nick.clone();
-            for c in &chans {
-                self.send_to(
-                    id,
-                    &Message::new("PART", [c.clone(), format!("Disconnected from {netname}")]).with_source(&me),
-                );
-            }
             let t = match delay {
                 Some(secs) => format!("Disconnected from {netname} ({reason}); reconnecting in {secs} s"),
                 None => format!("Disconnected from {netname} ({reason})"),
@@ -959,6 +975,12 @@ impl Core {
 
     fn client_line(&mut self, id: u32, bytes: &[u8]) {
         let now = self.now;
+        // Un appareil qui ne lit plus ne fait pas grossir sa file d'une réponse de plus.
+        let limit = self.cfg.clients.max_send_queue_kib.saturating_mul(1024);
+        if limit > 0 && self.net.pending_bytes(id) > limit {
+            self.check_send_queues();
+            return;
+        }
         let Some(d) = self.downs.get_mut(&id) else { return };
         if d.closing {
             return;
@@ -1888,10 +1910,6 @@ impl Core {
     // soju.im/bouncer-networks
     // -----------------------------------------------------------------------------------------------------------
 
-    fn name_attr(&self, key: &NetKey) -> Vec<(String, String)> {
-        self.ups.get(key).map(|u| vec![(s("name"), u.net.name().to_string())]).unwrap_or_default()
-    }
-
     /// Attributs complets d'un réseau (avec `state`, et `error` le cas échéant).
     fn network_attrs(&self, user: &str, netid: &str) -> Vec<(String, String)> {
         let Some(u) = self.users.get(&user.to_ascii_lowercase()) else { return Vec::new() };
@@ -1929,14 +1947,19 @@ impl Core {
         }
     }
 
-    /// Changement d'état d'un réseau (le nom est toujours joint : certains clients le prennent pour l'étiquette).
+    /// Changement d'état d'un réseau : seulement ce qui change (`state`, `error` posée à la coupure et retirée au
+    /// retour), comme le veut la spécification ; les clients fusionnent avec ce qu'ils savent déjà.
     fn notify_state(&self, key: &NetKey) {
         let Some(up) = self.ups.get(key) else { return };
-        let mut a = vec![(s("name"), up.net.name().to_string()), (s("state"), up.state.attr().to_string())];
-        if up.state == UpState::Disconnected
-            && let Some(e) = &up.error
-        {
-            a.push((s("error"), e.clone()));
+        let mut a = vec![(s("state"), up.state.attr().to_string())];
+        match up.state {
+            UpState::Disconnected => {
+                if let Some(e) = &up.error {
+                    a.push((s("error"), e.clone()));
+                }
+            }
+            UpState::Ready => a.push((s("error"), String::new())),
+            UpState::Connecting | UpState::Registering => {}
         }
         self.notify_network(&key.user, &key.net, Some(a));
     }
@@ -2057,9 +2080,7 @@ impl Core {
                                 self.up_send(&key, &Message::new("NICK", [n]));
                             }
                         }
-                        let mut a = self.name_attr(&key);
-                        a.extend(change.attributes.into_iter().filter(|(k, _)| k != "name"));
-                        self.notify_network(&name, &netid, Some(a));
+                        self.notify_network(&name, &netid, Some(change.attributes));
                         ok(self, "CHANGENETWORK", &netid);
                     }
                     Err(e) => self.bouncer_fail(id, "CHANGENETWORK", &netid, &e),

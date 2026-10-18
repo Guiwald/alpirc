@@ -42,10 +42,11 @@ const ENC: u32 = 210;
 const AUTO: u32 = 211;
 const BOUNCER: u32 = 212;
 
-const MECH: u32 = 302;
+pub(crate) const MECH: u32 = 302;
 const ACC: u32 = 304;
 const SPW: u32 = 306;
-const CERT: u32 = 308;
+pub(crate) const CERT: u32 = 308;
+pub(crate) const CERT_BROWSE: u32 = 309;
 const XU: u32 = 312;
 const XP: u32 = 314;
 const XHIDE: u32 = 315;
@@ -263,7 +264,8 @@ impl DialogCtl for NetworkEditor {
         c.push(l(field_label(305, lx, 114, 130, &tr("net.password"))));
         c.push(l(password(SPW, (fx, 114, 200, EDIT_H), "")));
         c.push(l(field_label(307, lx, 142, 130, &tr("net.sasl.cert"))));
-        c.push(l(edit(CERT, (fx, 142, x1 - 12 - fx, EDIT_H), "")));
+        c.push(l(edit(CERT, (fx, 142, x1 - 12 - fx - 102, EDIT_H), "")));
+        c.push(l(button(CERT_BROWSE, (x1 - 12 - 96, 141, 96, BTN_H), &tr("se.browse"))));
         c.push(l(group(310, (x0, 186, x1 - x0, 104), &tr("net.x"))));
         c.push(l(field_label(311, lx, 206, 130, &tr("net.x.user"))));
         c.push(l(edit(XU, (fx, 206, 110, EDIT_H), "")));
@@ -392,7 +394,18 @@ impl DialogCtl for NetworkEditor {
                 self.update_login(view);
                 Outcome::Keep
             }
+            DialogMsg::Clicked(CERT_BROWSE) => {
+                // Le fichier PEM (certificat et clé) : la réponse revient par `file_picked`.
+                cx.actions.push(Action::PickFile { kind: "network".into(), save: false, suggested: None });
+                Outcome::Keep
+            }
             _ => Outcome::Keep,
+        }
+    }
+
+    fn file_picked(&mut self, path: Option<PathBuf>, view: &mut DialogView, _cx: &mut Cx) {
+        if let Some(p) = path {
+            view.set_text(CERT, &p.display().to_string());
         }
     }
 }
@@ -410,6 +423,7 @@ impl NetworkEditor {
         view.set_enabled(ACC, mech == 1 || mech == 2);
         view.set_enabled(SPW, mech == 1 || mech == 2);
         view.set_enabled(CERT, mech == 3);
+        view.set_enabled(CERT_BROWSE, mech == 3);
     }
 }
 

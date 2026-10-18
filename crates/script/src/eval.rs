@@ -388,7 +388,10 @@ impl Engine {
             }
             b'?' => {
                 j += 1;
+                // `$?*` : mot de passe ; `$?!` : oui ou non.
+                let mut flags = "e";
                 if j < n && (b[j] == b'*' || b[j] == b'!') {
+                    flags = if b[j] == b'*' { "ep" } else { "y" };
                     j += 1;
                 }
                 let mut prompt = String::new();
@@ -399,7 +402,9 @@ impl Engine {
                     j = (e + 1).min(n);
                 }
                 let c = self.eff_ctx(ctx).into_owned();
-                let v = h.identifier(&c, "?", &[prompt], None).unwrap_or_default();
+                let req = crate::InputRequest { prompt, flags: flags.to_string(), ..Default::default() };
+                // Pas encore de réponse : arrêt silencieux, l'hôte relancera la commande.
+                let Some(v) = h.input(&c, &req) else { return Err(Abort::Halt) };
                 return done(v, j);
             }
             _ => {}
@@ -464,6 +469,13 @@ impl Engine {
             for a in raw {
                 args.push(self.eval_arg(h, ctx, a)?);
             }
+        }
+        // `$input(question, drapeaux, fenêtre, titre, texte)` : une question à l'utilisateur (voir `Host::input`).
+        if lname == "input" && parens {
+            let a = |i: usize| args.get(i).cloned().unwrap_or_default();
+            let req = crate::InputRequest { prompt: a(0), flags: a(1), title: a(3), default: a(4) };
+            let c = self.eff_ctx(ctx).into_owned();
+            return h.input(&c, &req).ok_or(Abort::Halt);
         }
         if let Some(v) = self.builtin_ident(h, ctx, &lname, &args, parens, prop)? {
             return Ok(v);

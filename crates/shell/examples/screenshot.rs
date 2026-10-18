@@ -66,6 +66,8 @@ fn main() {
         shell.settings_changed(&mut p);
     }
     shell.set_viewport(Size::new(1024, 700));
+    // Réglages enregistrés : pas de boîte du premier lancement sur la capture.
+    shell.settings_changed(&mut p);
     shell.start(&mut p);
     let status = shell.client.windows()[0].id;
     shell.client.connect(status, "Undernet", None, p.now);

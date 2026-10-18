@@ -19,6 +19,8 @@ struct App {
     client: Client,
     net: Net,
     rx: Receiver<NetEvent>,
+    /// Lignes envoyées, par connexion.
+    sent: std::collections::HashMap<ConnId, Vec<String>>,
 }
 
 impl App {
@@ -26,6 +28,8 @@ impl App {
         let mut s = Settings::default();
         s.identity.nick = "Gui".into();
         s.favorites.clear();
+        // Comme dans les essais d'alpirc-core : pas d'anti-flood côté client (le relais a le sien).
+        s.flood.enabled = false;
         let mut srv = Server::new(&env.addr.ip().to_string(), env.addr.port(), true);
         srv.verify = SVerify::Pinned;
         srv.fingerprint = Some(env.fp.clone());
@@ -33,14 +37,21 @@ impl App {
         let mut n = Network::new("Relais", vec![srv]);
         n.auto_connect = true;
         n.bouncer = true;
+        // Perform et Notify : pour les connexions liées seulement, pas pour la parente.
+        n.perform = vec!["/join #perf".into()];
         s.networks = vec![n];
+        s.address_book.notify.push(alpirc_core::settings::NotifyEntry {
+            nick: "Bob".into(),
+            note: String::new(),
+            network: None,
+        });
         let (tx, rx) = mpsc::channel();
         let net = Net::new(Box::new(move |ev| {
             let _ = tx.send(ev);
         }));
         let mut client = Client::new(s, home, now_ms());
         client.connect_startup(now_ms());
-        App { client, net, rx }
+        App { client, net, rx, sent: Default::default() }
     }
 
     /// Applique les effets (comme `alpirc-shell`) et livre les événements du réseau pendant `d`, ou jusqu'à
@@ -60,6 +71,7 @@ impl App {
                         self.net.connect(conn, t);
                     }
                     Effect::Send { conn, line } => {
+                        self.sent.entry(conn).or_default().push(line.clone());
                         let enc = self.client.conn_encoding(conn);
                         self.net.send(conn, enc.encode(&line).into_owned());
                     }
@@ -195,6 +207,50 @@ fn alpirc_client_uses_the_relay_as_a_bouncer() {
     if std::env::var_os("RELAY_TEST_DUMP").is_some() {
         eprintln!("{:#?}", app.dump());
     }
+
+    // Régressions du client (lot 3) : la connexion parente (non liée) ne fait que lister les réseaux.
+    let parent = app
+        .client
+        .conns()
+        .into_iter()
+        .find(|c| app.client.conn_info(*c).is_some_and(|i| i.bouncer_network.is_none()))
+        .unwrap();
+    let parent_sent = app.sent.get(&parent).cloned().unwrap_or_default();
+    assert!(
+        !parent_sent
+            .iter()
+            .any(|l| ["JOIN", "ISON", "MONITOR", "PRIVMSG", "BOUNCER LISTNETWORKS"].iter().any(|c| l.starts_with(c))),
+        "connexion parente : {parent_sent:?}"
+    );
+    let child_sent = app.sent.get(&conn).cloned().unwrap_or_default();
+    assert!(child_sent.iter().any(|l| l == "JOIN #perf"), "perform sur la connexion liée : {child_sent:?}");
+    let parent_status = app.client.conn_info(parent).unwrap().status_window;
+    let pl: Vec<String> = app.client.window(parent_status).unwrap().lines.iter().map(|l| l.text.clone()).collect();
+    assert_eq!(pl.iter().filter(|l| l.contains("Bouncer networks")).count(), 1, "{pl:?}");
+    let errors = ["(BOUNCER BIND)", "Not bound to a network", "Unknown command"];
+    assert!(!pl.iter().any(|l| errors.iter().any(|e| l.contains(e))), "pas d'erreur du relais : {pl:?}");
+    // Coupure du réseau : le relais n'annonce que l'état ; le nom du réseau reste « Fake », la fenêtre du canal
+    // reste ouverte (pas de PART).
+    let win_before = App::chan_win(&app.client, "1", "#test");
+    env.ircd.kill("Gui");
+    app.pump_until("reconnexion du relais", |c| {
+        App::has_line(c, "1", "#test", "Now talking in #test") && {
+            App::chan_win(c, "1", "#test")
+                .and_then(|w| c.window(w))
+                .is_some_and(|w| w.lines.iter().filter(|l| l.text.contains("Now talking in #test")).count() >= 2)
+        }
+    });
+    assert_eq!(app.client.conn_info(conn).unwrap().network, "Fake");
+    assert_eq!(app.client.settings().networks[0].bouncer_networks[0].name, "Fake");
+    assert_eq!(App::chan_win(&app.client, "1", "#test"), win_before, "même fenêtre");
+    // Un privé écrit sur le téléphone : AlpIRC ouvre le privé de Bob avec notre ligne.
+    phone.send("PRIVMSG Bob :privé écrit sur le téléphone");
+    app.pump_until("privé ouvert", |c| {
+        App::bound_conn(c, "1")
+            .and_then(|k| c.find_window(Some(k), "Bob"))
+            .and_then(|w| c.window(w))
+            .is_some_and(|w| w.lines.iter().any(|l| l.text.contains("<Gui> privé écrit sur le téléphone")))
+    });
 
     // Fermer AlpIRC (QUIT de ses connexions) : le relais reste sur le réseau.
     let st = app

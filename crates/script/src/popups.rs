@@ -15,6 +15,10 @@ use crate::source::{PopupLine, parse_popup_lines};
 use crate::wild::wildmatch;
 use crate::{Ctx, Engine, Host, MenuItem, PopupKind, ScriptError};
 
+/// Une entrée de menu gardée pour être relancée (voir [`Engine::popup_token`]).
+#[derive(Debug, Clone)]
+pub struct PopupToken(Action);
+
 /// Une entrée cliquable du dernier menu construit.
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -233,6 +237,23 @@ impl Engine {
             }
         }
         out
+    }
+
+    /// L'entrée `action` du dernier menu construit, gardée pour la relancer plus tard (après une question `$?`),
+    /// même si d'autres menus ont été construits entre-temps.
+    pub fn popup_token(&self, action: u32) -> Option<PopupToken> {
+        self.popup_actions.get(action as usize).cloned().map(PopupToken)
+    }
+
+    /// Relance une entrée de menu gardée par [`Engine::popup_token`]. `$1-` = `ctx.selected`.
+    pub fn popup_replay(&mut self, host: &mut dyn Host, ctx: &Ctx, token: &PopupToken) -> Result<(), ScriptError> {
+        self.flush_pending(host);
+        let a = token.0.clone();
+        self.rt.menu = a.menu.clone();
+        let frame = Frame { script: a.script.clone(), args: Self::default_args(ctx), ..Frame::default() };
+        let r = self.run_top(host, ctx, frame, &a.body, false);
+        self.rt.menu.clear();
+        r
     }
 
     /// Exécute l'entrée `action` du dernier menu construit par [`Engine::popup`]. `$1-` = `ctx.selected`.

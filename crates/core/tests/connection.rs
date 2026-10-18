@@ -275,7 +275,8 @@ fn bouncer_up(h: &mut H) {
 fn bouncer_networks_open_bound_connections() {
     let mut h = H::new();
     bouncer_up(&mut h);
-    assert!(h.sends().contains(&"BOUNCER LISTNETWORKS".to_string()));
+    // bouncer-networks-notify : la liste arrive d'elle-même, pas de LISTNETWORKS (voir tests/bouncer.rs).
+    assert!(!h.sends().contains(&"BOUNCER LISTNETWORKS".to_string()));
     h.clear();
     h.feed(":bnc BATCH +b1 soju.im/bouncer-networks");
     h.feed("@batch=b1 :bnc BOUNCER NETWORK 1 name=Libera;state=connected");

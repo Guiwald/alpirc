@@ -607,10 +607,16 @@ pub struct Env {
 
 impl Env {
     pub fn start(name: &str) -> Env {
+        Env::start_with(name, |_| {})
+    }
+
+    /// Comme [`Env::start`], réglages retouchés par `tweak`.
+    pub fn start_with(name: &str, tweak: impl FnOnce(&mut Config)) -> Env {
         let ircd = FakeIrcd::start();
         let data = temp_dir(name);
         let hash = alpirc_relay::auth::hash_password(PASSWORD).unwrap();
-        let cfg = test_config(ircd.addr, &hash);
+        let mut cfg = test_config(ircd.addr, &hash);
+        tweak(&mut cfg);
         let mut e = Env { ircd, relay: None, data, addr: "127.0.0.1:1".parse().unwrap(), fp: String::new(), cfg };
         e.boot();
         e

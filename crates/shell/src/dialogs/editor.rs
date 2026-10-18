@@ -550,8 +550,8 @@ pub struct LoadScript {
     pub path: Option<PathBuf>,
 }
 
-const L_PATH: u32 = 11;
-const L_BROWSE: u32 = 12;
+pub(crate) const L_PATH: u32 = 11;
+pub(crate) const L_BROWSE: u32 = 12;
 
 impl LoadScript {
     fn load(&self, path: &std::path::Path, cx: &mut Cx) -> Result<(), String> {

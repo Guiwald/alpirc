@@ -201,7 +201,8 @@ impl Shell {
         }
         // 5. Barre d'outils, switchbar, treebar.
         if let Some(tr) = l.toolbar {
-            if let Some(alpirc_ui::ToolMsg::Clicked(id)) = self.toolbar.event(&input, tr, &self.res, p) {
+            // Bouton à bascule (Absent) : la commande, puis l'état réel suit la réponse du serveur.
+            if let Some(alpirc_ui::ToolMsg::Clicked(id) | alpirc_ui::ToolMsg::Toggled(id, _)) = self.toolbar.event(&input, tr, &self.res, p) {
                 self.menu_action(id, p);
                 return;
             }
@@ -238,7 +239,11 @@ impl Shell {
                 None => {}
             }
         }
-        if let Some(tr) = l.treebar {
+        // La treebar ne prend pas le clavier (comme mIRC) : sinon le focus de la fenêtre du système (FocusIn) lui
+        // donnait Entrée et les flèches, perdus pour la ligne de saisie.
+        let for_treebar =
+            !matches!(input, Input::Key { .. } | Input::Text(_) | Input::ImePreedit { .. } | Input::FocusIn | Input::FocusOut);
+        if let Some(tr) = l.treebar.filter(|_| for_treebar) {
             match self.treebar.event(&input, tr, &self.res, p) {
                 Some(TreebarMsg::Activate(id)) => {
                     let now = p.now_ms();
@@ -307,6 +312,10 @@ impl Shell {
         let Some(w) = self.client.window(win) else { return };
         let is_list = views::has_list(w);
         let kind = w.kind;
+        // `on KEYDOWN`/`on KEYUP` des scripts (voir `keys.rs`) ; `/haltdef` : la touche n'est pas traitée.
+        if matches!(input, Input::Key { .. }) && self.script_key(win, input, p) {
+            return;
+        }
         // Séparation discussion / pseudos.
         if let Some(split) = r.split {
             let v = self.views.get_mut(&win).expect("vue");
@@ -500,13 +509,19 @@ impl Shell {
                 match kind {
                     WinKind::ChanList => self.client.command(win, &format!("/join {first}"), now),
                     WinKind::Urls => p.open_url(&first),
-                    WinKind::Notify => self.client.command(win, &format!("/whois {first}"), now),
+                    WinKind::Notify => self.notify_double_click(win, &first, now),
                     _ => {}
                 }
             }
             ListViewMsg::HeaderClicked(_) => {
                 if let Some(v) = self.views.get_mut(&win) {
                     v.list.sort_rows();
+                }
+            }
+            ListViewMsg::RightClicked(Some(i), pos) if kind == WinKind::Notify => {
+                let nick = self.views.get(&win).and_then(|v| v.list.rows.get(i)).and_then(|r| r.cells.first().cloned());
+                if let Some(nick) = nick {
+                    self.open_notify_popup(win, nick, pos);
                 }
             }
             ListViewMsg::RightClicked(_, pos) if kind == WinKind::Custom => {

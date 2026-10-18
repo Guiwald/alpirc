@@ -9,8 +9,17 @@ pub fn mods(m: ModifiersState) -> Mods {
     Mods { shift: m.shift_key(), ctrl: m.control_key(), alt: m.alt_key(), meta: m.super_key() }
 }
 
-/// (touche, texte produit) d'un appui ; `None` pour les touches seules (Maj, Ctrl…).
-pub fn map(ev: &KeyEvent, m: Mods) -> Option<(Key, Option<String>)> {
+/// Mac : Option sert à taper des caractères (Option+Maj+L → « | », Option+( → « { » sur un clavier français ;
+/// Option+O → « ø »…). Quand la touche produit un caractère sans Cmd ni Ctrl, ce n'est donc pas un raccourci Alt
+/// (Alt+O, mnémoniques des boîtes) : elle part comme une frappe ordinaire. Option garde son rôle avec les touches qui
+/// ne produisent rien (Option+← : mot précédent, Option+Effacement : mot).
+pub fn option_types_text(m: Mods, text: Option<&str>) -> Mods {
+    let printable = text.is_some_and(|t| !t.is_empty() && !t.chars().any(char::is_control));
+    if cfg!(target_os = "macos") && m.alt && !m.ctrl && !m.meta && printable { Mods { alt: false, ..m } } else { m }
+}
+
+/// (touche, modificateurs, texte produit) d'un appui ; `None` pour les touches seules (Maj, Ctrl…).
+pub fn map(ev: &KeyEvent, m: Mods) -> Option<(Key, Mods, Option<String>)> {
     let key = match &ev.logical_key {
         WKey::Named(n) => match n {
             NamedKey::Enter => Key::Enter,
@@ -63,5 +72,31 @@ pub fn map(ev: &KeyEvent, m: Mods) -> Option<(Key, Option<String>)> {
     } else {
         ev.text.as_ref().map(|t| t.to_string()).filter(|t| !t.is_empty() && !t.chars().any(char::is_control))
     };
-    Some((key, text))
+    let m = option_types_text(m, text.as_deref());
+    Some((key, m, text))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn option_tape_des_caracteres_sur_mac() {
+        let opt = Mods { alt: true, ..Mods::NONE };
+        let opt_shift = Mods { alt: true, shift: true, ..Mods::NONE };
+        let mac = cfg!(target_os = "macos");
+        // Option+Maj+L (« | » sur un clavier français) : une frappe, pas Alt+L.
+        assert_eq!(option_types_text(opt_shift, Some("|")).alt, !mac);
+        assert_eq!(option_types_text(opt_shift, Some("|")).shift, true);
+        assert_eq!(option_types_text(opt, Some("ø")).alt, !mac);
+        // Sans caractère produit (flèches, effacement), Option reste Option.
+        assert!(option_types_text(opt, None).alt);
+        assert!(option_types_text(opt, Some("\u{8}")).alt);
+        // Avec Cmd ou Ctrl, rien ne change.
+        let cmd_opt = Mods { alt: true, meta: true, ..Mods::NONE };
+        assert_eq!(option_types_text(cmd_opt, Some("ø")), cmd_opt);
+        let ctrl_opt = Mods { alt: true, ctrl: true, ..Mods::NONE };
+        assert_eq!(option_types_text(ctrl_opt, Some("ø")), ctrl_opt);
+        assert_eq!(option_types_text(Mods::SHIFT, Some("A")), Mods::SHIFT);
+    }
 }

@@ -81,7 +81,10 @@ fn own_message_with_echo_message() {
     h.feed(":Guiwald!alpirc@host.test PRIVMSG #lyon :hello");
     assert_eq!(h.last(w), "<Guiwald> hello");
     assert_eq!(h.c.window(w).unwrap().lines.back().unwrap().kind, LineKind::Own);
-    // Écho d'un privé sans fenêtre : dans la fenêtre active.
+    // Écho d'un /msg tapé ici, sans fenêtre de privé : dans la fenêtre active (un privé écrit sur un autre
+    // appareil ouvrirait le privé, voir tests/bouncer.rs).
+    h.input(w, "/msg Bob psst");
+    assert_eq!(h.sends(), vec!["PRIVMSG Bob :psst"]);
     h.feed(":Guiwald!alpirc@host.test PRIVMSG Bob :psst");
     assert_eq!(h.last(w), "-> *Bob* psst");
     // Écho de notre action.

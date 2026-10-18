@@ -15,16 +15,20 @@
 // Style du projet : on garde parfois des `if` imbriqués pour la lisibilité.
 #![allow(clippy::collapsible_if)]
 
+use std::cell::Cell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 
+use alpirc_core::i18n::Lang;
 use alpirc_core::{ConnState, WinId, WinKind};
 use alpirc_script::PopupKind;
 use alpirc_ui::widgets::{ArrowDir, CHECK_MARK, MENU_DOT, draw_arrow, draw_pattern};
 use alpirc_ui::{
-    Bevel, Canvas, ControlKind, DialogView, EditMsg, FontKind, Input, Key, MenuItem, Mods, MouseButton, Point, Rect,
-    TextStyle, draw_mirc_line,
+    Bevel, Canvas, ControlKind, DialogMsg, DialogSpec, DialogView, EditMsg, FontKind, Input, Key, MenuItem, Mods,
+    MouseButton, Point, Rect, TextStyle, draw_mirc_line,
 };
 
+use crate::dialogs::{Cx, DialogCtl, Outcome};
 use crate::menus::{self, ids};
 use crate::tr::{plain, t, tf};
 use crate::views::{self, WinLines, short_label};
@@ -32,23 +36,261 @@ use crate::{PopupSrc, Shell, ShellPlatform, win_menu};
 
 /// Textes propres au téléphone (voir [`crate::tr`]).
 pub const TR: crate::tr::Table = &[
-    ("mobile.windows", ["Windows", "Fenêtres", "", "", "", "", ""]),
-    ("mobile.users", ["{n} users", "{n} personnes", "", "", "", "", ""]),
-    ("mobile.join", ["&Join a Channel...", "&Rejoindre un canal...", "", "", "", "", ""]),
-    ("mobile.copy_line", ["&Copy the Line", "&Copier la ligne", "", "", "", "", ""]),
-    ("mobile.display_size", ["Display &Size", "&Taille de l'affichage", "", "", "", "", ""]),
-    ("mobile.no_window", ["No window", "Aucune fenêtre", "", "", "", "", ""]),
-    ("mobile.hint", ["Message {win}", "Message dans {win}", "", "", "", "", ""]),
-    ("mobile.hint.status", ["Command (/join #channel)", "Commande (/join #canal)", "", "", "", "", ""]),
-    ("mobile.send", ["Send", "Envoyer", "", "", "", "", ""]),
-    ("mobile.tab", ["Tab", "Tab", "", "", "", "", ""]),
-    ("mobile.service.one", ["Connected to 1 network", "Connecté à 1 réseau", "", "", "", "", ""]),
-    ("mobile.service.many", ["Connected to {n} networks", "Connecté à {n} réseaux", "", "", "", "", ""]),
-    ("mobile.service.connecting", ["Connecting...", "Connexion en cours...", "", "", "", "", ""]),
-    ("mobile.service.waiting", ["Disconnected, waiting to reconnect", "Déconnecté, reconnexion en attente", "", "", "", "", ""]),
-    ("mobile.service.quit", ["Quit", "Quitter", "", "", "", "", ""]),
-    ("mobile.service.channel", ["Connection", "Connexion", "", "", "", "", ""]),
-    ("mobile.notify.channel", ["Highlights and private messages", "Mentions et messages privés", "", "", "", "", ""]),
+    ("mobile.windows", ["Windows", "Fenêtres", "Ventanas", "Fenster", "Finestre", "Finestres", "Fuinneoga"]),
+    (
+        "mobile.users",
+        ["{n} users", "{n} personnes", "{n} usuarios", "{n} Nutzer", "{n} utenti", "{n} usuaris", "{n} úsáideoir"],
+    ),
+    (
+        "mobile.join",
+        [
+            "&Join a Channel...",
+            "&Rejoindre un canal...",
+            "&Entrar en un canal...",
+            "Channel &betreten...",
+            "&Entra in un canale...",
+            "&Entrar en un canal...",
+            "Téigh &isteach i gcainéal...",
+        ],
+    ),
+    (
+        "mobile.copy_line",
+        [
+            "&Copy the Line",
+            "&Copier la ligne",
+            "&Copiar la línea",
+            "Zeile &kopieren",
+            "&Copia la riga",
+            "&Copiar la línia",
+            "&Cóipeáil an líne",
+        ],
+    ),
+    (
+        "mobile.display_size",
+        [
+            "Display &Size",
+            "&Taille de l'affichage",
+            "&Tamaño de la pantalla",
+            "&Anzeigegröße",
+            "Dimensione dello &schermo",
+            "&Mida de la pantalla",
+            "&Méid na taispeána",
+        ],
+    ),
+    (
+        "mobile.no_window",
+        [
+            "No window",
+            "Aucune fenêtre",
+            "Ninguna ventana",
+            "Kein Fenster",
+            "Nessuna finestra",
+            "Cap finestra",
+            "Gan fuinneog",
+        ],
+    ),
+    (
+        "mobile.hint",
+        [
+            "Message {win}",
+            "Message dans {win}",
+            "Mensaje en {win}",
+            "Nachricht in {win}",
+            "Messaggio in {win}",
+            "Missatge en {win}",
+            "Teachtaireacht i {win}",
+        ],
+    ),
+    (
+        "mobile.hint.status",
+        [
+            "Command (/join #channel)",
+            "Commande (/join #canal)",
+            "Comando (/join #canal)",
+            "Befehl (/join #channel)",
+            "Comando (/join #canale)",
+            "Ordre (/join #canal)",
+            "Ordú (/join #cainéal)",
+        ],
+    ),
+    ("mobile.send", ["Send", "Envoyer", "Enviar", "Senden", "Invia", "Enviar", "Seol"]),
+    ("mobile.tab", ["Tab", "Tab", "Tab", "Tab", "Tab", "Tab", "Tab"]),
+    (
+        "mobile.service.one",
+        [
+            "Connected to 1 network",
+            "Connecté à 1 réseau",
+            "Conectado a 1 red",
+            "Mit 1 Netzwerk verbunden",
+            "Connesso a 1 rete",
+            "Connectat a 1 xarxa",
+            "Ceangailte le líonra amháin",
+        ],
+    ),
+    (
+        "mobile.service.many",
+        [
+            "Connected to {n} networks",
+            "Connecté à {n} réseaux",
+            "Conectado a {n} redes",
+            "Mit {n} Netzwerken verbunden",
+            "Connesso a {n} reti",
+            "Connectat a {n} xarxes",
+            "Ceangailte le {n} líonra",
+        ],
+    ),
+    (
+        "mobile.service.connecting",
+        [
+            "Connecting...",
+            "Connexion en cours...",
+            "Conectando...",
+            "Verbinde...",
+            "Connessione in corso...",
+            "S'està connectant...",
+            "Ag ceangal...",
+        ],
+    ),
+    (
+        "mobile.service.waiting",
+        [
+            "Disconnected, waiting to reconnect",
+            "Déconnecté, reconnexion en attente",
+            "Desconectado, esperando para reconectar",
+            "Getrennt, warte auf Neuverbindung",
+            "Disconnesso, in attesa di riconnessione",
+            "Desconnectat, en espera de reconnectar",
+            "Dícheangailte, ag fanacht le hathcheangal",
+        ],
+    ),
+    ("mobile.service.quit", ["Quit", "Quitter", "Salir", "Beenden", "Esci", "Eixir", "Scoir"]),
+    (
+        "mobile.service.channel",
+        ["Connection", "Connexion", "Conexión", "Verbindung", "Connessione", "Connexió", "Ceangal"],
+    ),
+    (
+        "mobile.notify.channel",
+        [
+            "Highlights and private messages",
+            "Mentions et messages privés",
+            "Menciones y mensajes privados",
+            "Erwähnungen und private Nachrichten",
+            "Menzioni e messaggi privati",
+            "Mencions i missatges privats",
+            "Luanna agus teachtaireachtaí príobháideacha",
+        ],
+    ),
+    ("mobile.phone", ["&Phone", "&Téléphone", "&Teléfono", "Tele&fon", "&Telefono", "&Telèfon", "&Fón"]),
+    (
+        "mobile.bg",
+        [
+            "&Disconnect in Background",
+            "&Déconnexion en arrière-plan",
+            "&Desconexión en segundo plano",
+            "&Trennen im Hintergrund",
+            "&Disconnessione in background",
+            "&Desconnexió en segon pla",
+            "&Dícheangal sa chúlra",
+        ],
+    ),
+    ("mobile.bg.never", ["&Never", "&Jamais", "&Nunca", "&Nie", "&Mai", "&Mai", "&Choíche"]),
+    (
+        "mobile.bg.after",
+        [
+            "After {n} minutes",
+            "Après {n} minutes",
+            "Tras {n} minutos",
+            "Nach {n} Minuten",
+            "Dopo {n} minuti",
+            "Després de {n} minuts",
+            "Tar éis {n} nóiméad",
+        ],
+    ),
+    (
+        "mobile.bg.other",
+        [
+            "&Other Duration...",
+            "&Autre durée...",
+            "&Otra duración...",
+            "&Andere Dauer...",
+            "&Altra durata...",
+            "&Altra durada...",
+            "Fad &eile...",
+        ],
+    ),
+    (
+        "mobile.bg.other_n",
+        [
+            "&Other Duration ({n} min)...",
+            "&Autre durée ({n} min)...",
+            "&Otra duración ({n} min)...",
+            "&Andere Dauer ({n} Min.)...",
+            "&Altra durata ({n} min)...",
+            "&Altra durada ({n} min)...",
+            "Fad &eile ({n} nóim.)...",
+        ],
+    ),
+    (
+        "mobile.bg.title",
+        [
+            "Disconnect in Background",
+            "Déconnexion en arrière-plan",
+            "Desconexión en segundo plano",
+            "Trennen im Hintergrund",
+            "Disconnessione in background",
+            "Desconnexió en segon pla",
+            "Dícheangal sa chúlra",
+        ],
+    ),
+    (
+        "mobile.bg.prompt",
+        [
+            "Disconnect from IRC after this many minutes in the background (0: never):",
+            "Se déconnecter d'IRC après ce nombre de minutes en arrière-plan (0 : jamais) :",
+            "Desconectar de IRC tras estos minutos en segundo plano (0: nunca):",
+            "Nach so vielen Minuten im Hintergrund vom IRC trennen (0: nie):",
+            "Disconnetti da IRC dopo questi minuti in background (0: mai):",
+            "Desconnectar d'IRC després d'estos minuts en segon pla (0: mai):",
+            "Dícheangail ó IRC tar éis an oiread seo nóiméad sa chúlra (0: choíche):",
+        ],
+    ),
+    (
+        "mobile.bg.minutes",
+        [
+            "minutes (at most 1440)",
+            "minutes (1440 au plus)",
+            "minutos (1440 como máximo)",
+            "Minuten (höchstens 1440)",
+            "minuti (al massimo 1440)",
+            "minuts (1440 com a màxim)",
+            "nóiméad (1440 ar a mhéad)",
+        ],
+    ),
+    (
+        "mobile.bg.done",
+        [
+            "Disconnected after {n} min in the background",
+            "Déconnecté après {n} min en arrière-plan",
+            "Desconectado tras {n} min en segundo plano",
+            "Nach {n} Min. im Hintergrund getrennt",
+            "Disconnesso dopo {n} min in background",
+            "Desconnectat després de {n} min en segon pla",
+            "Dícheangailte tar éis {n} nóim. sa chúlra",
+        ],
+    ),
+    (
+        "mobile.vibrate",
+        [
+            "&Vibrate with Beeps",
+            "&Vibrer avec les bips",
+            "&Vibrar con los pitidos",
+            "Bei Pieptönen &vibrieren",
+            "&Vibra con i bip",
+            "&Vibrar amb els bips",
+            "&Crith le bípeanna",
+        ],
+    ),
+    ("mobile.history", ["History", "Historique", "Historial", "Verlauf", "Cronologia", "Historial", "Stair"]),
 ];
 
 /// Hauteur de la barre du haut (pixels logiques) : deux lignes, nom et sujet.
@@ -93,6 +335,34 @@ const M_COPY_LINE: u32 = 990_002;
 /// Taille de l'affichage : `M_SCALE + centièmes` (200 = 2×).
 const M_SCALE: u32 = 990_000;
 const SCALES: [f32; 7] = [2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0];
+/// Déconnexion en arrière-plan : `M_BG_BASE + minutes` (0 : jamais), « Autre durée… ».
+const M_BG_BASE: u32 = 992_000;
+const M_BG_OTHER: u32 = 990_003;
+/// Vibrer avec les bips.
+const M_VIBRATE: u32 = 990_004;
+/// Durées proposées (minutes ; 0 : jamais) et durée la plus longue acceptée.
+const BG_CHOICES: [u32; 5] = [0, 5, 15, 30, 60];
+const BG_MAX_MIN: u32 = 1440;
+/// Lignes de l'historique montrées par le bouton du champ natif.
+const HISTORY_MENU_MAX: usize = 30;
+/// Hauteur minimale des lignes des listes au toucher (boîtes de dialogue, fenêtres à liste).
+const TOUCH_ROW_H: i32 = 24;
+
+/// Réglages propres au téléphone, gardés par la plateforme (`android.toml`) et réglés depuis le menu ⋮
+/// (Téléphone).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PhonePrefs {
+    /// Se déconnecter d'IRC après ce nombre de minutes en arrière-plan ; 0 : jamais (ADR 0006).
+    pub background_disconnect_min: u32,
+    /// Vibrer avec les bips.
+    pub vibrate: bool,
+}
+
+impl Default for PhonePrefs {
+    fn default() -> PhonePrefs {
+        PhonePrefs { background_disconnect_min: 0, vibrate: true }
+    }
+}
 
 /// Tiroir ouvert.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -175,6 +445,8 @@ enum MenuOrigin {
     Main,
     /// Menu surgissant du shell (scripts, fenêtre).
     Popup(PopupSrc),
+    /// Historique de la ligne de saisie d'une fenêtre (bouton du champ natif) : entrée `n` = ligne `n - 1`.
+    History(WinId),
 }
 
 struct MenuLevel {
@@ -240,6 +512,17 @@ pub struct MobileState {
     tab: Option<(WinId, String, usize, String, usize)>,
     /// Texte de la ligne sous le doigt lors du dernier appui long (entrée « Copier la ligne »).
     copy_text: Option<String>,
+    /// Réglages du téléphone (`None` : pas de section Téléphone), et s'ils ont changé depuis le menu.
+    phone: Option<PhonePrefs>,
+    phone_changed: bool,
+    /// Réponse de la boîte « Autre durée » (minutes).
+    bg_answer: Rc<Cell<Option<u32>>>,
+    /// Connexions fermées par la déconnexion en arrière-plan (fenêtres Status), à rouvrir au retour.
+    bg_disconnected: Vec<WinId>,
+    /// Parcours de l'historique dans le champ natif : fenêtre, rang de la ligne affichée, brouillon gardé.
+    history: Option<(WinId, usize, String)>,
+    /// Texte à mettre dans le champ natif (historique choisi).
+    native_text: Option<String>,
 }
 
 /// Ligne du tiroir des fenêtres.
@@ -277,6 +560,82 @@ fn mobile_menubar(model: Vec<(String, Vec<MenuItem>)>) -> Vec<MenuItem> {
             (!items.is_empty()).then(|| MenuItem::submenu(&title, items))
         })
         .collect()
+}
+
+/// Un pas dans l'historique de saisie (`len` lignes, la plus récente à la fin) depuis `pos` (`None` : le
+/// brouillon) ; `older` : vers les plus anciennes (↑). Renvoie la nouvelle position (`Some(None)` : retour au
+/// brouillon), ou `None` s'il n'y a rien à faire.
+fn step_history(len: usize, pos: Option<usize>, older: bool) -> Option<Option<usize>> {
+    match (pos, older) {
+        (None, true) => len.checked_sub(1).map(Some),
+        (Some(i), true) => (i > 0 && i <= len).then(|| Some(i - 1)),
+        (None, false) => None,
+        (Some(i), false) => Some((i + 1 < len).then_some(i + 1)),
+    }
+}
+
+/// Entrées du sous-menu « Déconnexion en arrière-plan » (durée en vigueur cochée).
+fn background_items(lang: Lang, minutes: u32) -> Vec<MenuItem> {
+    let mut v: Vec<MenuItem> = BG_CHOICES
+        .iter()
+        .map(|&m| {
+            let label = if m == 0 { t(lang, "mobile.bg.never") } else { tf(lang, "mobile.bg.after", &[("n", &m.to_string())]) };
+            MenuItem::new(M_BG_BASE + m, &label).radio(minutes == m)
+        })
+        .collect();
+    let custom = !BG_CHOICES.contains(&minutes);
+    let other = if custom { tf(lang, "mobile.bg.other_n", &[("n", &minutes.to_string())]) } else { t(lang, "mobile.bg.other") };
+    v.push(MenuItem::separator());
+    v.push(MenuItem::new(M_BG_OTHER, &other).radio(custom));
+    v
+}
+
+/// Boîte « Autre durée » de la déconnexion en arrière-plan : un nombre de minutes (0 : jamais).
+struct BackgroundDialog {
+    minutes: u32,
+    answer: Rc<Cell<Option<u32>>>,
+}
+
+impl DialogCtl for BackgroundDialog {
+    fn kind(&self) -> Option<String> {
+        Some("mobile.bg".into())
+    }
+
+    fn spec(&self, lang: Lang) -> DialogSpec {
+        use crate::dialogs::{button, edit, spec, text};
+        let w = 300;
+        spec(
+            &t(lang, "mobile.bg.title"),
+            w,
+            12 + 48 + 8 + 22 + 14 + 24 + 12,
+            vec![
+                text(1, (12, 12, w - 24, 48), &t(lang, "mobile.bg.prompt")),
+                edit(2, (12, 68, 64, 22), &self.minutes.to_string()),
+                text(5, (84, 71, w - 96, 16), &t(lang, "mobile.bg.minutes")),
+                button(3, (w - 12 - 2 * 84 - 8, 104, 84, 24), &t(lang, "dlg.ok")).style("default ok"),
+                button(4, (w - 12 - 84, 104, 84, 24), &t(lang, "dlg.cancel")).style("cancel"),
+            ],
+        )
+    }
+
+    fn init(&mut self, view: &mut DialogView, _cx: &mut Cx) {
+        view.set_focus(2);
+    }
+
+    fn on(&mut self, msg: DialogMsg, view: &mut DialogView, _cx: &mut Cx) -> Outcome {
+        match msg {
+            DialogMsg::Ok(_) | DialogMsg::Clicked(3) => match view.text(2).unwrap_or_default().trim().parse::<u32>() {
+                Ok(m) if m <= BG_MAX_MIN => {
+                    self.answer.set(Some(m));
+                    Outcome::Close
+                }
+                // Pas un nombre (ou trop grand) : la boîte reste ouverte.
+                _ => Outcome::Keep,
+            },
+            DialogMsg::Cancel | DialogMsg::Clicked(4) => Outcome::Close,
+            _ => Outcome::Keep,
+        }
+    }
 }
 
 /// Début (octet) du dernier mot d'un texte.
@@ -535,10 +894,19 @@ impl Shell {
             MenuItem::separator(),
         ];
         items.extend(mobile_menubar(model));
+        // Téléphone : taille de l'affichage, déconnexion en arrière-plan, vibration.
+        let mut phone = Vec::new();
         if let Some(cur) = p.ui_scale() {
             let sizes = SCALES.iter().map(|s| MenuItem::new(M_SCALE + (s * 100.0).round() as u32, &format!("{s}×")).radio((cur - s).abs() < 0.01)).collect();
+            phone.push(MenuItem::submenu(&t(lang, "mobile.display_size"), sizes));
+        }
+        if let Some(pp) = &self.mobile.phone {
+            phone.push(MenuItem::submenu(&t(lang, "mobile.bg"), background_items(lang, pp.background_disconnect_min)));
+            phone.push(MenuItem::new(M_VIBRATE, &t(lang, "mobile.vibrate")).checked(pp.vibrate));
+        }
+        if !phone.is_empty() {
             items.push(MenuItem::separator());
-            items.push(MenuItem::submenu(&t(lang, "mobile.display_size"), sizes));
+            items.push(MenuItem::submenu(&t(lang, "mobile.phone"), phone));
         }
         let bar = self.top_bar();
         self.mobile.menu = Some(TouchMenu::new(MenuOrigin::Main, items, Point::new(bar.right() - 2, bar.bottom()), true));
@@ -565,6 +933,7 @@ impl Shell {
             PopupSrc::Script { kind: PopupKind::Nicklist, tree, selected, .. } => (menus::from_script(tree, 0), Some(selected.join(", "))),
             PopupSrc::Script { tree, win, .. } => (menus::from_script(tree, 0), label(*win)),
             PopupSrc::Window(w) => (self.window_menu_items(*w), label(*w)),
+            PopupSrc::Notify { nick, .. } => (self.notify_menu_items(), Some(nick.clone())),
         };
         if !items.is_empty() {
             self.mobile.menu = Some(TouchMenu::new(MenuOrigin::Popup(src), items, at, false).with_caption(caption));
@@ -599,6 +968,12 @@ impl Shell {
         let m = self.mobile.menu.take().expect("menu ouvert");
         match m.origin {
             MenuOrigin::Main => self.main_menu_action(it.id, p),
+            MenuOrigin::History(win) => {
+                let line = self.client.window(win).and_then(|w| w.history.get((it.id as usize).wrapping_sub(1))).cloned();
+                if let Some(line) = line {
+                    self.put_input_text(win, line);
+                }
+            }
             MenuOrigin::Popup(src) => {
                 self.popup_activated(it.id, src, p);
                 self.adopt_popup();
@@ -616,6 +991,18 @@ impl Shell {
             id if (M_SCALE + 100..M_SCALE + 1000).contains(&id) => {
                 p.set_ui_scale((id - M_SCALE) as f32 / 100.0);
                 p.request_repaint();
+            }
+            id if (M_BG_BASE..=M_BG_BASE + BG_MAX_MIN).contains(&id) => self.set_background_minutes(id - M_BG_BASE),
+            M_BG_OTHER => {
+                let minutes = self.mobile.phone.as_ref().map_or(0, |pp| pp.background_disconnect_min);
+                let answer = self.mobile.bg_answer.clone();
+                self.open_dialog(Box::new(BackgroundDialog { minutes, answer }), p);
+            }
+            M_VIBRATE => {
+                if let Some(pp) = self.mobile.phone.as_mut() {
+                    pp.vibrate = !pp.vibrate;
+                    self.mobile.phone_changed = true;
+                }
             }
             id => self.menu_action(id, p),
         }
@@ -655,6 +1042,9 @@ impl Shell {
         if let Some((key, msg)) = self.modals.event(&ev, &self.res, p, bounds) {
             self.dialog_msg(key, msg, p);
             self.adopt_popup();
+        }
+        if let Some(m) = self.mobile.bg_answer.take() {
+            self.set_background_minutes(m);
         }
         p.request_repaint();
     }
@@ -709,6 +1099,7 @@ impl Shell {
     pub fn mobile_submit(&mut self, text: &str, p: &mut dyn ShellPlatform) {
         let Some(win) = self.mobile_active() else { return };
         self.mobile.tab = None;
+        self.mobile.history = None;
         let lines: Vec<String> = text.split('\n').map(|l| l.trim_end_matches('\r').to_string()).filter(|l| !l.trim().is_empty()).collect();
         if let Some(v) = self.views.get_mut(&win) {
             if lines.len() == 1 {
@@ -744,6 +1135,126 @@ impl Shell {
         let new = format!("{}{}", &text[..start], rep);
         self.mobile.tab = Some((win, word, start, new.clone(), idx));
         Some(new)
+    }
+
+    // --- Réglages du téléphone, déconnexion en arrière-plan ----------------------------------------------------
+
+    /// Durée la plus longue de la déconnexion en arrière-plan (minutes).
+    pub const MOBILE_BG_MAX_MIN: u32 = BG_MAX_MIN;
+
+    /// Les réglages du téléphone (lus par la plateforme) : déconnexion après `background_disconnect_min` minutes
+    /// en arrière-plan (0 : jamais), vibration des bips. Le menu ⋮ montre alors la section Téléphone.
+    pub fn set_phone_prefs(&mut self, background_disconnect_min: u32, vibrate: bool) {
+        self.mobile.phone = Some(PhonePrefs { background_disconnect_min: background_disconnect_min.min(BG_MAX_MIN), vibrate });
+        self.mobile.phone_changed = false;
+    }
+
+    /// Les réglages du téléphone (minutes, vibration), s'ils ont été changés depuis le menu (la plateforme les
+    /// enregistre).
+    pub fn take_phone_prefs_change(&mut self) -> Option<(u32, bool)> {
+        if !std::mem::take(&mut self.mobile.phone_changed) {
+            return None;
+        }
+        self.mobile.phone.as_ref().map(|pp| (pp.background_disconnect_min, pp.vibrate))
+    }
+
+    fn set_background_minutes(&mut self, minutes: u32) {
+        if let Some(pp) = self.mobile.phone.as_mut() {
+            pp.background_disconnect_min = minutes.min(BG_MAX_MIN);
+            self.mobile.phone_changed = true;
+        }
+    }
+
+    /// Déconnexion après N minutes en arrière-plan (ADR 0006) : QUIT avec le message habituel sur chaque
+    /// connexion ouverte. Elles sont notées pour [`Shell::mobile_background_reconnect`]. Renvoie leur nombre.
+    pub fn mobile_background_disconnect(&mut self, p: &mut dyn ShellPlatform) -> usize {
+        let now = p.now_ms();
+        let statuses: Vec<WinId> = self
+            .client
+            .conns()
+            .into_iter()
+            .filter_map(|c| self.client.conn_info(c))
+            .filter(|i| i.state != ConnState::Disconnected)
+            .map(|i| i.status_window)
+            .collect();
+        for st in &statuses {
+            self.client.disconnect(*st, None, now);
+        }
+        log::info!("déconnexion en arrière-plan : {} connexion(s)", statuses.len());
+        self.mobile.bg_disconnected = statuses.clone();
+        self.after(p);
+        statuses.len()
+    }
+
+    /// Retour au premier plan après une déconnexion en arrière-plan : reconnexion aux mêmes serveurs (`/server`
+    /// dans chaque fenêtre Status restée fermée). Renvoie le nombre de reconnexions.
+    pub fn mobile_background_reconnect(&mut self, p: &mut dyn ShellPlatform) -> usize {
+        let now = p.now_ms();
+        let mut n = 0;
+        for st in std::mem::take(&mut self.mobile.bg_disconnected) {
+            let closed = self.client.window(st).and_then(|w| w.conn).and_then(|c| self.client.conn_info(c)).is_some_and(|c| c.state == ConnState::Disconnected);
+            if closed {
+                self.client.command(st, "/server", now);
+                n += 1;
+            }
+        }
+        self.after(p);
+        n
+    }
+
+    // --- Historique de la saisie ------------------------------------------------------------------------------
+
+    /// Historique du champ natif, comme ↑ / ↓ dans la ligne de saisie du bureau : `older` remonte vers les lignes
+    /// plus anciennes de la fenêtre affichée, sinon redescend jusqu'au brouillon. `current` : texte du champ.
+    /// Renvoie le texte à y mettre (`None` : rien ne change).
+    pub fn mobile_history_step(&mut self, older: bool, current: &str) -> Option<String> {
+        let win = self.mobile_active()?;
+        let hist = &self.client.window(win)?.history;
+        let pos = self.mobile.history.as_ref().filter(|h| h.0 == win).map(|h| h.1);
+        match step_history(hist.len(), pos, older)? {
+            Some(i) => {
+                let line = hist[i].clone();
+                let draft = match self.mobile.history.take() {
+                    Some((w, _, d)) if w == win => d,
+                    _ => current.to_string(),
+                };
+                self.mobile.history = Some((win, i, draft));
+                Some(line)
+            }
+            None => self.mobile.history.take().map(|(_, _, d)| d),
+        }
+    }
+
+    /// Bouton Historique du champ natif : la liste des dernières lignes tapées dans la fenêtre affichée ; la
+    /// ligne choisie revient par [`Shell::take_native_input_text`].
+    pub fn mobile_history_menu(&mut self, p: &mut dyn ShellPlatform) {
+        let lang = self.language();
+        let Some(win) = self.mobile_active() else { return };
+        let Some(w) = self.client.window(win) else { return };
+        let mut items: Vec<MenuItem> =
+            w.history.iter().enumerate().rev().take(HISTORY_MENU_MAX).map(|(i, l)| MenuItem::new(i as u32 + 1, &l.replace('&', "&&"))).collect();
+        if items.is_empty() {
+            items.push(MenuItem::new(0, &t(lang, "menu.empty")).disabled());
+        }
+        let safe = self.mobile_safe();
+        self.mobile.drawer = None;
+        let menu = TouchMenu::new(MenuOrigin::History(win), items, Point::new(safe.x + 4, safe.bottom()), false);
+        self.mobile.menu = Some(menu.with_caption(Some(t(lang, "mobile.history"))));
+        p.request_repaint();
+    }
+
+    /// Texte à mettre dans le champ natif (ligne choisie dans l'historique), une fois.
+    pub fn take_native_input_text(&mut self) -> Option<String> {
+        self.mobile.native_text.take()
+    }
+
+    fn put_input_text(&mut self, win: WinId, text: String) {
+        self.mobile.history = None;
+        if self.mobile.native_input {
+            self.mobile.native_text = Some(text);
+        } else if let Some(v) = self.views.get_mut(&win) {
+            v.editbox.set_text(&text);
+        }
     }
 
     /// Bouton Retour d'Android : ferme le menu, la boîte, le tiroir ouverts. `false` : rien à fermer (la
@@ -831,6 +1342,7 @@ impl Shell {
     }
 
     pub(crate) fn mobile_input(&mut self, input: Input, p: &mut dyn ShellPlatform) {
+        self.res.min_row_h = TOUCH_ROW_H;
         match input {
             Input::MouseDown { pos, button: MouseButton::Left, .. } => self.touch_down(pos, p),
             Input::MouseMove { pos } => self.touch_move(pos, p),
@@ -1343,6 +1855,8 @@ impl Shell {
     // Dessin.
 
     pub(crate) fn mobile_paint(&mut self, canvas: &mut Canvas) {
+        // Listes des boîtes et des fenêtres à liste : lignes plus hautes au toucher.
+        self.res.min_row_h = TOUCH_ROW_H;
         let full = Rect::new(0, 0, self.viewport.w, self.viewport.h);
         canvas.fill(full, self.res.theme.face);
         let active = self.mobile_active();
@@ -1727,6 +2241,41 @@ mod tests {
     }
 
     #[test]
+    fn pas_dans_l_historique() {
+        // Trois lignes : ↑ depuis le brouillon donne la plus récente, puis les plus anciennes, puis s'arrête.
+        assert_eq!(step_history(3, None, true), Some(Some(2)));
+        assert_eq!(step_history(3, Some(2), true), Some(Some(1)));
+        assert_eq!(step_history(3, Some(0), true), None);
+        // ↓ redescend, puis revient au brouillon ; depuis le brouillon, rien.
+        assert_eq!(step_history(3, Some(1), false), Some(Some(2)));
+        assert_eq!(step_history(3, Some(2), false), Some(None));
+        assert_eq!(step_history(3, None, false), None);
+        // Historique vide.
+        assert_eq!(step_history(0, None, true), None);
+        // Position périmée (historique raccourci) : rien.
+        assert_eq!(step_history(1, Some(5), true), None);
+    }
+
+    #[test]
+    fn menu_de_deconnexion_en_arriere_plan() {
+        let lang = Lang::Fr;
+        let v = background_items(lang, 15);
+        let checked: Vec<u32> = v.iter().filter(|i| i.checked).map(|i| i.id).collect();
+        assert_eq!(checked, vec![M_BG_BASE + 15]);
+        assert_eq!(v[0].id, M_BG_BASE, "jamais");
+        assert_eq!(plain(&v[0].label), "Jamais");
+        assert_eq!(v[2].label, "Après 15 minutes");
+        // Une durée hors de la liste : « Autre durée (45 min)… » cochée.
+        let v = background_items(lang, 45);
+        let other = v.iter().find(|i| i.id == M_BG_OTHER).unwrap();
+        assert!(other.checked && other.label.contains("45 min"));
+        assert_eq!(v.iter().filter(|i| i.checked).count(), 1);
+        // Les identifiants restent hors des plages des autres entrées.
+        assert!(!(M_SCALE + 100..M_SCALE + 1000).contains(&(M_BG_BASE + BG_MAX_MIN)));
+        assert!(M_BG_BASE + BG_MAX_MIN < ids::SCRIPT_BASE && M_BG_BASE > ids::WIN_BASE + 100_000);
+    }
+
+    #[test]
     fn dernier_mot() {
         assert_eq!(last_word_start("salut gui"), 6);
         assert_eq!(last_word_start("gui"), 0);
@@ -1745,5 +2294,155 @@ mod tests {
         let r = unzoom_rect(Rect::new(0, 20, 360, 700), 0.5);
         assert_eq!(r, Rect::new(0, 40, 720, 1400));
         assert_eq!(unzoom(Point::new(10, 11), 0.5), Point::new(20, 22));
+    }
+}
+
+/// Essais de la disposition du téléphone avec l'application entière (sans écran ni réseau) : historique de la
+/// saisie, réglages du téléphone dans le menu ⋮, déconnexion en arrière-plan et reconnexion.
+#[cfg(test)]
+mod phone_tests {
+    use std::path::{Path, PathBuf};
+
+    use alpirc_core::settings::{Network, Server};
+    use alpirc_net::{Net, NetEvent};
+    use alpirc_ui::{Cursor, Input, Key, Mods, Platform, Rect};
+
+    use super::*;
+    use crate::{LayoutKind, ShellConfig};
+
+    #[derive(Default)]
+    struct P {
+        now: i64,
+    }
+
+    impl Platform for P {
+        fn clipboard_get(&mut self) -> Option<String> {
+            None
+        }
+        fn clipboard_set(&mut self, _text: &str) {}
+        fn now_ms(&self) -> i64 {
+            self.now
+        }
+        fn set_cursor(&mut self, _c: Cursor) {}
+        fn set_ime_area(&mut self, _rect: Rect) {}
+        fn request_repaint(&mut self) {}
+    }
+
+    impl ShellPlatform for P {
+        fn notify(&mut self, _title: &str, _body: &str) {}
+        fn beep(&mut self) {}
+        fn play_sound(&mut self, _path: &Path) {}
+        fn flash(&mut self) {}
+        fn open_url(&mut self, _url: &str) {}
+        fn set_title(&mut self, _title: &str) {}
+        fn exit(&mut self) {}
+    }
+
+    fn phone(name: &str, p: &mut P) -> Shell {
+        let d: PathBuf = std::env::temp_dir().join(format!("alpirc-mobile-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        p.now = 1_792_260_000_000;
+        let cfg = ShellConfig {
+            settings_path: d.join("settings.toml"),
+            data_dir: d.clone(),
+            layout: LayoutKind::Mobile,
+            utc_offset: 0,
+            locale: Some("fr-FR".into()),
+            now_ms: p.now,
+        };
+        let mut s = Shell::new(cfg, Net::new(Box::new(|_e: NetEvent| {})));
+        s.set_viewport(alpirc_ui::Size::new(360, 800));
+        s.set_native_input(true);
+        s
+    }
+
+    fn status(s: &Shell) -> WinId {
+        s.client.windows().iter().find(|w| w.kind == WinKind::Status).map(|w| w.id).unwrap()
+    }
+
+    #[test]
+    fn historique_du_champ_natif() {
+        let mut p = P::default();
+        let mut s = phone("hist", &mut p);
+        let st = status(&s);
+        s.activate(st, p.now);
+        for l in ["/echo un", "/echo deux", "/echo trois"] {
+            s.mobile_submit(l, &mut p);
+        }
+        // ↑ depuis le brouillon : la plus récente, puis les plus anciennes ; la plus ancienne reste.
+        assert_eq!(s.mobile_history_step(true, "brouil").as_deref(), Some("/echo trois"));
+        assert_eq!(s.mobile_history_step(true, "/echo trois").as_deref(), Some("/echo deux"));
+        assert_eq!(s.mobile_history_step(true, "/echo deux").as_deref(), Some("/echo un"));
+        assert_eq!(s.mobile_history_step(true, "/echo un"), None);
+        // ↓ redescend jusqu'au brouillon gardé.
+        assert_eq!(s.mobile_history_step(false, "/echo un").as_deref(), Some("/echo deux"));
+        assert_eq!(s.mobile_history_step(false, "").as_deref(), Some("/echo trois"));
+        assert_eq!(s.mobile_history_step(false, "").as_deref(), Some("brouil"));
+        assert_eq!(s.mobile_history_step(false, "brouil"), None);
+        // La liste (bouton Historique) : la plus récente d'abord ; le choix revient pour le champ natif.
+        s.mobile_history_menu(&mut p);
+        let first = s.mobile.menu.as_ref().unwrap().level().items[0].label.clone();
+        assert_eq!(first, "/echo trois");
+        s.menu_tap(Some(1), &mut p);
+        assert_eq!(s.take_native_input_text().as_deref(), Some("/echo deux"));
+        assert_eq!(s.take_native_input_text(), None, "une seule fois");
+        assert!(s.mobile.menu.is_none());
+    }
+
+    #[test]
+    fn reglages_du_telephone_dans_le_menu() {
+        let mut p = P::default();
+        let mut s = phone("prefs", &mut p);
+        assert_eq!(s.take_phone_prefs_change(), None);
+        s.set_phone_prefs(0, true);
+        // La section Téléphone est dans le menu ⋮.
+        s.open_main_menu(&p);
+        let labels: Vec<String> = s.mobile.menu.as_ref().unwrap().level().items.iter().map(|i| plain(&i.label)).collect();
+        assert!(labels.iter().any(|l| l == "Téléphone"), "{labels:?}");
+        s.mobile.menu = None;
+        s.main_menu_action(M_BG_BASE + 15, &mut p);
+        assert_eq!(s.take_phone_prefs_change(), Some((15, true)));
+        assert_eq!(s.take_phone_prefs_change(), None);
+        s.main_menu_action(M_VIBRATE, &mut p);
+        assert_eq!(s.take_phone_prefs_change(), Some((15, false)));
+        // « Autre durée… » : une valeur absurde garde la boîte ouverte ; 45 la ferme et devient le réglage.
+        s.main_menu_action(M_BG_OTHER, &mut p);
+        assert!(!s.modals.is_empty());
+        s.modals.dialogs.last_mut().unwrap().1.set_text(2, "99999");
+        s.dialog_input(&Input::key(Key::Enter, Mods::NONE), (0, 0), &mut p);
+        assert!(!s.modals.is_empty(), "plus de 1440 minutes : refusé");
+        assert_eq!(s.take_phone_prefs_change(), None);
+        s.modals.dialogs.last_mut().unwrap().1.set_text(2, "45");
+        s.dialog_input(&Input::key(Key::Enter, Mods::NONE), (0, 0), &mut p);
+        assert!(s.modals.is_empty());
+        assert_eq!(s.take_phone_prefs_change(), Some((45, false)));
+    }
+
+    #[test]
+    fn deconnexion_en_arriere_plan_puis_reconnexion() {
+        let mut p = P::default();
+        let mut s = phone("bg", &mut p);
+        s.client.settings_mut().networks.insert(0, Network::new("Local", vec![Server::new("127.0.0.1", 1, false)]));
+        let st = status(&s);
+        s.client.connect(st, "Local", None, p.now);
+        s.tick(&mut p);
+        let conn = s.client.window(st).and_then(|w| w.conn).unwrap();
+        let a: std::net::SocketAddr = "127.0.0.1:1".parse().unwrap();
+        s.on_net(NetEvent::Connected { conn, peer: a, local: a, tls: None }, &mut p);
+        s.on_net(NetEvent::Line { conn, bytes: b":srv 001 Guiwald :Welcome".to_vec() }, &mut p);
+        assert_eq!(s.client.conn_info(conn).unwrap().state, ConnState::Connected);
+        assert_eq!(s.mobile_background_disconnect(&mut p), 1);
+        assert_ne!(s.client.conn_info(conn).unwrap().state, ConnState::Connected);
+        s.on_net(NetEvent::Closed { conn, error: None }, &mut p);
+        assert_eq!(s.client.conn_info(conn).unwrap().state, ConnState::Disconnected);
+        // Retour au premier plan : reconnexion au même serveur, une seule fois.
+        assert_eq!(s.mobile_background_reconnect(&mut p), 1);
+        assert_ne!(s.client.conn_info(conn).unwrap().state, ConnState::Disconnected);
+        assert_eq!(s.mobile_background_reconnect(&mut p), 0);
+        // Rien d'ouvert : rien à fermer.
+        let mut q = P::default();
+        let mut idle = phone("bg-idle", &mut q);
+        assert_eq!(idle.mobile_background_disconnect(&mut q), 0);
     }
 }

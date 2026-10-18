@@ -331,6 +331,33 @@ fn info_plist(v: &str, build: u32) -> String {
     )
 }
 
+/// Architectures d'un binaire Mach-O : simple (64 bits) ou universel (« fat », fait par `lipo`) ; `None` si ce n'est
+/// pas un Mach-O (un binaire Linux, par exemple).
+fn macho_archs(bin: &[u8]) -> Option<Vec<String>> {
+    let be = |o: usize| bin.get(o..o + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
+    let le = |o: usize| bin.get(o..o + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    let name = |cpu: u32| match cpu {
+        0x0100_000c => "arm64".to_string(),
+        0x0100_0007 => "x86_64".to_string(),
+        other => format!("cpu {other:#x}"),
+    };
+    match be(0)? {
+        // FAT_MAGIC (entrées de 20 octets) et FAT_MAGIC_64 (32 octets), en gros-boutiste.
+        m @ (0xcafe_babe | 0xcafe_babf) => {
+            let n = be(4)? as usize;
+            let size = if m == 0xcafe_babe { 20 } else { 32 };
+            // 0xcafebabe est aussi la signature des classes Java : un nombre d'architectures absurde trahit ces fichiers.
+            if n == 0 || n > 16 {
+                return None;
+            }
+            (0..n).map(|i| be(8 + i * size).map(name)).collect()
+        }
+        // MH_MAGIC_64 lu en gros-boutiste (le fichier est en petit-boutiste).
+        0xcffa_edfe => Some(vec![name(le(4)?)]),
+        _ => None,
+    }
+}
+
 /// Construit `AlpIRC.app` (et, sur macOS, `AlpIRC-X.Y.Z.dmg`) à partir d'un binaire (universel ou non).
 fn bundle_mac(binary: Option<PathBuf>, out_dir: Option<PathBuf>) -> Res {
     let v = version()?;
@@ -357,6 +384,12 @@ fn bundle_mac(binary: Option<PathBuf>, out_dir: Option<PathBuf>) -> Res {
     std::fs::create_dir_all(contents.join("Resources"))?;
     let exe = contents.join("MacOS/alpirc");
     std::fs::copy(&binary, &exe)?;
+    // Pour le journal de la CI : un paquet universel doit montrer arm64 et x86_64.
+    match macho_archs(&std::fs::read(&binary)?) {
+        Some(a) if a.len() > 1 => println!("binaire universel : {}", a.join(" + ")),
+        Some(a) => println!("binaire : {} seulement", a.join("")),
+        None => eprintln!("attention : {} n'est pas un binaire macOS (Mach-O)", binary.display()),
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -457,6 +490,23 @@ mod tests {
         ] {
             assert!(p.contains(k), "{k}");
         }
+    }
+
+    #[test]
+    fn architectures_mach_o() {
+        let mut thin = vec![0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01];
+        thin.resize(64, 0);
+        assert_eq!(macho_archs(&thin), Some(vec!["arm64".to_string()]));
+        // Universel (lipo) : en-tête gros-boutiste, une entrée de 20 octets par architecture.
+        let mut fat = vec![0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 2];
+        for cpu in [0x0100_0007u32, 0x0100_000c] {
+            fat.extend_from_slice(&cpu.to_be_bytes());
+            fat.extend_from_slice(&[0; 16]);
+        }
+        assert_eq!(macho_archs(&fat), Some(vec!["x86_64".to_string(), "arm64".to_string()]));
+        assert_eq!(macho_archs(b"\x7fELF\x02\x01\x01\x00"), None);
+        assert_eq!(macho_archs(&[0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 52]), None, "classe Java");
+        assert_eq!(macho_archs(&fat[..20]), None, "tronqué");
     }
 
     #[test]

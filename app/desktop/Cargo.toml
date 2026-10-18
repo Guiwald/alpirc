@@ -23,11 +23,19 @@ softbuffer = "0.4"
 directories = "6"
 sys-locale = "0.3"
 arboard = { version = "3", default-features = false }
+# Sons (ADR 0003) : décodage en Rust pur (wav, mp3, ogg/vorbis, flac) et sortie par cpal (CoreAudio sur Mac, ALSA
+# sous Linux, liés au système ; rien à compiler en C).
+cpal = "0.18"
+symphonia = { version = "0.5.5", default-features = false, features = ["wav", "pcm", "adpcm", "mp3", "ogg", "vorbis", "flac"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 muda = "0.21"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSGraphics"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSGraphics", "NSResponder", "NSRunningApplication"] }
+# Liens irc:// (Apple Event « GURL »), notifications natives (UNUserNotificationCenter).
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSAppleEventDescriptor", "NSAppleEventManager", "NSBundle", "NSError", "NSNotification", "NSObject", "NSString"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationTrigger", "UNUserNotificationCenter"] }
+block2 = "0.6"
 # Choix de fichiers (envoi DCC) : NSOpenPanel.
 rfd = "0.17"
 
@@ -35,3 +43,8 @@ rfd = "0.17"
 notify-rust = { version = "4", default-features = false, features = ["z"] }
 # Choix de fichiers (envoi DCC) par le portail du bureau (xdg-desktop-portal, D-Bus en Rust pur, sans GTK).
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Choix de fichiers (envoi DCC) : boîtes communes de Windows (windows-sys, rien à compiler en C). Windows n'est pas
+# une cible de la 1.0 (ADR 0002), mais le code y reste portable.
+rfd = "0.17"

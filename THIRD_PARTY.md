@@ -24,6 +24,12 @@ Police des menus et des boîtes de dialogue (dans l'esprit de MS Sans Serif) : `
 Les icônes d'AlpIRC (application, barre d'outils, fenêtres) sont des œuvres originales en pixel-art, dessinées
 pour AlpIRC (`assets/icons/src/draw_icons.py`) ; elles ne reprennent ni le logo ni les icônes de mIRC.
 
+## Sons
+
+Les sons des événements (`assets/sounds/*.wav`) sont des œuvres originales, calculées note par note par
+`assets/sounds/src/make_sounds.py` (synthèse : cloches, piano électrique, marimba, bruit filtré à graine fixe) ;
+aucun enregistrement ni échantillon n'est repris d'ailleurs, ni de mIRC, ni de Windows.
+
 ## Valeurs de protocole
 
 Les palettes de couleurs de mIRC (16 couleurs, puis 99) et les codes de mise en forme (Ctrl+K, Ctrl+B…) sont des
@@ -43,8 +49,10 @@ cargo xtask licenses > licences.md
 
 (Elle suit `Cargo.lock` : dépendances normales et de compilation, toutes plateformes confondues.)
 
-Une seule crate est sous licence à réciprocité par fichier : `option-ext` (MPL-2.0, tirée par `directories`),
-utilisée sans modification ; son code source est celui publié sur crates.io. Quelques crates proposent une licence
+Deux familles de crates sont sous licence à réciprocité par fichier (MPL-2.0), utilisées sans modification ; leur
+code source est celui publié sur crates.io : `option-ext` (tirée par `directories`) et, dans l'appli de bureau, le
+décodeur de sons `symphonia` et ses sous-crates (`symphonia-core`, `symphonia-bundle-mp3`, `symphonia-codec-vorbis`…,
+lecture des fichiers wav, mp3, ogg et flac). Quelques crates proposent une licence
 GPL/LGPL **au choix** avec MIT ou Apache-2.0 (`r-efi`, `self_cell`) : AlpIRC les utilise sous MIT/Apache-2.0.
 
 ## Marques

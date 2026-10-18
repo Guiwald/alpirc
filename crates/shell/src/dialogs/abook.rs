@@ -1,12 +1,11 @@
 //! Carnet d'adresses (Alt+B) : onglets Notify (amis dont on suit l'arrivée), Ignore (masques ignorés, par
 //! sorte de message) et Control (auto-op, auto-voice, protection). Ajouter et modifier passent par la petite
 //! boîte de saisie ; OK écrit le carnet dans les réglages et resynchronise la liste Notify des connexions
-//! ouvertes (`/notify` et `/notify -r`, qui envoient `MONITOR` ou relancent `ISON`).
+//! ouvertes sans rien afficher (`Client::notify_changed` : `MONITOR` ou `ISON`).
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use alpirc_core::ConnState;
 use alpirc_core::i18n::Lang;
 use alpirc_core::settings::{AddressBook as Book, ControlEntry, ControlKind as CtlKind, IgnoreEntry, NotifyEntry};
 use alpirc_ui::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogView};
@@ -263,19 +262,11 @@ impl AddressBook {
         if book == old {
             return;
         }
-        let has = |l: &[NotifyEntry], n: &str| l.iter().any(|e| e.nick.eq_ignore_ascii_case(n));
-        let removed: Vec<String> = old.notify.iter().filter(|e| !has(&book.notify, &e.nick)).map(|e| e.nick.clone()).collect();
-        let added: Vec<String> = book.notify.iter().filter(|e| !has(&old.notify, &e.nick)).map(|e| e.nick.clone()).collect();
+        let notify_changed = book.notify != old.notify;
         cx.client.settings_mut().address_book = book;
         cx.actions.push(Action::SettingsChanged);
-        let connected = cx.client.conns().into_iter().any(|c| cx.client.conn_info(c).is_some_and(|i| i.state == ConnState::Connected));
-        if let (true, Some(win)) = (connected, status_window(cx.client)) {
-            for n in removed {
-                cx.actions.push(Action::Command(win, format!("/notify -r {n}")));
-            }
-            for n in added {
-                cx.actions.push(Action::Command(win, format!("/notify {n}")));
-            }
+        if notify_changed {
+            cx.client.notify_changed(cx.now);
         }
     }
 }
@@ -423,8 +414,8 @@ mod tests {
         });
         let (o, actions) = k.send(&mut ab, &mut v, DialogMsg::Ok(OK));
         assert_eq!(o, Outcome::Close);
-        let cmds: Vec<String> = actions.iter().filter_map(|a| if let Action::Command(_, c) = a { Some(c.clone()) } else { None }).collect();
-        assert_eq!(cmds, vec!["/notify -r Zaza", "/notify Elisa"]);
+        // Plus de `/notify` (et de lignes « ajouté »/« retiré ») : resynchronisation silencieuse.
+        assert!(!actions.iter().any(|a| matches!(a, Action::Command(..))));
         let b = &k.client.settings().address_book;
         assert_eq!(b.notify.len(), 1);
         assert_eq!((b.notify[0].nick.as_str(), b.notify[0].note.as_str()), ("Elisa", "de Lyon"));

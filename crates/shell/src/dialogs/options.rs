@@ -6,15 +6,22 @@
 //! parties qu'elle montre (le reste — couleurs, DCC, politiques STS apprises… — n'est pas touché). Les réseaux
 //! et les mots surlignés sont modifiés par des boîtes filles ([`NetworkEditor`], [`Form`]) à travers un état
 //! partagé.
+//!
+//! Affichage : thème (fournis et ceux de l'utilisateur), police des discussions avec sa taille et un aperçu (le
+//! rôle [`FontKind::Preview`], que l'appli règle d'après `display.font_preview` sans toucher aux fenêtres). Sons :
+//! un choix par événement (aucun son, bip, fichier), tout couper, demandes de sons.
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Mutex;
 
 use alpirc_core::i18n::Lang;
-use alpirc_core::settings::{DccChatAction, DccExists, DccSendAction, HighlightWord, Network, Server, Settings};
+use alpirc_core::settings::{
+    DccChatAction, DccExists, DccSendAction, EventSound, HighlightWord, Network, Server, Settings, SoundEvent, SoundPlay,
+};
 use alpirc_ui::dialog::Widget;
 use alpirc_ui::widgets::TreeNode;
-use alpirc_ui::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogView};
+use alpirc_ui::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogView, FontKind, FontSpec, Fonts, TextStyle};
 
 use super::form::{Field, Form, Val};
 use super::network::NetworkEditor;
@@ -45,6 +52,7 @@ const P_DISPLAY: u32 = 10;
 const P_NOTIF: u32 = 11;
 const P_SCRIPTS: u32 = 12;
 const P_DCC: u32 = 13;
+const P_SOUNDS: u32 = 14;
 
 // Connexion.
 const NET: u32 = 103;
@@ -80,14 +88,21 @@ const QUITMSG: u32 = 621;
 // Journaux.
 const FOLDER: u32 = 807;
 // Affichage.
-const CLASSIC: u32 = 1002;
-const DARK: u32 = 1003;
+const THEME: u32 = 1003;
 const COLORS_BTN: u32 = 1004;
-const F16: u32 = 1006;
-const F32: u32 = 1007;
-const F48: u32 = 1008;
+const FONTS: u32 = 1006;
+const FONT_SIZE: u32 = 1008;
+const PREVIEW: u32 = 1018;
 const SWB: u32 = 1011;
 const LANG: u32 = 1016;
+// Sons.
+const SND_EVENTS: u32 = 1403;
+const SND_NONE: u32 = 1404;
+const SND_BEEP: u32 = 1405;
+const SND_FILE: u32 = 1406;
+const SND_PATH: u32 = 1407;
+const SND_BROWSE: u32 = 1408;
+const SND_TEST: u32 = 1409;
 // Scripts.
 const EDITOR_BTN: u32 = 1204;
 // DCC.
@@ -190,6 +205,9 @@ const CHECKS: &[CheckDef] = &[
     // DCC.
     ck!(1310, "opt.dcc.passive", dcc.passive),
     ck!(1311, "opt.dcc.passive_chat", dcc.passive_chat),
+    // Sons.
+    ck!(1401, "opt.snd.mute", sounds.mute),
+    ck!(1411, "opt.snd.accept", sounds.accept_requests),
 ];
 
 const NUMS: &[NumDef] = &[
@@ -201,6 +219,7 @@ const NUMS: &[NumDef] = &[
     nm!(424, u32, irc.confirm_paste_lines),
     nm!(427, usize, irc.max_lines),
     nm!(429, u64, irc.auto_op_delay_ms),
+    nm!(623, u32, away.auto_away_minutes),
     nm!(704, u32, flood.burst),
     nm!(707, u64, flood.rate_ms),
     nm!(711, u32, flood.ctcp_flood_limit),
@@ -252,6 +271,64 @@ pub struct Options {
     base: Settings,
     /// Thème vu dans les réglages (la boîte Couleurs peut le changer pendant que celle-ci est ouverte).
     seen_theme: String,
+    /// Thèmes proposés (fournis, puis ceux de l'utilisateur), tels que la liste les montre.
+    themes: Vec<String>,
+    /// Polices proposées : (nom des réglages, police pixel).
+    fonts: Vec<(String, bool)>,
+    /// Police et taille montrées à l'ouverture (elles ne sont écrites que si on les change).
+    font_shown: (String, u32),
+    /// La liste des tailles est celle d'une police pixel (multiples de 16).
+    sizes_pixel: bool,
+    /// Un aperçu de police est en cours (`display.font_preview`) : à retirer en fermant.
+    previewing: bool,
+    /// Sons des événements, dans l'ordre de [`SoundEvent::ALL`], et l'événement choisi dans la liste.
+    sounds: Vec<EventSound>,
+    sound_sel: usize,
+    /// Dossier des sons (pour la note des demandes de sons et le choix d'un fichier).
+    sounds_dir: PathBuf,
+}
+
+/// Polices intégrées, sous leur nom dans les réglages : Fixedsys Excelsior (par défaut) et Pixel Operator.
+pub(crate) const BUILTIN_FONTS: [&str; 2] = ["Fixedsys Excelsior", "Pixel Operator"];
+
+/// Tailles proposées : polices pixel (nettes aux multiples de 16) et polices vectorielles.
+const PIXEL_SIZES: [u32; 4] = [16, 32, 48, 64];
+const VECTOR_SIZES: [u32; 16] = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36];
+
+/// Polices proposées (nom, police pixel), tenues à jour par l'appli (`Shell::apply_settings`) : la boîte n'a pas
+/// accès aux polices elle-même.
+static FONT_CHOICES: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
+
+/// Recense les polices proposées : les intégrées, puis les polices à chasse fixe du système.
+pub(crate) fn set_font_choices(fonts: &Fonts) {
+    let mut v: Vec<(String, bool)> = BUILTIN_FONTS.iter().map(|n| (n.to_string(), true)).collect();
+    v.extend(fonts.monospace_families().into_iter().map(|n| {
+        let pixel = fonts.is_pixel_family(&n);
+        (n, pixel)
+    }));
+    if let Ok(mut g) = FONT_CHOICES.lock() {
+        *g = v;
+    }
+}
+
+fn font_choices() -> Vec<(String, bool)> {
+    let v = FONT_CHOICES.lock().map(|g| g.clone()).unwrap_or_default();
+    if v.is_empty() { BUILTIN_FONTS.iter().map(|n| (n.to_string(), true)).collect() } else { v }
+}
+
+/// Police des discussions d'après les réglages : la famille choisie à cette taille. Une police inconnue
+/// (désinstallée depuis) laisse place à Fixedsys Excelsior à la même taille.
+pub(crate) fn chat_font_spec(fonts: &Fonts, name: &str, size: u32) -> FontSpec {
+    let (chat, ui) = fonts.builtin_families();
+    let name = name.trim();
+    let family = if name.is_empty() || name.eq_ignore_ascii_case(BUILTIN_FONTS[0]) {
+        chat.clone()
+    } else if name.eq_ignore_ascii_case(BUILTIN_FONTS[1]) {
+        ui
+    } else {
+        name.to_string()
+    };
+    fonts.font_spec(&family, size).or_else(|| fonts.font_spec(&chat, size)).unwrap_or_else(|| fonts.spec(FontKind::Chat))
 }
 
 /// Page d'après son nom (`/options display`).
@@ -269,6 +346,7 @@ fn page_of(name: &str) -> u32 {
         "notifications" | "notify" => P_NOTIF,
         "scripts" | "script" => P_SCRIPTS,
         "dcc" => P_DCC,
+        "sounds" | "sound" | "sons" => P_SOUNDS,
         _ => P_CONNECT,
     }
 }
@@ -292,7 +370,176 @@ impl Options {
         let base = client.settings().clone();
         let networks = base.networks.iter().map(|n| NetEntry { origin: Some(n.name.clone()), net: n.clone() }).collect();
         let st = Shared { networks, words: base.highlight.words.clone(), version: 0 };
-        Options { page: page.map(page_of).unwrap_or(P_CONNECT), st: Rc::new(RefCell::new(st)), seen: 0, seen_theme: base.display.theme.clone(), base }
+        let mut fonts = font_choices();
+        if !fonts.iter().any(|(n, _)| n.eq_ignore_ascii_case(&base.display.chat_font)) && !base.display.chat_font.trim().is_empty() {
+            // Police choisie mais absente (désinstallée) : gardée dans la liste.
+            fonts.push((base.display.chat_font.clone(), false));
+        }
+        Options {
+            page: page.map(page_of).unwrap_or(P_CONNECT),
+            st: Rc::new(RefCell::new(st)),
+            seen: 0,
+            seen_theme: base.display.theme.clone(),
+            themes: base.display.theme_names(),
+            fonts,
+            font_shown: (String::new(), 0),
+            sizes_pixel: true,
+            previewing: false,
+            sounds: SoundEvent::ALL.iter().map(|e| base.sounds.get(*e).clone()).collect(),
+            sound_sel: 0,
+            sounds_dir: client.sounds_dir(),
+            base,
+        }
+    }
+
+    // --- Affichage ---
+
+    /// Nom affiché d'un thème : les thèmes fournis traduits, ceux de l'utilisateur tels quels.
+    fn theme_label(lang: Lang, name: &str) -> String {
+        match alpirc_core::settings::theme(name) {
+            Some(th) => plain(&t(lang, &format!("col.scheme.{}", th.name))),
+            None => name.to_string(),
+        }
+    }
+
+    fn fill_themes(&mut self, view: &mut DialogView, lang: Lang, d: &alpirc_core::settings::DisplayOptions, select: &str) {
+        self.themes = d.theme_names();
+        let labels: Vec<String> = self.themes.iter().map(|n| Options::theme_label(lang, n)).collect();
+        view.set_items(THEME, &labels);
+        let i = self.themes.iter().position(|n| n.eq_ignore_ascii_case(select)).unwrap_or(0);
+        select_row(view, THEME, Some(i));
+    }
+
+    /// Police choisie dans la liste : (nom, police pixel).
+    fn font_sel(&self, view: &DialogView) -> (String, bool) {
+        sel(view, FONTS).and_then(|i| self.fonts.get(i)).cloned().unwrap_or_else(|| (BUILTIN_FONTS[0].to_string(), true))
+    }
+
+    /// Remplit la liste des tailles pour la police choisie, en gardant la plus proche de `size`.
+    fn fill_sizes(&mut self, view: &mut DialogView, size: u32) {
+        let (_, pixel) = self.font_sel(view);
+        self.sizes_pixel = pixel;
+        let mut sizes: Vec<u32> = if pixel { PIXEL_SIZES.to_vec() } else { VECTOR_SIZES.to_vec() };
+        if !pixel && !sizes.contains(&size) && (6..=96).contains(&size) {
+            sizes.push(size);
+            sizes.sort_unstable();
+        }
+        let items: Vec<String> = sizes.iter().map(u32::to_string).collect();
+        view.set_items(FONT_SIZE, &items);
+        let i = sizes.iter().enumerate().min_by_key(|(_, s)| (**s as i64 - size as i64).abs()).map(|(i, _)| i);
+        select_row(view, FONT_SIZE, i);
+    }
+
+    fn size_sel(&self, view: &DialogView) -> u32 {
+        sel(view, FONT_SIZE).and_then(|i| view.items(FONT_SIZE).get(i).and_then(|s| s.parse().ok())).unwrap_or(16)
+    }
+
+    /// Montre la police choisie dans l'aperçu : l'appli règle le rôle `Preview` d'après `display.font_preview`.
+    fn preview_font(&mut self, view: &DialogView, cx: &mut Cx) {
+        let (name, _) = self.font_sel(view);
+        let p = Some((name, self.size_sel(view)));
+        let d = &mut cx.client.settings_mut().display;
+        if d.font_preview != p {
+            d.font_preview = p;
+            self.previewing = true;
+            cx.actions.push(Action::SettingsChanged);
+        }
+    }
+
+    /// Retire l'aperçu en cours (fermeture de la boîte).
+    fn end_preview(&mut self, cx: &mut Cx) {
+        if self.previewing {
+            self.previewing = false;
+            if cx.client.settings_mut().display.font_preview.take().is_some() {
+                cx.actions.push(Action::SettingsChanged);
+            }
+        }
+    }
+
+    /// Le message a-t-il pu changer un réglage (pour activer Appliquer) ? Pas les boutons de la boîte, l'arbre des
+    /// pages, le choix d'une ligne à modifier ni les boutons qui ouvrent une autre boîte ou font écouter un son.
+    fn may_change(msg: &DialogMsg) -> bool {
+        let id = match msg {
+            DialogMsg::Changed(id) | DialogMsg::Clicked(id) | DialogMsg::SelectionChanged(id) => *id,
+            _ => return false,
+        };
+        !matches!(
+            id,
+            OK | CANCEL
+                | APPLY
+                | TREE
+                | NET
+                | SRV
+                | NEWWIN
+                | CONNECT_BTN
+                | NETS
+                | NADD
+                | NEDIT
+                | WORDS
+                | WADD
+                | WEDIT
+                | COLORS_BTN
+                | EDITOR_BTN
+                | SND_EVENTS
+                | SND_BROWSE
+                | SND_TEST
+        )
+    }
+
+    // --- Sons ---
+
+    /// Texte de la colonne « Son » d'un événement.
+    fn sound_cell(lang: Lang, s: &EventSound) -> String {
+        match s.play {
+            SoundPlay::None => t(lang, "opt.snd.cell.none"),
+            SoundPlay::Beep => t(lang, "opt.snd.cell.beep"),
+            SoundPlay::File => s.file.clone(),
+        }
+    }
+
+    fn fill_sound_list(&self, view: &mut DialogView, lang: Lang) {
+        let rows: Vec<String> = SoundEvent::ALL
+            .iter()
+            .zip(&self.sounds)
+            .map(|(e, s)| row(&[plain(&t(lang, &format!("opt.snd.ev.{}", e.name()))), Options::sound_cell(lang, s)]))
+            .collect();
+        view.set_items(SND_EVENTS, &rows);
+        select_row(view, SND_EVENTS, Some(self.sound_sel));
+    }
+
+    /// Montre le choix de l'événement sélectionné.
+    fn show_sound(&self, view: &mut DialogView) {
+        let s = &self.sounds[self.sound_sel];
+        let id = match s.play {
+            SoundPlay::None => SND_NONE,
+            SoundPlay::Beep => SND_BEEP,
+            SoundPlay::File => SND_FILE,
+        };
+        view.set_checked(id, true);
+        view.set_text(SND_PATH, &s.file);
+        self.update_sound_buttons(view);
+    }
+
+    fn update_sound_buttons(&self, view: &mut DialogView) {
+        let s = &self.sounds[self.sound_sel];
+        view.set_enabled(SND_PATH, s.play == SoundPlay::File);
+        view.set_enabled(SND_TEST, s.play != SoundPlay::None);
+    }
+
+    /// Lit le choix affiché dans l'événement sélectionné et met sa ligne à jour.
+    fn store_sound(&mut self, view: &mut DialogView, lang: Lang) {
+        let play = if view.checked(SND_FILE) {
+            SoundPlay::File
+        } else if view.checked(SND_BEEP) {
+            SoundPlay::Beep
+        } else {
+            SoundPlay::None
+        };
+        let s = &mut self.sounds[self.sound_sel];
+        s.play = play;
+        s.file = text_of(view, SND_PATH).trim().to_string();
+        self.fill_sound_list(view, lang);
+        self.update_sound_buttons(view);
     }
 
     fn show_page(&mut self, view: &mut DialogView, page: u32) {
@@ -473,7 +720,7 @@ impl Options {
 
     // --- Lecture et écriture des réglages ---
 
-    fn load(&self, view: &mut DialogView, s: &Settings) {
+    fn load(&mut self, view: &mut DialogView, s: &Settings) {
         for c in CHECKS {
             view.set_checked(c.id, (c.get)(s));
         }
@@ -493,18 +740,13 @@ impl Options {
         view.set_text(AWAY, &s.away.default_message);
         view.set_text(QUITMSG, &s.identity.quit_message);
         view.set_text(FOLDER, &s.logging.folder.as_ref().map(|p| p.display().to_string()).unwrap_or_default());
-        view.set_checked(if s.display.theme == "dark" { DARK } else { CLASSIC }, true);
-        let fs = s.display.chat_font_size;
-        view.set_checked(
-            if fs >= 48 {
-                F48
-            } else if fs >= 32 {
-                F32
-            } else {
-                F16
-            },
-            true,
-        );
+        let ti = self.themes.iter().position(|n| n.eq_ignore_ascii_case(&s.display.theme)).unwrap_or(0);
+        view.set_selection(THEME, &[ti]);
+        // Police : la liste, puis les tailles qui lui vont.
+        let fi = self.fonts.iter().position(|(n, _)| n.eq_ignore_ascii_case(&s.display.chat_font)).unwrap_or(0);
+        view.set_selection(FONTS, &[fi]);
+        self.fill_sizes(view, s.display.chat_font_size);
+        self.font_shown = (self.font_sel(view).0, self.size_sel(view));
         view.set_selection(SWB, &[SWITCHBAR.iter().position(|x| *x == crate::switchbar_pos(&s.display.switchbar)).unwrap_or(0)]);
         let li = LANGS.iter().position(|(c, _)| c.is_some_and(|c| s.language.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(c)))).unwrap_or(0);
         view.set_selection(LANG, &[li]);
@@ -559,25 +801,21 @@ impl Options {
         s.ctcp.userinfo_text = opt_text(view, USERINFO);
         s.away.default_message = keep(opt_text(view, AWAY), &s.away.default_message);
         s.logging.folder = opt_text(view, FOLDER).map(PathBuf::from);
-        s.display.theme = if view.checked(DARK) { "dark".into() } else { "classic".into() };
-        // La taille n'est changée que si l'on a choisi un autre bouton que celui de départ (le menu permet 64).
-        let fs = if view.checked(F48) {
-            48
-        } else if view.checked(F32) {
-            32
-        } else {
-            16
-        };
-        let old = s.display.chat_font_size;
-        let old_bucket = if old >= 48 {
-            48
-        } else if old >= 32 {
-            32
-        } else {
-            16
-        };
-        if fs != old_bucket {
-            s.display.chat_font_size = fs;
+        // Un autre thème choisi : son nom, sa palette et ses couleurs ; le même : les couleurs (peut-être retouchées
+        // dans la boîte Couleurs) restent.
+        if let Some(name) = sel(view, THEME).and_then(|i| self.themes.get(i))
+            && !name.eq_ignore_ascii_case(&live.display.theme)
+        {
+            s.display.select_theme(name);
+        }
+        // Police et taille : changées seulement si on les a touchées (le menu Affichage change aussi la taille).
+        let font = (self.font_sel(view).0, self.size_sel(view));
+        if font != self.font_shown {
+            (s.display.chat_font, s.display.chat_font_size) = font;
+        }
+        s.display.font_preview = None;
+        for (e, snd) in SoundEvent::ALL.iter().zip(&self.sounds) {
+            *s.sounds.get_mut(*e) = snd.clone();
         }
         s.display.switchbar = SWITCHBAR[sel(view, SWB).unwrap_or(0).min(4)].to_string();
         s.language = LANGS[sel(view, LANG).unwrap_or(0).min(LANGS.len() - 1)].0.map(str::to_string);
@@ -780,13 +1018,14 @@ impl DialogCtl for Options {
             c.push(field_label(lid, ix, y, 130, &tr(key)));
             c.push(edit(id, (ix + 136, y, cw - 136, EDIT_H), ""));
         }
-        c.push(group(615, (gx, 216, PW, 80), &tr("opt.away.group")));
+        c.push(group(615, (gx, 216, PW, 108), &tr("opt.away.group")));
         c.push(field_label(616, ix, 236, 130, &tr("opt.away.message")));
         c.push(edit(AWAY, (ix + 136, 236, cw - 136, EDIT_H), ""));
         c.push(ck(618, (ix, 266, cw, CHECK_H)));
-        c.push(group(619, (gx, 304, PW, 56), &tr("opt.quit.group")));
-        c.push(field_label(620, ix, 324, 130, &tr("opt.quit.message")));
-        c.push(edit(QUITMSG, (ix + 136, 324, cw - 136, EDIT_H), ""));
+        num_row(&mut c, 622, 623, 292, &tr("opt.away.auto"), Some(&tr("opt.unit.minutes_never")), 130);
+        c.push(group(619, (gx, 332, PW, 56), &tr("opt.quit.group")));
+        c.push(field_label(620, ix, 352, 130, &tr("opt.quit.message")));
+        c.push(edit(QUITMSG, (ix + 136, 352, cw - 136, EDIT_H), ""));
 
         // 7. Anti-flood.
         c.push(group(701, (gx, MARGIN, PW, 112), &tr("opt.flood.group")));
@@ -817,24 +1056,31 @@ impl DialogCtl for Options {
 
         // 10. Affichage.
         let half = (PW - 8) / 2;
-        c.push(group(1001, (gx, MARGIN, half, 96), &tr("opt.disp.theme")));
-        c.push(radio(CLASSIC, (ix, 28, half - 24, CHECK_H), &tr("opt.disp.classic")));
-        c.push(radio(DARK, (ix, 50, half - 24, CHECK_H), &tr("opt.disp.dark")));
-        c.push(button(COLORS_BTN, (ix + 110, 36, half - 134, BTN_H), &tr("opt.disp.colors")));
-        c.push(group(1005, (gx + half + 8, MARGIN, half, 96), &tr("opt.disp.font")));
-        c.push(radio(F16, (gx + half + 20, 28, half - 24, CHECK_H), &tr("opt.disp.font_normal")));
-        c.push(radio(F32, (gx + half + 20, 50, half - 24, CHECK_H), &tr("opt.disp.font_large")));
-        c.push(radio(F48, (gx + half + 20, 72, half - 24, CHECK_H), &tr("opt.disp.font_huge")));
-        c.push(group(1009, (gx, 112, PW, 124), &tr("opt.disp.window")));
-        c.push(field_label(1010, ix, 132, 110, &tr("opt.disp.switchbar")));
+        c.push(group(1001, (gx, MARGIN, PW, 52), &tr("opt.disp.theme")));
+        c.push(field_label(1002, ix, 28, 60, &tr("opt.disp.theme_label")));
+        let themes: Vec<String> = self.themes.iter().map(|n| Options::theme_label(lang, n)).collect();
+        c.push(drop_list(THEME, (ix + 66, 28, 200, EDIT_H + 8 * 16 + 4), &themes));
+        c.push(button(COLORS_BTN, (ix + 276, 27, 110, BTN_H), &tr("opt.disp.colors")));
+        c.push(group(1005, (gx, 68, PW, 168), &tr("opt.disp.chat_font")));
+        let fonts: Vec<String> = self
+            .fonts
+            .iter()
+            .map(|(n, _)| if BUILTIN_FONTS.contains(&n.as_str()) { tf(lang, "opt.disp.font_builtin", &[("name", n)]) } else { n.clone() })
+            .collect();
+        c.push(list_box(FONTS, (ix, 88, 210, 138)).items(&fonts));
+        c.push(field_label(1007, ix + 222, 88, 50, &tr("opt.disp.font_size")));
+        c.push(drop_list(FONT_SIZE, (ix + 276, 88, 70, EDIT_H + 8 * 16 + 4), &[] as &[&str]));
+        c.push(text(PREVIEW, (ix + 222, 118, cw - 222, 108), &tr("opt.disp.font_sample")).style("nowrap"));
+        c.push(group(1009, (gx, 244, PW, 100), &tr("opt.disp.window")));
+        c.push(field_label(1010, ix, 264, 110, &tr("opt.disp.switchbar")));
         let swb = [tr("opt.disp.swb.top"), tr("opt.disp.swb.bottom"), tr("opt.disp.swb.left"), tr("opt.disp.swb.right"), tr("opt.disp.swb.off")];
-        c.push(drop_list(SWB, (ix + 116, 132, 150, EDIT_H + 5 * 16 + 4), &swb));
-        c.push(ck(1012, (ix, 162, cw, CHECK_H)));
-        c.push(ck(1013, (ix, 184, cw, CHECK_H)));
-        c.push(ck(1014, (ix, 206, cw, CHECK_H)));
-        c.push(group(1015, (gx, 244, PW, 58), &tr("opt.disp.language")));
+        c.push(drop_list(SWB, (ix + 116, 264, 150, EDIT_H + 5 * 16 + 4), &swb));
+        c.push(ck(1012, (ix, 294, colw, CHECK_H)));
+        c.push(ck(1013, (ix + colw + 8, 294, colw, CHECK_H)));
+        c.push(ck(1014, (ix, 316, cw, CHECK_H)));
+        c.push(group(1015, (gx, 352, PW, 58), &tr("opt.disp.language")));
         let langs: Vec<String> = LANGS.iter().map(|(code, name)| if code.is_none() { tr("opt.disp.lang_auto") } else { name.to_string() }).collect();
-        c.push(drop_list(LANG, (ix, 266, 220, EDIT_H + 8 * 16 + 4), &langs));
+        c.push(drop_list(LANG, (ix, 374, 220, EDIT_H + 8 * 16 + 4), &langs));
 
         // 11. Notifications.
         c.push(group(1101, (gx, MARGIN, PW, 78), &tr("opt.notif.group")));
@@ -877,6 +1123,23 @@ impl DialogCtl for Options {
         c.push(edit(DL_FOLDER, (ix + 156, 320, cw - 156, EDIT_H), ""));
         c.push(text(1331, (ix + 156, 346, cw - 156, 36), &tr("opt.dcc.folder_note")));
 
+        // 14. Sons.
+        c.push(ck(1401, (gx, MARGIN, PW, CHECK_H)));
+        c.push(group(1402, (gx, 30, PW, 280), &tr("opt.snd.events")));
+        let cols = [tr("opt.snd.col.event"), tr("opt.snd.col.sound")];
+        c.push(list_view(SND_EVENTS, (ix, 50, cw, 174), &cols));
+        c.push(radio(SND_NONE, (ix, 232, 130, CHECK_H), &tr("opt.snd.none")));
+        c.push(radio(SND_BEEP, (ix + 136, 232, 180, CHECK_H), &tr("opt.snd.beep")));
+        c.push(radio(SND_FILE, (ix, 258, 116, CHECK_H), &tr("opt.snd.file")));
+        c.push(edit(SND_PATH, (ix + 120, 256, cw - 120, EDIT_H), ""));
+        c.push(button(SND_BROWSE, (ix + 120, 282, 110, BTN_H), &tr("opt.snd.browse")));
+        c.push(button(SND_TEST, (ix + 236, 282, 90, BTN_H), &tr("opt.snd.test")));
+        c.push(group(1410, (gx, 316, PW, 104), &tr("opt.snd.requests")));
+        c.push(ck(1411, (ix, 336, cw, CHECK_H)));
+        // Le dossier sur sa propre ligne (coupée au besoin, un chemin long ne déborde pas).
+        c.push(text(1412, (ix, 358, cw, LABEL_H), &tr("opt.snd.requests_note")).style("nowrap"));
+        c.push(text(1413, (ix, 376, cw, 36), &self.sounds_dir.display().to_string()));
+
         // Pages cachées sauf la première montrée.
         let page = self.page;
         let mut c: Vec<ControlSpec> = c.into_iter().map(|cs| if cs.id >= 100 && cs.id / 100 != page { cs.style("hide") } else { cs }).collect();
@@ -896,6 +1159,7 @@ impl DialogCtl for Options {
                 node(P_LOGGING, "opt.page.logging"),
                 node(P_CATCHER, "opt.page.catcher"),
             ]),
+            node(P_SOUNDS, "opt.page.sounds"),
             node(P_DCC, "opt.page.dcc"),
             node(P_DISPLAY, "opt.page.display"),
             node(P_NOTIF, "opt.page.notifications"),
@@ -916,6 +1180,17 @@ impl DialogCtl for Options {
                 (t(lang, "opt.hl.col.notify"), 56),
             ],
         );
+        view.set_columns(SND_EVENTS, &[(t(lang, "opt.snd.col.event"), 244), (t(lang, "opt.snd.col.sound"), 160)]);
+        self.fill_sound_list(view, lang);
+        self.show_sound(view);
+        // L'aperçu dans le rôle `Preview`, aux couleurs des discussions.
+        let (palette, colors) = self.base.display.effective_colors();
+        let rgb = |i: u8| palette.get(i as usize).copied().unwrap_or(0);
+        if let Some(Widget::Text(l)) = view.widget_mut(PREVIEW) {
+            l.style = TextStyle { kind: FontKind::Preview, ..TextStyle::CHAT };
+            l.color = Some(rgb(colors.normal));
+            l.background = Some(rgb(colors.background));
+        }
         let base = self.base.clone();
         self.load(view, &base);
         // Réseau et serveur : celui de la fenêtre active s'il y en a un, sinon le premier.
@@ -927,19 +1202,72 @@ impl DialogCtl for Options {
         let page = self.page;
         self.show_page(view, page);
         self.update_deps(view);
+        // Appliquer ne sert qu'après un changement.
+        view.set_enabled(APPLY, false);
         view.set_focus(TREE);
     }
 
     fn on(&mut self, msg: DialogMsg, view: &mut DialogView, cx: &mut Cx) -> Outcome {
         let lang = cx.lang;
+        // Appliquer : actif dès qu'un réglage a pu changer, éteint une fois appliqué.
+        if Options::may_change(&msg) {
+            view.set_enabled(APPLY, true);
+        }
         match msg {
             DialogMsg::Ok(_) => {
                 self.apply(view, cx);
+                self.end_preview(cx);
                 Outcome::Close
             }
-            DialogMsg::Cancel => Outcome::Close,
+            DialogMsg::Cancel => {
+                self.end_preview(cx);
+                Outcome::Close
+            }
             DialogMsg::Clicked(APPLY) => {
                 self.apply(view, cx);
+                view.set_enabled(APPLY, false);
+                Outcome::Keep
+            }
+            // Affichage : police et taille (aperçu tout de suite, écrites à OK ou Appliquer).
+            DialogMsg::SelectionChanged(FONTS) => {
+                // D'une police pixel à une police vectorielle (ou l'inverse), une taille qui rend pareil : 16 pixels
+                // de haut pour Fixedsys Excelsior, c'est à peu près 13 pixels d'em pour une police vectorielle.
+                let size = match (self.sizes_pixel, self.font_sel(view).1) {
+                    (true, false) => (self.size_sel(view) * 13).div_ceil(16),
+                    (false, true) => self.size_sel(view) * 16 / 13,
+                    _ => self.size_sel(view),
+                };
+                self.fill_sizes(view, size);
+                self.preview_font(view, cx);
+                Outcome::Keep
+            }
+            DialogMsg::SelectionChanged(FONT_SIZE) => {
+                self.preview_font(view, cx);
+                Outcome::Keep
+            }
+            // Sons.
+            DialogMsg::SelectionChanged(SND_EVENTS) => {
+                if let Some(i) = sel(view, SND_EVENTS) {
+                    self.sound_sel = i.min(self.sounds.len() - 1);
+                    self.show_sound(view);
+                }
+                Outcome::Keep
+            }
+            DialogMsg::Clicked(SND_NONE | SND_BEEP | SND_FILE) | DialogMsg::Changed(SND_PATH) => {
+                if matches!(msg, DialogMsg::Changed(_)) && !text_of(view, SND_PATH).trim().is_empty() {
+                    // Taper un fichier, c'est le choisir.
+                    view.set_checked(SND_FILE, true);
+                }
+                self.store_sound(view, lang);
+                Outcome::Keep
+            }
+            DialogMsg::Clicked(SND_BROWSE) => {
+                cx.actions.push(Action::PickFile { kind: "options".into(), save: false, suggested: None });
+                Outcome::Keep
+            }
+            DialogMsg::Clicked(SND_TEST) => {
+                let s = self.sounds[self.sound_sel].clone();
+                cx.client.test_sound(&s);
                 Outcome::Keep
             }
             DialogMsg::SelectionChanged(TREE) => {
@@ -1048,10 +1376,25 @@ impl DialogCtl for Options {
         }
     }
 
+    /// Fichier choisi pour le son de l'événement sélectionné : un fichier du dossier des sons garde son seul nom.
+    fn file_picked(&mut self, path: Option<PathBuf>, view: &mut DialogView, cx: &mut Cx) {
+        let Some(p) = path else { return };
+        let shown = match p.strip_prefix(&self.sounds_dir) {
+            Ok(rel) if rel.components().count() == 1 => rel.display().to_string(),
+            _ => p.display().to_string(),
+        };
+        view.set_text(SND_PATH, &shown);
+        view.set_checked(SND_FILE, true);
+        self.store_sound(view, cx.lang);
+        view.set_enabled(APPLY, true);
+    }
+
     fn refresh(&mut self, view: &mut DialogView, cx: &mut Cx) {
         let v = self.st.borrow().version;
         if v != self.seen {
             self.seen = v;
+            // Réseau ou mot surligné changé par une boîte fille.
+            view.set_enabled(APPLY, true);
             let lang = cx.lang;
             // Une entrée ajoutée : on la choisit ; sinon on garde le choix.
             let (n, prev) = (self.st.borrow().networks.len(), view.items(NETS).len());
@@ -1063,11 +1406,18 @@ impl DialogCtl for Options {
             let keep_net = sel(view, NET).and_then(|i| self.st.borrow().networks.get(i).map(|e| e.net.name.clone()));
             self.fill_networks_combo(view, keep_net);
         }
-        // Thème changé ailleurs (boîte Couleurs, menu).
-        let theme = cx.client.settings().display.theme.clone();
-        if theme != self.seen_theme {
-            view.set_checked(if theme == "dark" { DARK } else { CLASSIC }, true);
-            self.seen_theme = theme;
+        // Thème changé ailleurs (boîte Couleurs, menu), ou thèmes de l'utilisateur enregistrés ou supprimés.
+        let d = &cx.client.settings().display;
+        if d.theme != self.seen_theme || d.theme_names() != self.themes {
+            let d = d.clone();
+            // Le choix en cours dans la liste reste, sauf si le thème choisi a changé ailleurs.
+            let keep = if d.theme != self.seen_theme {
+                d.theme.clone()
+            } else {
+                sel(view, THEME).and_then(|i| self.themes.get(i).cloned()).unwrap_or_else(|| d.theme.clone())
+            };
+            self.fill_themes(view, cx.lang, &d, &keep);
+            self.seen_theme = d.theme.clone();
         }
     }
 }
@@ -1094,10 +1444,10 @@ mod tests {
         v.set_checked(402, false);
         v.set_text(427, "abc"); // invalide : on garde l'ancienne valeur
         v.set_text(424, "5");
-        v.set_checked(DARK, true);
+        v.set_selection(THEME, &[1]);
         v.set_selection(SWB, &[1]);
         v.set_selection(LANG, &[2]);
-        v.set_checked(F32, true);
+        v.set_selection(FONT_SIZE, &[1]);
         v.set_text(STARTNETS, "Undernet,  Libera.Chat ,");
         let (o2, actions) = k.send(&mut o, &mut v, DialogMsg::Ok(OK));
         assert_eq!(o2, Outcome::Close);
@@ -1120,7 +1470,7 @@ mod tests {
         k.client.settings_mut().display.chat_font_size = 64;
         let mut o = Options::new(&k.client, Some("display"));
         let (mut v, _) = k.open(&mut o);
-        assert!(v.checked(F48));
+        assert_eq!(o.size_sel(&v), 64);
         v.set_text(NICK, "Zaza");
         let (_, a) = k.send(&mut o, &mut v, DialogMsg::Cancel);
         assert!(a.is_empty());
@@ -1234,5 +1584,146 @@ mod tests {
         k.send(&mut o, &mut v, DialogMsg::Ok(OK));
         let w = &k.client.settings().highlight.words[0];
         assert_eq!((w.text.as_str(), w.color), ("alpirc", Some(4)));
+    }
+
+    #[test]
+    fn sounds_page() {
+        let mut k = Kit::new("options7");
+        crate::assets::install_sounds(&k.dir);
+        let mut o = Options::new(&k.client, Some("sounds"));
+        assert_translated(&o);
+        let (mut v, _) = k.open(&mut o);
+        assert_eq!(o.page, P_SOUNDS);
+        assert_eq!(v.items(SND_EVENTS).len(), SoundEvent::ALL.len());
+        assert_eq!(v.items(SND_EVENTS)[0], "Highlight (your nickname or a word)\talpirc-highlight.wav");
+        assert!(v.checked(SND_FILE) && v.text(SND_PATH).as_deref() == Some("alpirc-highlight.wav"));
+        // Essayer : le son joue, même tout coupé.
+        k.client.settings_mut().sounds.mute = true;
+        k.send(&mut o, &mut v, DialogMsg::Clicked(SND_TEST));
+        assert!(k.client.take_effects().contains(&alpirc_core::Effect::PlaySound(k.dir.join("sounds/alpirc-highlight.wav"))));
+        // Notify (3e ligne) : bip.
+        v.set_selection(SND_EVENTS, &[2]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(SND_EVENTS));
+        assert!(v.checked(SND_NONE) && !v.enabled(SND_PATH) && !v.enabled(SND_TEST));
+        v.set_checked(SND_BEEP, true);
+        k.send(&mut o, &mut v, DialogMsg::Clicked(SND_BEEP));
+        assert_eq!(v.items(SND_EVENTS)[2], "Notify (friend online or offline)\tBeep");
+        // Déconnexion : un fichier choisi par Parcourir (dans le dossier des sons : le nom seul).
+        v.set_selection(SND_EVENTS, &[5]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(SND_EVENTS));
+        let (_, a) = k.send(&mut o, &mut v, DialogMsg::Clicked(SND_BROWSE));
+        assert!(matches!(a.first(), Some(Action::PickFile { kind, .. }) if kind == "options"));
+        let mut cx = Cx { client: &mut k.client, now: 0, lang: Lang::En, utc_offset: 0, actions: Vec::new() };
+        o.file_picked(Some(o.sounds_dir.join("alpirc-ding.wav")), &mut v, &mut cx);
+        o.file_picked(Some(PathBuf::from("/ailleurs/a.wav")), &mut v, &mut cx);
+        assert_eq!(v.text(SND_PATH).as_deref(), Some("/ailleurs/a.wav"));
+        o.file_picked(Some(o.sounds_dir.join("alpirc-ding.wav")), &mut v, &mut cx);
+        // Taper un fichier le choisit ; « tout couper » décoché ; demandes acceptées.
+        v.set_selection(SND_EVENTS, &[8]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(SND_EVENTS));
+        v.set_text(SND_PATH, "tic.wav");
+        k.send(&mut o, &mut v, DialogMsg::Changed(SND_PATH));
+        assert!(v.checked(SND_FILE));
+        v.set_checked(1401, false);
+        v.set_checked(1411, true);
+        k.send(&mut o, &mut v, DialogMsg::Ok(OK));
+        let s = &k.client.settings().sounds;
+        assert!(!s.mute && s.accept_requests);
+        assert_eq!(s.notify.play, SoundPlay::Beep);
+        assert_eq!((s.disconnect.play, s.disconnect.file.as_str()), (SoundPlay::File, "alpirc-ding.wav"));
+        assert_eq!((s.channel_message.play, s.channel_message.file.as_str()), (SoundPlay::File, "tic.wav"));
+        assert_eq!(s.highlight, EventSound::file("alpirc-highlight.wav", true), "le reste ne bouge pas");
+    }
+
+    #[test]
+    fn font_chooser_previews_then_applies() {
+        let mut k = Kit::new("options8");
+        let mut o = Options::new(&k.client, Some("font"));
+        let (mut v, _) = k.open(&mut o);
+        assert_eq!(o.page, P_DISPLAY);
+        assert_eq!(&v.items(FONTS)[..2], ["Fixedsys Excelsior (built-in)", "Pixel Operator (built-in)"]);
+        assert_eq!(sel(&v, FONTS), Some(0));
+        assert_eq!(v.items(FONT_SIZE), vec!["16", "32", "48", "64"]);
+        // Choisir Pixel Operator : aperçu seulement (rien d'écrit dans la police des discussions).
+        v.set_selection(FONTS, &[1]);
+        let (_, a) = k.send(&mut o, &mut v, DialogMsg::SelectionChanged(FONTS));
+        assert!(a.iter().any(|a| matches!(a, Action::SettingsChanged)));
+        let d = &k.client.settings().display;
+        assert_eq!(d.font_preview, Some(("Pixel Operator".to_string(), 16)));
+        assert_eq!(d.chat_font, "Fixedsys Excelsior");
+        assert!(v.enabled(APPLY));
+        v.set_selection(FONT_SIZE, &[2]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(FONT_SIZE));
+        assert_eq!(k.client.settings().display.font_preview, Some(("Pixel Operator".to_string(), 48)));
+        // Appliquer : écrit, aperçu retiré, Appliquer s'éteint.
+        k.send(&mut o, &mut v, DialogMsg::Clicked(APPLY));
+        let d = &k.client.settings().display;
+        assert_eq!((d.chat_font.as_str(), d.chat_font_size, &d.font_preview), ("Pixel Operator", 48, &None));
+        assert!(!v.enabled(APPLY));
+        // Un aperçu puis Annuler : rien ne change, l'aperçu disparaît.
+        v.set_selection(FONTS, &[0]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(FONTS));
+        let (_, a) = k.send(&mut o, &mut v, DialogMsg::Cancel);
+        assert!(a.iter().any(|a| matches!(a, Action::SettingsChanged)));
+        let d = &k.client.settings().display;
+        assert_eq!((d.chat_font.as_str(), &d.font_preview), ("Pixel Operator", &None));
+    }
+
+    #[test]
+    fn switching_to_a_vector_font_converts_the_size() {
+        let mut k = Kit::new("options10");
+        let mut o = Options::new(&k.client, Some("display"));
+        o.fonts.push(("DejaVu Sans Mono".into(), false));
+        let (mut v, _) = k.open(&mut o);
+        let n = v.items(FONTS).len();
+        v.set_selection(FONTS, &[n - 1]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(FONTS));
+        assert_eq!(v.items(FONT_SIZE)[0], "8");
+        assert_eq!(o.size_sel(&v), 13, "Fixedsys 16 ≈ 13 en vectoriel");
+        v.set_selection(FONTS, &[0]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(FONTS));
+        assert_eq!((v.items(FONT_SIZE).len(), o.size_sel(&v)), (4, 16));
+    }
+
+    #[test]
+    fn chat_font_specs() {
+        let f = crate::assets::fonts();
+        let (chat, ui) = f.builtin_families();
+        assert_eq!(chat_font_spec(&f, "Fixedsys Excelsior", 32).family, chat);
+        assert_eq!(chat_font_spec(&f, "", 16), f.spec(FontKind::Chat));
+        assert_eq!(chat_font_spec(&f, "pixel operator", 16).family, ui);
+        // Police désinstallée : Fixedsys Excelsior à la même taille.
+        let s = chat_font_spec(&f, "Police Disparue", 32);
+        assert_eq!((s.family, s.line_height), (chat, 32));
+    }
+
+    #[test]
+    fn apply_tracks_changes_and_user_themes_are_listed() {
+        let mut k = Kit::new("options9");
+        let d = &mut k.client.settings_mut().display;
+        d.store_theme(alpirc_core::settings::UserTheme { name: "Nuit".into(), base: "dark".into(), ..Default::default() }).unwrap();
+        let mut o = Options::new(&k.client, Some("display"));
+        let (mut v, _) = k.open(&mut o);
+        assert_eq!(v.items(THEME), vec!["Classic", "Dark", "Nuit"]);
+        assert!(!v.enabled(APPLY));
+        // Changer de page ou choisir une ligne n'active pas Appliquer ; une case, si.
+        v.set_selection(TREE, &[P_SOUNDS as usize]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(TREE));
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(SND_EVENTS));
+        assert!(!v.enabled(APPLY));
+        k.send(&mut o, &mut v, DialogMsg::Clicked(1401));
+        assert!(v.enabled(APPLY));
+        // Le thème de l'utilisateur : ses couleurs à l'application.
+        v.set_selection(THEME, &[2]);
+        k.send(&mut o, &mut v, DialogMsg::SelectionChanged(THEME));
+        k.send(&mut o, &mut v, DialogMsg::Clicked(APPLY));
+        let d = &k.client.settings().display;
+        assert_eq!((d.theme.as_str(), d.theme_base()), ("Nuit", "dark"));
+        assert!(!v.enabled(APPLY));
+        // Un thème enregistré ailleurs (boîte Couleurs) apparaît dans la liste.
+        k.client.settings_mut().display.store_theme(alpirc_core::settings::UserTheme { name: "Aube".into(), ..Default::default() }).unwrap();
+        k.refresh(&mut o, &mut v);
+        assert_eq!(v.items(THEME), vec!["Classic", "Dark", "Nuit", "Aube"]);
+        assert_eq!(sel(&v, THEME), Some(2));
     }
 }

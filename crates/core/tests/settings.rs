@@ -81,11 +81,113 @@ fn default_colors() {
 fn themes() {
     let t = settings::themes();
     assert_eq!(t.iter().map(|t| t.name).collect::<Vec<_>>(), vec!["classic", "dark"]);
+    // Sombre : la palette de l'interface (blanc et noir échangés), mêmes numéros que le classique, texte lisible.
     let dark = settings::theme("Dark").unwrap();
-    assert_eq!(dark.colors.background, 1);
-    assert_eq!(dark.colors.normal, 15);
-    assert_ne!(dark.palette[1], 0x000000);
+    assert_eq!(dark.palette, settings::DARK_PALETTE);
+    assert_eq!(dark.colors, settings::EventColors::default());
+    let lum = |c: u32| ((c >> 16) & 0xFF) + ((c >> 8) & 0xFF) + (c & 0xFF);
+    assert!(lum(dark.palette[dark.colors.normal as usize]) > lum(dark.palette[dark.colors.background as usize]) + 300);
     assert_eq!(settings::theme("classic").unwrap().colors, settings::EventColors::default());
+    assert_eq!(settings::theme("sombre").unwrap().name, "dark");
+    assert!(settings::is_builtin_theme("Classique") && !settings::is_builtin_theme("Nuit"));
+}
+
+#[test]
+fn user_themes_save_select_delete() {
+    use settings::{ThemeNameError, UserTheme};
+    let mut d = Settings::default().display;
+    assert_eq!(d.theme_names(), vec!["classic", "dark"]);
+    let mut night = UserTheme { name: " Nuit ".into(), base: "dark".into(), palette: settings::DARK_PALETTE, ..UserTheme::default() };
+    night.palette[0] = 0x000020;
+    night.colors.action = 9;
+    assert_eq!(d.store_theme(night.clone()), Ok("Nuit".to_string()));
+    assert_eq!(d.store_theme(UserTheme { name: "  ".into(), ..UserTheme::default() }), Err(ThemeNameError::Empty));
+    assert_eq!(d.store_theme(UserTheme { name: "Sombre".into(), ..UserTheme::default() }), Err(ThemeNameError::Builtin));
+    // Même nom (casse indifférente) : remplacé.
+    night.colors.action = 11;
+    d.store_theme(UserTheme { name: "nuit".into(), ..night.clone() }).unwrap();
+    assert_eq!(d.user_themes.len(), 1);
+    assert_eq!(d.user_theme("NUIT").unwrap().colors.action, 11);
+    assert_eq!(d.theme_names(), vec!["classic", "dark", "nuit"]);
+    // Choisir : nom, palette et couleurs ; l'allure des fenêtres vient de la base.
+    assert!(d.select_theme("Nuit"));
+    assert_eq!((d.theme.as_str(), d.palette[0], d.colors.action), ("nuit", 0x000020, 11));
+    assert_eq!(d.theme_base(), "dark");
+    assert_eq!(d.effective_colors().0[0], 0x000020);
+    assert!(!d.select_theme("absent"));
+    assert_eq!(d.theme, "nuit");
+    // Supprimer le thème choisi : le choix revient à sa base, les couleurs restent.
+    assert!(d.delete_theme("NUIT"));
+    assert_eq!((d.theme.as_str(), d.palette[0]), ("dark", 0x000020));
+    assert!(d.user_themes.is_empty() && !d.delete_theme("Nuit"));
+    assert!(d.select_theme("classic"));
+    assert_eq!((d.palette, d.colors.clone()), (settings::MIRC_PALETTE, settings::EventColors::default()));
+}
+
+#[test]
+fn effective_colors_follow_builtin_themes() {
+    let mut d = Settings::default().display;
+    // Anciens réglages « sombres » (menu) : la palette classique est restée ; on montre celle du thème sombre.
+    d.theme = "dark".into();
+    assert_eq!(d.effective_colors().0, settings::DARK_PALETTE);
+    assert_eq!(d.theme_base(), "dark");
+    // Retour au classique par le menu avec les couleurs du sombre : celles du classique.
+    d.select_theme("dark");
+    d.theme = "classic".into();
+    assert_eq!(d.effective_colors().0, settings::MIRC_PALETTE);
+    // Couleurs retouchées : elles sont gardées telles quelles.
+    d.palette[4] = 0xFF6600;
+    assert_eq!(d.effective_colors().0[4], 0xFF6600);
+    // Un thème inconnu (supprimé à la main du fichier) : allure classique.
+    d.theme = "perdu".into();
+    assert_eq!(d.theme_base(), "classic");
+}
+
+#[test]
+fn old_settings_files_still_load() {
+    // Fichier d'avant les sons, les thèmes nommés et le choix de la police : valeurs par défaut pour le reste.
+    let s = Settings::from_toml(
+        "[display]\ntheme = \"dark\"\nchat_font = \"Fixedsys Excelsior\"\nchat_font_size = 32\npalette = [16777215, 0, 127, 37632, \
+         16711680, 8323072, 10223772, 16547584, 16776960, 64512, 37779, 65535, 252, 16711935, 8355711, 13816530]\n\n\
+         [display.colors]\naction = 13\n",
+    )
+    .unwrap();
+    assert_eq!(s.display.theme, "dark");
+    assert_eq!(s.display.chat_font_size, 32);
+    assert_eq!(s.display.colors.action, 13);
+    assert!(s.display.user_themes.is_empty());
+    assert_eq!(s.sounds, settings::SoundOptions::default());
+    // Thèmes et sons survivent à l'aller-retour ; l'aperçu de police n'est jamais écrit.
+    let mut s = Settings::default();
+    s.display.store_theme(settings::UserTheme { name: "Perso".into(), ..Default::default() }).unwrap();
+    s.sounds.notify.play = settings::SoundPlay::Beep;
+    s.sounds.mute = true;
+    s.display.font_preview = Some(("DejaVu Sans Mono".into(), 13));
+    let text = s.to_toml().unwrap();
+    assert!(text.contains("[sounds.notify]") && text.contains("play = \"beep\""), "{text}");
+    assert!(!text.contains("DejaVu"));
+    let back = Settings::from_toml(&text).unwrap();
+    s.display.font_preview = None;
+    assert_eq!(back, s);
+}
+
+#[test]
+fn sound_defaults_and_paths() {
+    use settings::{SoundEvent, SoundPlay, sound_path};
+    let s = settings::SoundOptions::default();
+    assert!(!s.mute && !s.accept_requests);
+    // Seuls « on vous nomme » et les privés sonnent ; chaque événement a son son fourni.
+    for e in SoundEvent::ALL {
+        let on = matches!(e, SoundEvent::Highlight | SoundEvent::Query);
+        assert_eq!(s.get(e).play == SoundPlay::File, on, "{e:?}");
+        assert_eq!(s.get(e).file, e.default_file());
+        assert!(settings::BUILTIN_SOUNDS.contains(&e.default_file()));
+    }
+    let d = Path::new("/donnees");
+    assert_eq!(sound_path(d, "ding.wav").as_deref(), Some(Path::new("/donnees/sounds/ding.wav")));
+    assert_eq!(sound_path(d, "/ailleurs/x.wav").as_deref(), Some(Path::new("/ailleurs/x.wav")));
+    assert_eq!(sound_path(d, "../x.wav"), None);
+    assert_eq!(sound_path(d, " "), None);
 }
 
 fn rich() -> Settings {
@@ -186,9 +288,9 @@ fn system_locale_used_without_setting() {
     assert_eq!(h.c.language(), Lang::Fr);
     h.c.set_system_locale("ga_IE.UTF-8");
     assert_eq!(h.c.language(), Lang::Ga);
-    // Irlandais pas encore traduit : repli sur l'anglais.
+    // Les textes du moteur sont alors en irlandais.
     h.input(h.status, "salut");
-    assert_eq!(h.last(h.status), "* You're not on a channel");
+    assert_eq!(h.last(h.status), "* Níl tú ar chainéal");
 }
 
 #[test]

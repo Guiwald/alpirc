@@ -119,8 +119,13 @@ fn notify_with_monitor() {
     assert_eq!(h.last(h.status), "* Added Carl to notify list");
     h.input(h.status, "/notify -r Carl");
     assert_eq!(h.sends(), vec!["MONITOR - Carl"]);
-    h.input(h.status, "/notify");
+    h.input(h.status, "/notify -s");
     assert_eq!(h.last(h.status), "* Notify list: Bob, Zed");
+    // Sans argument : la fenêtre Notify.
+    h.input(h.status, "/notify");
+    let notify = h.c.windows().iter().find(|w| w.kind == alpirc_core::WinKind::Notify);
+    let w = notify.map(|w| w.id).expect("fenêtre Notify");
+    assert_eq!(h.c.active(), Some(w));
 }
 
 #[test]

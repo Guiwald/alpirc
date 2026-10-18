@@ -43,17 +43,24 @@ fn desktop_file(exec: &str) -> String {
          GenericName[de]=IRC-Client\n\
          GenericName[it]=Client IRC\n\
          GenericName[ca]=Client IRC\n\
+         GenericName[ca@valencia]=Client IRC\n\
          GenericName[ga]=Cliant IRC\n\
          Comment=Chat on IRC networks, with the look of the 2000s classics\n\
          Comment[fr]=Discuter sur les réseaux IRC, avec l'allure des classiques des années 2000\n\
          Comment[es]=Chatear en las redes IRC, con el aspecto de los clásicos de los años 2000\n\
+         Comment[de]=Auf IRC-Netzwerken chatten, im Stil der Klassiker der 2000er\n\
+         Comment[it]=Chattare sulle reti IRC, con l'aspetto dei classici degli anni 2000\n\
+         Comment[ca]=Xatejar a les xarxes IRC, amb l'aspecte dels clàssics dels anys 2000\n\
+         Comment[ca@valencia]=Xatejar en les xarxes IRC, amb l'aspecte dels clàssics dels anys 2000\n\
+         Comment[ga]=Déan comhrá ar líonraí IRC, le cuma na gclasaiceach ó na 2000idí\n\
          Exec={exec} %u\n\
          Icon=alpirc\n\
          Terminal=false\n\
          Categories=Network;Chat;IRCClient;\n\
          MimeType=x-scheme-handler/irc;x-scheme-handler/ircs;\n\
          Keywords=irc;chat;undernet;libera;channel;canal;\n\
-         StartupWMClass=alpirc\n"
+         StartupWMClass=alpirc\n\
+         SingleMainWindow=true\n"
     )
 }
 
@@ -85,6 +92,12 @@ for s in {sizes}; do
 done
 sed "s|^Exec=alpirc|Exec=$BIN/alpirc|" alpirc.desktop > "$DATA/applications/alpirc.desktop"
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q "$DATA/applications" || true
+# Liens irc:// et ircs:// : AlpIRC les ouvre, sauf si un autre programme en a déjà la charge.
+if command -v xdg-mime >/dev/null 2>&1; then
+    for u in irc ircs; do
+        [ -n "$(xdg-mime query default x-scheme-handler/$u 2>/dev/null)" ] || xdg-mime default alpirc.desktop "x-scheme-handler/$u" || true
+    done
+fi
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -t "$DATA/icons/hicolor" 2>/dev/null || true
 echo "AlpIRC est installé : cherchez-le dans le menu des applications, ou lancez « alpirc »."
 echo "AlpIRC is installed: look for it in your applications menu, or run \"alpirc\"."
@@ -491,6 +504,8 @@ mod tests {
         assert!(d.contains("\nExec=alpirc %u\n"));
         assert!(d.contains("\nMimeType=x-scheme-handler/irc;x-scheme-handler/ircs;\n"));
         assert!(d.contains("\nStartupWMClass=alpirc\n"));
+        // Une seule fenêtre : la seconde instance passe la main à la première (app/desktop/src/instance.rs).
+        assert!(d.contains("\nSingleMainWindow=true\n"));
         assert!(d.contains("\nIcon=alpirc\n"));
         // Pas d'espace en tête de ligne (les « \ » de fin de ligne les mangent).
         assert!(d.lines().all(|l| !l.starts_with(' ')));
@@ -502,6 +517,7 @@ mod tests {
         assert!(s.contains("for s in 16 24 32 48 64 128 256 512; do"));
         assert!(s.contains("${s}x${s}"));
         assert!(s.contains("s|^Exec=alpirc|Exec=$BIN/alpirc|"));
+        assert!(s.contains("xdg-mime default alpirc.desktop \"x-scheme-handler/$u\""));
     }
 
     #[test]

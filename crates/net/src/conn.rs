@@ -4,7 +4,7 @@
 
 use std::io;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -90,8 +90,8 @@ pub(crate) async fn client_task(
     h.state.store(CONNECTED, Ordering::Release);
     inner.emit(NetEvent::Connected { conn, peer, local, tls });
     let error = match stream {
-        Stream::Plain(s) => run_io(&inner, conn, s, &mut h.cmds, &mut h.closing).await,
-        Stream::Tls(s) => run_io(&inner, conn, *s, &mut h.cmds, &mut h.closing).await,
+        Stream::Plain(s) => run_io(&inner, conn, s, &mut h.cmds, &mut h.closing, &h.pending).await,
+        Stream::Tls(s) => run_io(&inner, conn, *s, &mut h.cmds, &mut h.closing, &h.pending).await,
     };
     log::info!("connexion {conn} fermée{}", error.as_ref().map(|e| format!(" : {e}")).unwrap_or_default());
     inner.finish(&h, Some(NetEvent::Closed { conn, error }));
@@ -303,7 +303,7 @@ async fn server_task(
         None => {
             h.state.store(CONNECTED, Ordering::Release);
             inner.emit(NetEvent::Accepted { listener, conn, peer, tls: false });
-            run_io(&inner, conn, sock, &mut h.cmds, &mut h.closing).await
+            run_io(&inner, conn, sock, &mut h.cmds, &mut h.closing, &h.pending).await
         }
         Some(acceptor) => {
             let handshake = tokio::select! {
@@ -328,7 +328,7 @@ async fn server_task(
             };
             h.state.store(CONNECTED, Ordering::Release);
             inner.emit(NetEvent::Accepted { listener, conn, peer, tls: true });
-            run_io(&inner, conn, stream, &mut h.cmds, &mut h.closing).await
+            run_io(&inner, conn, stream, &mut h.cmds, &mut h.closing, &h.pending).await
         }
     };
     log::debug!("connexion {conn} fermée{}", error.as_ref().map(|e| format!(" : {e}")).unwrap_or_default());
@@ -346,13 +346,14 @@ async fn run_io<S>(
     stream: S,
     cmds: &mut mpsc::UnboundedReceiver<Cmd>,
     closing: &mut watch::Receiver<bool>,
+    pending: &AtomicUsize,
 ) -> Option<String>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {
     let (rd, wr) = tokio::io::split(stream);
     let reader = read_lines(inner, conn, rd);
-    let writer = write_lines(wr, cmds);
+    let writer = write_lines(wr, cmds, pending);
     tokio::pin!(reader, writer);
     let timer = tokio::time::sleep(Duration::from_secs(365 * 86_400));
     tokio::pin!(timer);
@@ -436,8 +437,13 @@ fn emit_line(inner: &Inner, conn: u32, line: &mut Vec<u8>) {
     inner.emit(NetEvent::Line { conn, bytes });
 }
 
-/// Écrit les lignes de la file (par lots), jusqu'à l'ordre de fermeture : alors vide, termine TLS et TCP.
-async fn write_lines<W: AsyncWrite + Unpin>(mut wr: W, cmds: &mut mpsc::UnboundedReceiver<Cmd>) -> io::Result<()> {
+/// Écrit les lignes de la file (par lots), jusqu'à l'ordre de fermeture : alors vide, termine TLS et TCP. Chaque
+/// lot écrit est retiré du compteur `pending` (voir [`crate::Net::pending_bytes`]).
+async fn write_lines<W: AsyncWrite + Unpin>(
+    mut wr: W,
+    cmds: &mut mpsc::UnboundedReceiver<Cmd>,
+    pending: &AtomicUsize,
+) -> io::Result<()> {
     let mut out = Vec::with_capacity(4096);
     loop {
         let mut close = match cmds.recv().await {
@@ -457,6 +463,8 @@ async fn write_lines<W: AsyncWrite + Unpin>(mut wr: W, cmds: &mut mpsc::Unbounde
         if !out.is_empty() {
             wr.write_all(&out).await?;
             wr.flush().await?;
+            let n = out.len();
+            let _ = pending.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |p| Some(p.saturating_sub(n)));
             out.clear();
         }
         if close {

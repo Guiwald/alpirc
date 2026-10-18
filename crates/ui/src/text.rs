@@ -32,6 +32,8 @@ pub enum FontKind {
     Ui,
     /// Fenêtres de discussion, ligne de saisie, liste des pseudos, éditeur de scripts.
     Chat,
+    /// Aperçu d'une police pas encore choisie (boîte Options), sans toucher aux autres rôles.
+    Preview,
 }
 
 /// Rôle et graisse/italique d'un texte.
@@ -288,6 +290,7 @@ impl AttrSpec {
         let (spec, has_bold) = match st.kind {
             FontKind::Chat => (&inner.chat, inner.chat_has_bold),
             FontKind::Ui => (&inner.ui, inner.ui_has_bold),
+            FontKind::Preview => (&inner.preview, inner.preview_has_bold),
         };
         AttrSpec {
             family: spec.family.clone(),
@@ -343,8 +346,12 @@ struct Inner {
     faces: HashMap<fontdb::ID, FaceMeta>,
     chat: FontSpec,
     ui: FontSpec,
+    preview: FontSpec,
     chat_has_bold: bool,
     ui_has_bold: bool,
+    preview_has_bold: bool,
+    /// Familles des polices intégrées : discussions, interface.
+    builtin: (String, String),
     /// Famille d'emoji en couleur, si le système en a une.
     emoji_family: Option<String>,
     generation: u64,
@@ -357,6 +364,7 @@ impl Inner {
         let has_bold = |fam: &str| db.faces().any(|f| f.weight.0 >= 600 && f.families.iter().any(|(n, _)| n == fam));
         self.chat_has_bold = has_bold(&self.chat.family);
         self.ui_has_bold = has_bold(&self.ui.family);
+        self.preview_has_bold = has_bold(&self.preview.family);
         const EMOJI: [&str; 6] =
             ["Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", "Twemoji", "Twitter Color Emoji", "EmojiOne Color"];
         self.emoji_family = EMOJI
@@ -459,6 +467,8 @@ impl Fonts {
         db.set_monospace_family(chat_family.clone());
         db.set_sans_serif_family(ui_family.clone());
         let fs = FontSystem::new_with_locale_and_db(system_locale(), db);
+        let chat_spec =
+            FontSpec { family: chat_family.clone(), size: 1000.0 / FIXEDSYS_GRID, line_height: 16, ascent: 13, grid: Some(FIXEDSYS_GRID) };
         let fonts = Fonts {
             inner: RefCell::new(Inner {
                 fs,
@@ -466,16 +476,13 @@ impl Fonts {
                 glyphs: HashMap::new(),
                 shaped: HashMap::new(),
                 faces,
-                chat: FontSpec {
-                    family: chat_family,
-                    size: 1000.0 / FIXEDSYS_GRID,
-                    line_height: 16,
-                    ascent: 13,
-                    grid: Some(FIXEDSYS_GRID),
-                },
-                ui: FontSpec { family: ui_family, size: 16.0, line_height: 16, ascent: 13, grid: Some(PIXEL_OPERATOR_GRID) },
+                chat: chat_spec.clone(),
+                ui: FontSpec { family: ui_family.clone(), size: 16.0, line_height: 16, ascent: 13, grid: Some(PIXEL_OPERATOR_GRID) },
+                preview: chat_spec,
                 chat_has_bold: false,
                 ui_has_bold: false,
+                preview_has_bold: false,
+                builtin: (chat_family, ui_family),
                 emoji_family: None,
                 generation: 1,
             }),
@@ -533,6 +540,7 @@ impl Fonts {
         match kind {
             FontKind::Chat => inner.chat.clone(),
             FontKind::Ui => inner.ui.clone(),
+            FontKind::Preview => inner.preview.clone(),
         }
     }
 
@@ -542,6 +550,7 @@ impl Fonts {
         match kind {
             FontKind::Chat => inner.chat = spec,
             FontKind::Ui => inner.ui = spec,
+            FontKind::Preview => inner.preview = spec,
         }
         inner.glyphs.clear();
         inner.refresh_families();
@@ -557,6 +566,84 @@ impl Fonts {
         self.set_spec(FontKind::Chat, spec);
     }
 
+    /// Familles des polices intégrées : (discussions, interface), c'est-à-dire Fixedsys Excelsior et Pixel Operator
+    /// sous les noms qu'elles déclarent.
+    pub fn builtin_families(&self) -> (String, String) {
+        self.inner.borrow().builtin.clone()
+    }
+
+    /// Familles à chasse fixe connues en plus des polices intégrées (polices du système, voir
+    /// [`Fonts::load_system_fallbacks`] et [`Fonts::load_font_files`]), triées, sans les polices d'emoji.
+    pub fn monospace_families(&self) -> Vec<String> {
+        let inner = self.inner.borrow();
+        let (chat, ui) = &inner.builtin;
+        let mut v: Vec<String> = inner
+            .fs
+            .db()
+            .faces()
+            .filter(|f| f.monospaced)
+            .filter_map(|f| f.families.first().map(|(n, _)| n.clone()))
+            .filter(|n| n != chat && n != ui && !n.to_lowercase().contains("emoji"))
+            .collect();
+        v.sort_by_key(|n| n.to_lowercase());
+        v.dedup();
+        v
+    }
+
+    /// Face régulière (à défaut, la plus proche) d'une famille, sans tenir compte de la casse.
+    fn regular_face(inner: &Inner, family: &str) -> Option<(fontdb::ID, String)> {
+        inner
+            .fs
+            .db()
+            .faces()
+            .filter_map(|f| f.families.iter().find(|(n, _)| n.eq_ignore_ascii_case(family)).map(|(n, _)| (f, n.clone())))
+            .min_by_key(|(f, _)| (f.weight.0 as i32 - 400).abs() + if f.style == fontdb::Style::Normal { 0 } else { 1000 })
+            .map(|(f, n)| (f.id, n))
+    }
+
+    /// Vrai si la famille est une police « pixel » (intégrée) : elle n'est nette qu'aux multiples de sa taille.
+    pub fn is_pixel_family(&self, family: &str) -> bool {
+        let inner = self.inner.borrow();
+        Fonts::regular_face(&inner, family).is_some_and(|(id, _)| inner.faces.get(&id).is_some_and(|m| m.grid.is_some()))
+    }
+
+    /// Description d'une police pour un rôle : la famille `family` (sans tenir compte de la casse) à la taille
+    /// `size`. Police « pixel » intégrée : `size` est la hauteur de ligne voulue, ramenée au multiple de 16 le plus
+    /// proche (16 à 64) pour rester nette. Police vectorielle : `size` est la taille de l'em en pixels (6 à 96) ;
+    /// hauteur de ligne et ligne de base viennent des mesures de la police. `None` si la famille est inconnue.
+    pub fn font_spec(&self, family: &str, size: u32) -> Option<FontSpec> {
+        let inner = self.inner.borrow();
+        let (id, name) = Fonts::regular_face(&inner, family)?;
+        if let Some(meta) = inner.faces.get(&id)
+            && let Some(grid) = meta.grid
+        {
+            // Les deux polices intégrées sont dessinées sur 16 pixels de haut, ligne de base à 13.
+            let zoom = size.saturating_add(8).div_euclid(16).clamp(1, 4) as i32;
+            return Some(FontSpec {
+                family: name,
+                size: meta.upem / grid * zoom as f32,
+                line_height: 16 * zoom,
+                ascent: 13 * zoom,
+                grid: Some(grid),
+            });
+        }
+        let px = size.clamp(6, 96) as f32;
+        let m = inner.fs.db().with_face_data(id, |d, i| swash::FontRef::from_index(d, i as usize).map(|f| f.metrics(&[]))).flatten()?;
+        let k = px / m.units_per_em.max(1) as f32;
+        let ascent = (m.ascent * k).ceil().max(1.0) as i32;
+        let line_height = ((m.ascent + m.descent + m.leading) * k).ceil().max(px.ceil()) as i32;
+        Some(FontSpec { family: name, size: px, line_height, ascent, grid: None })
+    }
+
+    /// Change la police d'un rôle seulement si elle diffère (sinon les caches restent).
+    pub fn set_spec_if_changed(&self, kind: FontKind, spec: FontSpec) -> bool {
+        if self.spec(kind) == spec {
+            return false;
+        }
+        self.set_spec(kind, spec);
+        true
+    }
+
     /// Compteur incrémenté à chaque changement de police (pour invalider les caches de mise en page).
     pub fn generation(&self) -> u64 {
         self.inner.borrow().generation
@@ -568,6 +655,7 @@ impl Fonts {
         match kind {
             FontKind::Chat => inner.chat.line_height,
             FontKind::Ui => inner.ui.line_height,
+            FontKind::Preview => inner.preview.line_height,
         }
     }
 
@@ -577,6 +665,7 @@ impl Fonts {
         match kind {
             FontKind::Chat => inner.chat.ascent,
             FontKind::Ui => inner.ui.ascent,
+            FontKind::Preview => inner.preview.ascent,
         }
     }
 
@@ -1037,6 +1126,37 @@ pub(crate) mod tests {
         assert_eq!(emoji_ranges("☺ ok"), Vec::<Range<usize>>::new());
         assert_eq!(emoji_ranges("❤\u{FE0F}x").len(), 1);
         assert_eq!(emoji_ranges("🇫🇷"), vec![0..8]);
+    }
+
+    #[test]
+    fn font_specs_and_preview_role() {
+        let f = fonts();
+        let (chat, ui) = f.builtin_families();
+        assert!(f.is_pixel_family(&chat) && f.is_pixel_family(&ui.to_uppercase()));
+        // Polices pixel : multiples de 16, comme le zoom.
+        let s = f.font_spec(&chat, 32).unwrap();
+        assert_eq!((s.line_height, s.ascent), (32, 26));
+        assert_eq!(f.font_spec(&chat, 16).unwrap(), f.spec(FontKind::Chat));
+        assert_eq!(f.font_spec(&chat, 100).unwrap().line_height, 64);
+        let p = f.font_spec(&ui, 16).unwrap();
+        assert_eq!((p.size, p.line_height), (16.0, 16));
+        assert_eq!(f.font_spec("Nulle Part Mono", 16), None);
+        assert!(f.monospace_families().is_empty(), "sans les polices du système, rien de plus");
+        // L'aperçu change sans toucher aux discussions.
+        assert!(f.set_spec_if_changed(FontKind::Preview, p.clone()));
+        assert!(!f.set_spec_if_changed(FontKind::Preview, p));
+        assert_eq!(f.spec(FontKind::Chat).family, chat);
+        assert!(f.measure("Mmmm", TextStyle { kind: FontKind::Preview, ..TextStyle::CHAT }) != f.measure("Mmmm", TextStyle::CHAT));
+        // Une police vectorielle du système, si la machine en a une.
+        let dejavu = std::path::PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf");
+        if dejavu.is_file() {
+            f.load_font_files(&[dejavu]);
+            assert!(f.monospace_families().iter().any(|n| n == "DejaVu Sans Mono"));
+            assert!(!f.is_pixel_family("DejaVu Sans Mono"));
+            let v = f.font_spec("dejavu sans mono", 13).unwrap();
+            assert_eq!((v.family.as_str(), v.size, v.grid), ("DejaVu Sans Mono", 13.0, None));
+            assert!(v.line_height >= 13 && v.line_height <= 18 && v.ascent < v.line_height, "{v:?}");
+        }
     }
 
     #[test]

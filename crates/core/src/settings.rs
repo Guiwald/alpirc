@@ -33,6 +33,8 @@ pub struct Settings {
     pub catcher: CatcherOptions,
     pub display: DisplayOptions,
     pub notifications: NotificationOptions,
+    /// Sons des événements et demandes de sons (Options › Sons).
+    pub sounds: SoundOptions,
     pub scripts: ScriptOptions,
     pub address_book: AddressBook,
     pub dcc: DccOptions,
@@ -65,6 +67,7 @@ impl Default for Settings {
             catcher: CatcherOptions::default(),
             display: DisplayOptions::default(),
             notifications: NotificationOptions::default(),
+            sounds: SoundOptions::default(),
             scripts: ScriptOptions::default(),
             address_book: AddressBook::default(),
             dcc: DccOptions::default(),
@@ -240,12 +243,29 @@ impl Network {
 
 /// Réseaux par défaut, Undernet en tête (ADR 0010). Les adresses et la prise en charge de TLS sont à vérifier
 /// en vrai depuis le Mac (ADR 0010, conséquences) ; elles suivent ce que chaque réseau publie.
+///
+/// TLS (6697) partout où le réseau l'offre à tous ; sinon le port en clair publié. Ces valeurs ne servent qu'aux
+/// nouvelles installations : un fichier de réglages existant garde ses réseaux tels quels (pas de migration).
+///
+/// Sources (sites officiels, relevés le 18/10/2026) :
+/// - Undernet : <https://www.undernet.org/servers.php> — ports 6660-6669 et 7000, aucun port TLS publié : le
+///   mot de passe du Login on Connect (X) passe donc en clair, faute de mieux.
+/// - Libera.Chat : <https://libera.chat/guides/connect> — irc.libera.chat, TLS 6697 (aussi 7000, 7070).
+/// - OFTC : <https://www.oftc.net/> — ircs://irc.oftc.net:6697 (aussi 9999), TLS sur tous les serveurs.
+/// - IRCnet : <https://www.ircnet.com/servers> — irc.ircnet.com port 6667 (serveur ouvert à tous) ; TLS seulement
+///   sur des serveurs réservés aux comptes SASL (<https://www.ircnet.com/sasl> : irc.ircnet.ca +6697).
+/// - EFnet : <https://www.efnet.org/> — irc.efnet.org, 6667 ou 6697 (SSL).
+/// - DALnet : <https://www.dal.net/kb/view.php?kb=189> — SSL sur le port 6697 ; <https://www.dal.net/servers/> —
+///   irc.dal.net choisit un serveur.
+/// - QuakeNet : <https://www.quakenet.org/servers> — irc.quakenet.org, aucun TLS publié.
+/// - Rizon : <https://wiki.rizon.net/index.php?title=Servers> — irc.rizon.net, TLS 6697 ou 9999.
+/// - EpiKnet : <https://www.epiknet.link/irc/> (lien du site epiknet.org) — irc.epiknet.org, 6667 ou 6697 (SSL).
 pub fn default_networks() -> Vec<Network> {
     vec![
         Network::new("Undernet", vec![Server::new("irc.undernet.org", 6667, false)]),
         Network::new("Libera.Chat", vec![Server::new("irc.libera.chat", 6697, true)]),
         Network::new("OFTC", vec![Server::new("irc.oftc.net", 6697, true)]),
-        Network::new("IRCnet", vec![Server::new("open.ircnet.net", 6667, false)]),
+        Network::new("IRCnet", vec![Server::new("irc.ircnet.com", 6667, false)]),
         Network::new("EFnet", vec![Server::new("irc.efnet.org", 6697, true)]),
         Network::new("DALnet", vec![Server::new("irc.dal.net", 6697, true)]),
         Network::new("QuakeNet", vec![Server::new("irc.quakenet.org", 6667, false)]),
@@ -476,14 +496,17 @@ impl Default for CtcpOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AwayOptions {
+    /// Message de l'absence automatique (et de `/away` sans message choisi dans l'interface).
     pub default_message: String,
     /// Montrer une fois le message d'absence de l'autre dans un privé.
     pub show_in_queries: bool,
+    /// Absence automatique après ce nombre de minutes sans rien taper (0 : jamais) ; retour à la saisie suivante.
+    pub auto_away_minutes: u32,
 }
 
 impl Default for AwayOptions {
     fn default() -> AwayOptions {
-        AwayOptions { default_message: "Away".into(), show_in_queries: true }
+        AwayOptions { default_message: "Away".into(), show_in_queries: true, auto_away_minutes: 0 }
     }
 }
 
@@ -609,67 +632,86 @@ pub struct Theme {
     pub colors: EventColors,
 }
 
-/// Thèmes fournis : `classic` (mIRC) et `dark`.
+/// Palette du thème sombre, la même que celle de l'interface (`alpirc_ui::Theme::dark`) : comme les thèmes sombres
+/// de mIRC, le blanc (0) et le noir (1) sont échangés, si bien que les numéros par défaut (fond 0, texte 1) et le
+/// texte « noir » des autres restent lisibles ; les couleurs foncées sont éclaircies.
+pub const DARK_PALETTE: [u32; 16] = [
+    0x1C1C1C, 0xE0E0E0, 0x6C8CFF, 0x4CC24C, 0xFF5C5C, 0xD08A5C, 0xC77DE0, 0xFFA040, 0xFFE65C, 0x7CFF7C, 0x3CC0C0, 0x7CFFFF,
+    0x7C9CFF, 0xFF7CFF, 0x9A9A9A, 0x3C3C3C,
+];
+
+/// Thèmes fournis : `classic` (mIRC) et `dark`. Ils ne se modifient pas : la boîte Couleurs enregistre les
+/// changements sous un autre nom ([`UserTheme`]).
 pub fn themes() -> Vec<Theme> {
-    let dark_colors = EventColors {
-        action: 13,
-        ctcp: 4,
-        highlight: 7,
-        info: 11,
-        info2: 12,
-        invite: 9,
-        join: 9,
-        kick: 9,
-        mode: 9,
-        nick: 9,
-        normal: 15,
-        notice: 7,
-        notify: 4,
-        other: 13,
-        own: 15,
-        part: 9,
-        quit: 11,
-        topic: 9,
-        wallops: 7,
-        whois: 15,
-        error: 4,
-        background: 1,
-        editbox_bg: 1,
-        editbox_text: 15,
-        listbox_bg: 1,
-        listbox_text: 15,
-    };
     vec![
         Theme { name: "classic", palette: MIRC_PALETTE, colors: EventColors::default() },
-        Theme {
-            name: "dark",
-            palette: [
-                0xFFFFFF, 0x1C1C1C, 0x5C8DFF, 0x4FC14F, 0xFF5555, 0xD06060, 0xC678DD, 0xFFA040, 0xFFFF55, 0x7CFC7C, 0x2EC4C4,
-                0x7FFFFF, 0x6C9CFF, 0xFF79C6, 0x9A9A9A, 0xD8D8D8,
-            ],
-            colors: dark_colors,
-        },
+        Theme { name: "dark", palette: DARK_PALETTE, colors: EventColors::default() },
     ]
 }
 
-/// Un thème fourni, par son nom.
+/// Un thème fourni, par son nom (`classic`/`classique`, `dark`/`sombre`).
 pub fn theme(name: &str) -> Option<Theme> {
+    let name = match name.to_ascii_lowercase().as_str() {
+        "classique" => "classic",
+        "sombre" => "dark",
+        _ => name,
+    };
     themes().into_iter().find(|t| t.name.eq_ignore_ascii_case(name))
+}
+
+/// Vrai pour le nom d'un thème fourni (ces noms sont réservés : un thème de l'utilisateur ne peut pas les prendre).
+pub fn is_builtin_theme(name: &str) -> bool {
+    theme(name.trim()).is_some()
+}
+
+/// Un jeu de couleurs enregistré par l'utilisateur (boîte Couleurs, « Enregistrer »).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserTheme {
+    pub name: String,
+    /// Thème fourni dont il garde l'allure des fenêtres et des boîtes de dialogue : `classic` ou `dark`.
+    pub base: String,
+    pub palette: [u32; 16],
+    pub colors: EventColors,
+}
+
+impl Default for UserTheme {
+    fn default() -> UserTheme {
+        UserTheme { name: String::new(), base: "classic".into(), palette: MIRC_PALETTE, colors: EventColors::default() }
+    }
+}
+
+/// Pourquoi un thème de l'utilisateur ne peut pas être enregistré sous ce nom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeNameError {
+    Empty,
+    /// Nom d'un thème fourni (Classique, Sombre).
+    Builtin,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DisplayOptions {
+    /// Thème choisi : `classic`, `dark`, ou le nom d'un thème de l'utilisateur (`user_themes`).
     pub theme: String,
+    /// Police des discussions : `Fixedsys Excelsior` (intégrée, par défaut), `Pixel Operator` (intégrée) ou une
+    /// police à chasse fixe du système, par son nom de famille.
     pub chat_font: String,
+    /// Taille de la police des discussions (pixels) ; pour les polices intégrées, hauteur de ligne en multiples de 16.
     pub chat_font_size: u32,
     /// `top`, `bottom`, `left`, `right` ou `off`.
     pub switchbar: String,
     pub treebar: bool,
     pub toolbar: bool,
     pub nicklist: bool,
+    /// Couleurs en vigueur (chargées depuis un thème, puis éventuellement retouchées dans la boîte Couleurs).
     pub colors: EventColors,
     pub palette: [u32; 16],
+    /// Thèmes enregistrés par l'utilisateur.
+    pub user_themes: Vec<UserTheme>,
+    /// Aperçu d'une police dans la boîte Options (famille, taille), pas encore choisie : jamais enregistré.
+    #[serde(skip)]
+    pub font_preview: Option<(String, u32)>,
 }
 
 impl Default for DisplayOptions {
@@ -684,7 +726,102 @@ impl Default for DisplayOptions {
             nicklist: true,
             colors: EventColors::default(),
             palette: MIRC_PALETTE,
+            user_themes: Vec::new(),
+            font_preview: None,
         }
+    }
+}
+
+impl DisplayOptions {
+    /// Thème de l'utilisateur, par son nom (sans tenir compte de la casse).
+    pub fn user_theme(&self, name: &str) -> Option<&UserTheme> {
+        let name = name.trim();
+        self.user_themes.iter().find(|t| t.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Thème fourni qui donne l'allure des fenêtres et des boîtes (`classic` ou `dark`) : le thème choisi, ou la
+    /// base du thème de l'utilisateur choisi.
+    pub fn theme_base(&self) -> &'static str {
+        let base = match self.user_theme(&self.theme) {
+            Some(u) => u.base.as_str(),
+            None => self.theme.as_str(),
+        };
+        match theme(base) {
+            Some(t) => t.name,
+            None => "classic",
+        }
+    }
+
+    /// Noms des thèmes proposés : les thèmes fournis, puis ceux de l'utilisateur.
+    pub fn theme_names(&self) -> Vec<String> {
+        themes().iter().map(|t| t.name.to_string()).chain(self.user_themes.iter().map(|t| t.name.clone())).collect()
+    }
+
+    /// Palette et couleurs d'un thème (fourni ou de l'utilisateur).
+    pub fn theme_colors(&self, name: &str) -> Option<([u32; 16], EventColors)> {
+        match (self.user_theme(name), theme(name.trim())) {
+            (Some(u), _) => Some((u.palette, u.colors.clone())),
+            (None, Some(t)) => Some((t.palette, t.colors)),
+            _ => None,
+        }
+    }
+
+    /// Choisit un thème : son nom, sa palette et ses couleurs. Faux (rien ne change) s'il n'existe pas.
+    pub fn select_theme(&mut self, name: &str) -> bool {
+        let Some((palette, colors)) = self.theme_colors(name) else { return false };
+        self.theme = match (self.user_theme(name), theme(name.trim())) {
+            (Some(u), _) => u.name.clone(),
+            (None, Some(t)) => t.name.to_string(),
+            _ => return false,
+        };
+        self.palette = palette;
+        self.colors = colors;
+        true
+    }
+
+    /// Enregistre un thème de l'utilisateur (remplace celui du même nom) ; rend son nom tel qu'enregistré.
+    pub fn store_theme(&mut self, mut t: UserTheme) -> Result<String, ThemeNameError> {
+        t.name = t.name.trim().to_string();
+        if t.name.is_empty() {
+            return Err(ThemeNameError::Empty);
+        }
+        if is_builtin_theme(&t.name) {
+            return Err(ThemeNameError::Builtin);
+        }
+        if theme(&t.base).is_none() {
+            t.base = "classic".into();
+        }
+        let name = t.name.clone();
+        match self.user_themes.iter_mut().find(|u| u.name.eq_ignore_ascii_case(&name)) {
+            Some(u) => *u = t,
+            None => self.user_themes.push(t),
+        }
+        Ok(name)
+    }
+
+    /// Supprime un thème de l'utilisateur. S'il était choisi, le thème choisi devient sa base ; les couleurs en
+    /// vigueur restent. Faux s'il n'existe pas.
+    pub fn delete_theme(&mut self, name: &str) -> bool {
+        let Some(i) = self.user_themes.iter().position(|u| u.name.eq_ignore_ascii_case(name.trim())) else { return false };
+        let t = self.user_themes.remove(i);
+        if self.theme.eq_ignore_ascii_case(&t.name) {
+            self.theme = theme(&t.base).map(|b| b.name.to_string()).unwrap_or_else(|| "classic".into());
+        }
+        true
+    }
+
+    /// Palette et couleurs à afficher. Ce sont celles des réglages, sauf si elles sont restées celles d'un thème
+    /// fourni alors que le thème choisi en est un autre (le menu Affichage › Thème change le thème sans toucher aux
+    /// couleurs, et les anciens réglages « sombres » gardaient la palette classique) : alors celles du thème choisi.
+    pub fn effective_colors(&self) -> ([u32; 16], EventColors) {
+        let preset = themes().into_iter().any(|t| t.palette == self.palette && t.colors == self.colors);
+        if preset
+            && self.user_theme(&self.theme).is_none()
+            && let Some(t) = theme(&self.theme)
+        {
+            return (t.palette, t.colors);
+        }
+        (self.palette, self.colors.clone())
     }
 }
 
@@ -700,6 +837,208 @@ impl Default for NotificationOptions {
     fn default() -> NotificationOptions {
         NotificationOptions { enabled: true, only_when_inactive: true }
     }
+}
+
+/// Ce que joue un événement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum SoundPlay {
+    /// Rien.
+    #[default]
+    None,
+    /// Le bip du système.
+    Beep,
+    /// Un fichier son (`file`).
+    File,
+}
+
+/// Le son d'un événement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct EventSound {
+    pub play: SoundPlay,
+    /// Nom d'un fichier du dossier des sons (`<données>/sounds`) ou chemin complet ; gardé même quand `play`
+    /// n'est pas `file`, pour le retrouver.
+    pub file: String,
+}
+
+impl EventSound {
+    /// Le fichier `file`, joué si `on`.
+    pub fn file(file: &str, on: bool) -> EventSound {
+        EventSound { play: if on { SoundPlay::File } else { SoundPlay::None }, file: file.into() }
+    }
+}
+
+/// Les événements qui peuvent jouer un son (Options › Sons).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SoundEvent {
+    /// On vous nomme (pseudo ou mot surligné), dans une fenêtre hors de vue.
+    Highlight,
+    /// Message privé, dans un privé hors de vue.
+    Query,
+    /// Un pseudo de la liste Notify arrive ou part.
+    Notify,
+    /// Offre DCC (envoi de fichier ou discussion) à accepter.
+    Dcc,
+    /// Connecté à un serveur (fin du MOTD).
+    Connect,
+    /// Déconnecté sans l'avoir demandé.
+    Disconnect,
+    /// Expulsé d'un canal.
+    Kick,
+    /// Invité sur un canal.
+    Invite,
+    /// Message d'un canal dont la fenêtre n'est pas active.
+    ChannelMessage,
+}
+
+impl SoundEvent {
+    pub const ALL: [SoundEvent; 9] = [
+        SoundEvent::Highlight,
+        SoundEvent::Query,
+        SoundEvent::Notify,
+        SoundEvent::Dcc,
+        SoundEvent::Connect,
+        SoundEvent::Disconnect,
+        SoundEvent::Kick,
+        SoundEvent::Invite,
+        SoundEvent::ChannelMessage,
+    ];
+
+    /// Nom de l'événement (celui de la section du fichier de réglages, et des textes de l'interface).
+    pub fn name(self) -> &'static str {
+        match self {
+            SoundEvent::Highlight => "highlight",
+            SoundEvent::Query => "query",
+            SoundEvent::Notify => "notify",
+            SoundEvent::Dcc => "dcc",
+            SoundEvent::Connect => "connect",
+            SoundEvent::Disconnect => "disconnect",
+            SoundEvent::Kick => "kick",
+            SoundEvent::Invite => "invite",
+            SoundEvent::ChannelMessage => "channel_message",
+        }
+    }
+
+    /// Son fourni avec AlpIRC pour cet événement (voir [`BUILTIN_SOUNDS`]).
+    pub fn default_file(self) -> &'static str {
+        match self {
+            SoundEvent::Highlight => "alpirc-highlight.wav",
+            SoundEvent::Query => "alpirc-query.wav",
+            SoundEvent::Notify => "alpirc-notify.wav",
+            SoundEvent::Dcc => "alpirc-dcc.wav",
+            SoundEvent::Connect => "alpirc-connect.wav",
+            SoundEvent::Disconnect => "alpirc-disconnect.wav",
+            SoundEvent::Kick => "alpirc-kick.wav",
+            SoundEvent::Invite => "alpirc-invite.wav",
+            SoundEvent::ChannelMessage => "alpirc-message.wav",
+        }
+    }
+}
+
+/// Sons fournis avec AlpIRC, installés dans `<données>/sounds` au démarrage s'ils manquent (voir
+/// `assets/sounds/src/make_sounds.py`).
+pub const BUILTIN_SOUNDS: [&str; 10] = [
+    "alpirc-highlight.wav",
+    "alpirc-query.wav",
+    "alpirc-notify.wav",
+    "alpirc-dcc.wav",
+    "alpirc-connect.wav",
+    "alpirc-disconnect.wav",
+    "alpirc-kick.wav",
+    "alpirc-invite.wav",
+    "alpirc-message.wav",
+    "alpirc-ding.wav",
+];
+
+/// Sons (Options › Sons de mIRC) : un choix par événement, tout couper, demandes de sons.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SoundOptions {
+    /// Tout couper : sons des événements, bips des alertes (surlignage, privés) et demandes de sons. `/splay` et
+    /// `/beep`, demandés exprès, jouent toujours.
+    pub mute: bool,
+    pub highlight: EventSound,
+    pub query: EventSound,
+    pub notify: EventSound,
+    pub dcc: EventSound,
+    pub connect: EventSound,
+    pub disconnect: EventSound,
+    pub kick: EventSound,
+    pub invite: EventSound,
+    pub channel_message: EventSound,
+    /// Demandes de sons (CTCP SOUND, `/sound`) : jouer le fichier demandé s'il est dans le dossier des sons
+    /// (sinon : « veut vous faire écouter… »).
+    pub accept_requests: bool,
+}
+
+impl Default for SoundOptions {
+    /// Agréable sans être bruyant : seuls « on vous nomme » et les messages privés sonnent ; les autres
+    /// événements ont leur son prêt, à activer.
+    fn default() -> SoundOptions {
+        let f = |e: SoundEvent, on: bool| EventSound::file(e.default_file(), on);
+        SoundOptions {
+            mute: false,
+            highlight: f(SoundEvent::Highlight, true),
+            query: f(SoundEvent::Query, true),
+            notify: f(SoundEvent::Notify, false),
+            dcc: f(SoundEvent::Dcc, false),
+            connect: f(SoundEvent::Connect, false),
+            disconnect: f(SoundEvent::Disconnect, false),
+            kick: f(SoundEvent::Kick, false),
+            invite: f(SoundEvent::Invite, false),
+            channel_message: f(SoundEvent::ChannelMessage, false),
+            accept_requests: false,
+        }
+    }
+}
+
+impl SoundOptions {
+    /// Le son d'un événement.
+    pub fn get(&self, e: SoundEvent) -> &EventSound {
+        match e {
+            SoundEvent::Highlight => &self.highlight,
+            SoundEvent::Query => &self.query,
+            SoundEvent::Notify => &self.notify,
+            SoundEvent::Dcc => &self.dcc,
+            SoundEvent::Connect => &self.connect,
+            SoundEvent::Disconnect => &self.disconnect,
+            SoundEvent::Kick => &self.kick,
+            SoundEvent::Invite => &self.invite,
+            SoundEvent::ChannelMessage => &self.channel_message,
+        }
+    }
+
+    pub fn get_mut(&mut self, e: SoundEvent) -> &mut EventSound {
+        match e {
+            SoundEvent::Highlight => &mut self.highlight,
+            SoundEvent::Query => &mut self.query,
+            SoundEvent::Notify => &mut self.notify,
+            SoundEvent::Dcc => &mut self.dcc,
+            SoundEvent::Connect => &mut self.connect,
+            SoundEvent::Disconnect => &mut self.disconnect,
+            SoundEvent::Kick => &mut self.kick,
+            SoundEvent::Invite => &mut self.invite,
+            SoundEvent::ChannelMessage => &mut self.channel_message,
+        }
+    }
+}
+
+/// Chemin d'un son des réglages : un nom se lit dans `<données>/sounds`, un chemin complet tel quel. `None` pour
+/// un nom vide ou qui remonte hors du dossier des sons (`..`).
+pub fn sound_path(data_dir: &Path, file: &str) -> Option<PathBuf> {
+    let file = file.trim();
+    if file.is_empty() {
+        return None;
+    }
+    let p = Path::new(file);
+    if p.is_absolute() {
+        return Some(p.to_path_buf());
+    }
+    if p.components().any(|c| !matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir)) {
+        return None;
+    }
+    Some(data_dir.join("sounds").join(p))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

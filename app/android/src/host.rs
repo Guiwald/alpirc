@@ -27,6 +27,11 @@ pub enum SysEvent {
     Destroyed { config: bool },
     /// Réponse du sélecteur de fichiers (jeton de la demande ; copie locale du document, ou rien si annulé).
     Picked { token: u32, path: Option<PathBuf> },
+    /// Glisser sur le champ natif : ligne précédente (`older`, vers le haut) ou suivante de l'historique ; le texte
+    /// du champ à ce moment.
+    History { older: bool, text: String },
+    /// Bouton Historique du champ natif : la liste des dernières lignes.
+    HistoryMenu,
     Log(String),
 }
 
@@ -49,6 +54,16 @@ pub fn parse_event(raw: &str) -> Option<SysEvent> {
             let (token, path) = rest.split_once('\t').unwrap_or((rest, ""));
             SysEvent::Picked { token: token.trim().parse().ok()?, path: (!path.is_empty()).then(|| PathBuf::from(path)) }
         }
+        "hist" => {
+            let (dir, text) = rest.split_once('\t').unwrap_or((rest, ""));
+            let older = match dir {
+                "-1" => true,
+                "1" => false,
+                _ => return None,
+            };
+            SysEvent::History { older, text: text.to_string() }
+        }
+        "histmenu" => SysEvent::HistoryMenu,
         "log" => SysEvent::Log(rest.to_string()),
         _ => return None,
     })
@@ -64,6 +79,9 @@ pub struct ServiceState {
     pub quit: String,
     pub channel: String,
     pub notify_channel: String,
+    /// Arrêt avec un mot laissé dans la notification (déconnexion en arrière-plan), qui reste jusqu'à ce qu'on
+    /// la balaie ou qu'on revienne dans AlpIRC.
+    pub note: bool,
 }
 
 /// Les services du système pour l'appli du téléphone.
@@ -73,6 +91,14 @@ pub trait Host {
     /// Notification (mention, message privé) ; la toucher ouvre AlpIRC.
     fn notify(&mut self, title: &str, body: &str);
     fn vibrate(&mut self, ms: i32);
+    /// Joue un fichier son (wav, mp3, ogg) au volume des notifications.
+    fn play_sound(&mut self, path: &Path) {
+        log::info!("son : {}", path.display());
+    }
+    /// Bip court du système (quand il n'y a pas de `sounds/beep.wav`).
+    fn beep_tone(&mut self) {
+        log::info!("bip");
+    }
     fn open_url(&mut self, url: &str);
     /// Dossier des réglages, des scripts et des journaux.
     fn data_dir(&self) -> PathBuf;
@@ -106,8 +132,8 @@ pub trait Host {
         let _ = text;
     }
     /// Libellés des boutons du champ natif.
-    fn set_input_labels(&mut self, send: &str, tab: &str) {
-        let _ = (send, tab);
+    fn set_input_labels(&mut self, send: &str, tab: &str, history: &str) {
+        let _ = (send, tab, history);
     }
     /// Ouvre ou ferme le clavier du système pour un champ dessiné par Rust (boîtes de dialogue).
     fn show_keyboard(&mut self, show: bool) {
@@ -143,11 +169,22 @@ pub trait Host {
     }
 }
 
-/// Réglages propres au téléphone (`android.toml` dans le dossier des données) : la taille de l'interface.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// Réglages propres au téléphone (`android.toml` dans le dossier des données) : taille de l'interface,
+/// déconnexion en arrière-plan, vibration des bips.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Prefs {
     /// Pixels du téléphone par pixel logique ; `None` : automatique (selon la densité de l'écran).
     pub scale: Option<f32>,
+    /// Se déconnecter d'IRC après ce nombre de minutes en arrière-plan ; 0 : jamais (par défaut, ADR 0006).
+    pub background_disconnect_min: u32,
+    /// Vibrer avec les bips (en plus du son).
+    pub vibrate: bool,
+}
+
+impl Default for Prefs {
+    fn default() -> Prefs {
+        Prefs { scale: None, background_disconnect_min: 0, vibrate: true }
+    }
 }
 
 impl Prefs {
@@ -165,8 +202,14 @@ impl Prefs {
         for line in text.lines() {
             let line = line.split('#').next().unwrap_or("").trim();
             if let Some((k, v)) = line.split_once('=') {
-                if k.trim() == "scale" {
-                    p.scale = v.trim().parse::<f32>().ok().filter(|s| (1.0..=8.0).contains(s));
+                let v = v.trim();
+                match k.trim() {
+                    "scale" => p.scale = v.parse::<f32>().ok().filter(|s| (1.0..=8.0).contains(s)),
+                    "background_disconnect_min" => {
+                        p.background_disconnect_min = v.parse::<u32>().ok().map_or(0, |m| m.min(alpirc_shell::Shell::MOBILE_BG_MAX_MIN))
+                    }
+                    "vibrate" => p.vibrate = v != "false",
+                    _ => {}
                 }
             }
         }
@@ -178,6 +221,11 @@ impl Prefs {
         if let Some(v) = self.scale {
             s.push_str(&format!("scale = {v}\n"));
         }
+        s.push_str(&format!(
+            "# Se déconnecter d'IRC après ce nombre de minutes en arrière-plan (0 : jamais).\nbackground_disconnect_min = {}\n",
+            self.background_disconnect_min
+        ));
+        s.push_str(&format!("# Vibrer avec les bips.\nvibrate = {}\n", self.vibrate));
         s
     }
 
@@ -266,6 +314,9 @@ impl Host for SimHost {
     fn open_path(&mut self, path: &Path) {
         log::info!("ouvrir : {}", path.display());
     }
+    fn service(&mut self, s: &ServiceState) {
+        log::info!("service : {} connexion(s), « {} »{}", s.active, s.text, if s.note { " (mot laissé)" } else { "" });
+    }
 }
 
 #[cfg(test)]
@@ -291,18 +342,29 @@ mod tests {
         assert_eq!(parse_event("picked\t3\t/data/cache/picked/3/photo.jpg"), Some(SysEvent::Picked { token: 3, path: Some(PathBuf::from("/data/cache/picked/3/photo.jpg")) }));
         assert_eq!(parse_event("picked\t4"), Some(SysEvent::Picked { token: 4, path: None }));
         assert_eq!(parse_event("picked\tx"), None);
+        assert_eq!(parse_event("hist\t-1\tsalut"), Some(SysEvent::History { older: true, text: "salut".into() }));
+        assert_eq!(parse_event("hist\t1\t"), Some(SysEvent::History { older: false, text: String::new() }));
+        assert_eq!(parse_event("hist\t2\tx"), None);
+        assert_eq!(parse_event("histmenu"), Some(SysEvent::HistoryMenu));
         assert_eq!(parse_event("inconnu"), None);
     }
 
     #[test]
     fn reglages_du_telephone() {
-        assert_eq!(Prefs::parse(""), Prefs { scale: None });
-        assert_eq!(Prefs::parse("scale = 2.5\n"), Prefs { scale: Some(2.5) });
-        assert_eq!(Prefs::parse("# rien\nscale=3 # commentaire"), Prefs { scale: Some(3.0) });
-        assert_eq!(Prefs::parse("scale = 99"), Prefs { scale: None }, "valeur absurde ignorée");
-        let p = Prefs { scale: Some(2.75) };
+        let d = Prefs::default();
+        assert_eq!(Prefs::parse(""), d);
+        assert_eq!(d.background_disconnect_min, 0, "déconnexion en arrière-plan : non par défaut");
+        assert!(d.vibrate);
+        assert_eq!(Prefs::parse("scale = 2.5\n"), Prefs { scale: Some(2.5), ..d.clone() });
+        assert_eq!(Prefs::parse("# rien\nscale=3 # commentaire"), Prefs { scale: Some(3.0), ..d.clone() });
+        assert_eq!(Prefs::parse("scale = 99"), d, "valeur absurde ignorée");
+        assert_eq!(Prefs::parse("background_disconnect_min = 15\nvibrate = false").background_disconnect_min, 15);
+        assert!(!Prefs::parse("vibrate = false").vibrate);
+        assert_eq!(Prefs::parse("background_disconnect_min = 99999").background_disconnect_min, 1440, "borné");
+        assert_eq!(Prefs::parse("background_disconnect_min = -3").background_disconnect_min, 0);
+        let p = Prefs { scale: Some(2.75), background_disconnect_min: 30, vibrate: false };
         assert_eq!(Prefs::parse(&p.to_text()), p);
-        assert_eq!(Prefs::parse(&Prefs::default().to_text()), Prefs::default());
+        assert_eq!(Prefs::parse(&d.to_text()), d);
     }
 
     #[test]

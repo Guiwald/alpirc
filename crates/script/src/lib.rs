@@ -45,6 +45,8 @@ mod users;
 mod vars;
 mod wild;
 
+pub use popups::PopupToken;
+
 /// Erreur d'un script (lecture ou exécution). Le texte est affiché à l'utilisateur, en anglais comme mIRC
 /// (`* /msg: insufficient parameters`), le client le traduit si besoin.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -335,7 +337,43 @@ pub trait Host {
             .map(|o| o.whole_seconds())
             .unwrap_or(0)
     }
+
+    /// `/load` d'un script qui s'exécute dès son chargement (`on LOAD`, `on START`) : vrai pour l'exécuter tout
+    /// de suite ; faux pour le retirer sans rien exécuter (le client demande d'abord à l'utilisateur, ADR 0007,
+    /// puis le recharge lui-même). Par défaut : vrai.
+    fn confirm_load(&mut self, name: &str, path: &Path) -> bool {
+        let _ = (name, path);
+        true
+    }
+
+    /// `$?` et `$input(…)` : la réponse de l'utilisateur. `None` arrête l'exécution sans bruit : l'hôte pose la
+    /// question, puis relance ce qui a été demandé en rendant la réponse au passage suivant (le moteur ne sait pas
+    /// attendre). Par défaut : l'identifiant `?` de l'hôte (vide s'il ne le connaît pas).
+    fn input(&mut self, ctx: &Ctx, req: &InputRequest) -> Option<String> {
+        Some(self.identifier(ctx, "?", std::slice::from_ref(&req.prompt), None).unwrap_or_default())
+    }
 }
+
+/// Question posée à l'utilisateur par `$?` (`$?="Pseudo :"`, `$?*` mot de passe, `$?!` oui ou non) ou par
+/// `$input(question, drapeaux, fenêtre, titre, texte)`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InputRequest {
+    pub prompt: String,
+    /// Drapeaux de `$input` : `e` champ de saisie, `p` mot de passe, `o` bouton OK, `y` oui/non, `n` oui/non/annuler,
+    /// `v` réponses `$ok`, `$yes`, `$no`, `$cancel` ; `i`, `q`, `w`, `h` l'icône. `$?` vaut `e`, `$?*` `ep`, `$?!` `y`.
+    pub flags: String,
+    pub title: String,
+    /// Texte de départ du champ.
+    pub default: String,
+}
+
+/// Commandes propres au moteur (en plus de celles de l'hôte), pour la complétion par Tab.
+pub const ENGINE_COMMANDS: &[&str] = &[
+    "alias", "auser", "break", "continue", "copy", "dec", "did", "dialog", "disable", "enable", "flushini", "goto",
+    "guser", "hadd", "halt", "haltdef", "hdec", "hdel", "hfree", "hinc", "hload", "hmake", "hsave", "inc", "load",
+    "mkdir", "noop", "reload", "remini", "remove", "rename", "return", "rlevel", "rmdir", "ruser", "scid", "scon",
+    "set", "signal", "timer", "timers", "tokenize", "unload", "unset", "unsetall", "var", "write", "writeini",
+];
 
 /// Le moteur : scripts chargés, variables, tables, timers, dialogues.
 ///

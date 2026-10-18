@@ -27,8 +27,12 @@ public class ConnectionService extends Service {
     static volatile boolean wanted;
     static volatile String title = "AlpIRC", text = "", quit = "Quit", channelName = "Connection";
 
-    /** Appelé par Rust (par {@link Bridge#service}) à chaque changement. */
-    static void update(int active, String t, String x, String q, String ch) {
+    /**
+     * Appelé par Rust (par {@link Bridge#service}) à chaque changement. {@code active == 0} arrête le service ; avec
+     * {@code note}, sa notification reste, avec le texte donné, sans être permanente (déconnexion en arrière-plan,
+     * ADR 0006) ; sans, elle disparaît.
+     */
+    static void update(int active, boolean note, String t, String x, String q, String ch) {
         if (t != null) title = t;
         if (x != null) text = x;
         if (q != null) quit = q;
@@ -38,6 +42,7 @@ public class ConnectionService extends Service {
             Context c = Bridge.app;
             if (c == null) return;
             ConnectionService s = instance;
+            NotificationManager nm = c.getSystemService(NotificationManager.class);
             if (wanted) {
                 if (s != null) {
                     s.refresh();
@@ -48,9 +53,20 @@ public class ConnectionService extends Service {
                         Bridge.post("log\tservice de connexion : " + e);
                     }
                 }
-            } else if (s != null) {
-                s.stopForeground(STOP_FOREGROUND_REMOVE);
-                s.stopSelf();
+            } else if (note) {
+                // Le mot reste (on peut le balayer) ; le service s'arrête.
+                ensureChannel(nm);
+                nm.notify(ID, build(c, false));
+                if (s != null) {
+                    s.stopForeground(STOP_FOREGROUND_DETACH);
+                    s.stopSelf();
+                }
+            } else {
+                if (s != null) {
+                    s.stopForeground(STOP_FOREGROUND_REMOVE);
+                    s.stopSelf();
+                }
+                nm.cancel(ID);
             }
         });
     }
@@ -105,24 +121,37 @@ public class ConnectionService extends Service {
         super.onDestroy();
     }
 
-    void refresh() {
-        NotificationManager nm = getSystemService(NotificationManager.class);
+    static void ensureChannel(NotificationManager nm) {
         NotificationChannel ch = nm.getNotificationChannel(CHANNEL);
         if (ch == null || !channelName.contentEquals(ch.getName())) {
             nm.createNotificationChannel(new NotificationChannel(CHANNEL, channelName, NotificationManager.IMPORTANCE_LOW));
         }
-        Intent q = new Intent(this, ConnectionService.class).setAction("quit");
-        PendingIntent quitIntent = PendingIntent.getService(this, 1, q, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new Notification.Builder(this, CHANNEL)
-                .setSmallIcon(Bridge.smallIcon(this))
+    }
+
+    /** La notification : permanente avec le bouton Quitter (service en marche), ou simple mot ({@code ongoing} faux). */
+    static Notification build(Context c, boolean ongoing) {
+        Notification.Builder b = new Notification.Builder(c, CHANNEL)
+                .setSmallIcon(Bridge.smallIcon(c))
                 .setContentTitle(title)
                 .setContentText(text)
-                .setOngoing(true)
-                .setShowWhen(false)
+                .setOngoing(ongoing)
+                .setShowWhen(!ongoing)
                 .setCategory(Notification.CATEGORY_SERVICE)
-                .setContentIntent(Bridge.openApp(this, 3))
-                .addAction(new Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), quit, quitIntent).build())
-                .build();
+                .setContentIntent(Bridge.openApp(c, 3));
+        if (ongoing) {
+            Intent q = new Intent(c, ConnectionService.class).setAction("quit");
+            PendingIntent quitIntent = PendingIntent.getService(c, 1, q, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, android.R.drawable.ic_menu_close_clear_cancel), quit, quitIntent).build());
+        } else {
+            b.setAutoCancel(true);
+        }
+        return b.build();
+    }
+
+    void refresh() {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        ensureChannel(nm);
+        Notification n = build(this, true);
         try {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);

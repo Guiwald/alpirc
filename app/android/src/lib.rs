@@ -10,6 +10,7 @@
 #![allow(clippy::collapsible_if)]
 
 pub mod app;
+pub mod background;
 pub mod host;
 pub mod keys;
 

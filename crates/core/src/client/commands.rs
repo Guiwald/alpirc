@@ -16,13 +16,14 @@ use crate::settings::{IgnoreEntry, NotifyEntry, Server};
 
 /// Noms des commandes intégrées (complétion Tab).
 pub const BUILTINS: &[&str] = &[
-    "abook", "about", "action", "admin", "aline", "ame", "amsg", "away", "back", "ban", "beep", "channel", "clear", "clearall",
-    "cline", "close", "colors", "ctcp", "ctcpreply", "cycle", "dcc", "dehalfop", "deop", "describe", "devoice", "disconnect",
-    "dline", "dns", "echo", "exit", "flash", "folder", "font", "halfop", "help", "hop", "ignore", "iline", "info", "invite",
-    "join", "kick", "lag", "linesep", "links", "list", "log", "lusers", "me", "mode", "motd", "msg", "names", "nick", "notice",
-    "notify", "omsg", "onotice", "op", "options", "part", "partall", "ping", "query", "quit", "quote", "raw", "rline", "run",
-    "say", "scripts", "server", "setname", "sline", "splay", "stats", "time", "topic", "url", "version", "voice", "who",
-    "whois", "whowas", "window",
+    "abook", "about", "action", "admin", "aline", "ame", "amsg", "away", "back", "ban", "beep", "channel", "clear",
+    "clearall", "cline", "close", "closemsg", "colors", "ctcp", "ctcpreply", "cycle", "dcc", "dehalfop", "deop",
+    "describe", "devoice", "disconnect", "dline", "dns", "echo", "exit", "flash", "folder", "font", "halfop", "help",
+    "hop", "ial", "ignore", "iline", "info", "invite", "join", "kick", "lag", "linesep", "links", "list", "log",
+    "lusers", "me", "mode", "motd", "msg", "names", "nick", "notice", "notify", "omsg", "onotice", "op", "options",
+    "part", "partall", "ping", "query", "quit", "quote", "raw", "rline", "run", "say", "scripts", "server", "setname",
+    "sline", "sound", "splay", "stats", "time", "timestamp", "topic", "url", "version", "voice", "who", "whois",
+    "whowas", "window",
 ];
 
 /// `PRIVMSG cible :texte` : le texte toujours en dernier paramètre, comme le font les clients IRC.
@@ -482,6 +483,8 @@ impl State {
                 let co = self.conns.get_mut(&c).unwrap();
                 co.session.set_away(msg);
                 self.drain_session(c);
+                // Une absence choisie (ou un retour) n'est plus l'affaire de l'absence automatique.
+                self.auto_away.retain(|x| *x != c);
             }
             "whois" | "uwho" => {
                 if args.is_empty() {
@@ -657,6 +660,8 @@ impl State {
             "aline" | "dline" | "rline" | "iline" | "sline" | "cline" => self.cmd_lines(conn, &name, args)?,
             "ignore" => self.cmd_ignore(conn, win, args)?,
             "notify" => self.cmd_notify(conn, win, args)?,
+            // Demande de son (CTCP SOUND) : voir `sounds.rs`.
+            "sound" => self.cmd_sound(conn, win, args, quiet)?,
             "splay" => {
                 let (_, file) = switches(args);
                 if file.is_empty() {
@@ -749,18 +754,24 @@ impl State {
             "about" => self.effects.push(Effect::OpenDialog(UiDialog::About)),
             "scripts" => self.effects.push(Effect::OpenDialog(UiDialog::ScriptEditor)),
             "find" => self.effects.push(Effect::OpenDialog(UiDialog::Find(win))),
-            "help" => {
-                let url = format!("{}#readme", super::irc::HOMEPAGE);
-                let t = self.t(Key::Help, &[("url", &url)]);
-                self.print(win, LineKind::Info, t);
-            }
+            "help" => self.cmd_help(win, args),
             "linesep" => {
                 let target = if args.is_empty() { win } else { self.find_win(conn, args).unwrap_or(win) };
                 let mut l = self.pl(target, LineKind::Info, "-");
                 l.no_stamp = true;
                 self.add_line(l);
             }
-            "ial" | "timestamp" | "flush" => {}
+            "timestamp" => self.cmd_timestamp(win, args),
+            "ial" => {
+                let t = self.t(Key::IalAlwaysOn, &[]);
+                self.print(win, LineKind::Info, t);
+            }
+            "closemsg" => {
+                // `/closemsg [pseudo]` : comme `/close -m [pseudo]`.
+                let names = if args.is_empty() { String::new() } else { format!(" {args}") };
+                self.cmd_close(conn, win, &format!("-m{names}"));
+            }
+            "flush" => {}
             _ => {
                 // Commande inconnue : envoyée au serveur telle quelle, comme dans mIRC.
                 let line = if args.is_empty() { name.to_ascii_uppercase() } else { format!("{} {args}", name.to_ascii_uppercase()) };
@@ -981,13 +992,24 @@ impl State {
 
     // --- fenêtres @ ---
 
+    /// `/window [-acehlnrx] nom` : fenêtres `@` (créées au besoin) et toutes les autres (canal, privé, Status,
+    /// `=discussion`, Notify…) : `-a` activer, `-c` fermer, `-n` réduire, `-x` agrandir, `-r` restaurer.
     fn cmd_window(&mut self, conn: Option<ConnId>, args: &str) -> Result<(), String> {
         let (sw, rest) = switches(args);
         let (name, _) = split_word(rest);
-        if !name.starts_with('@') || name.len() < 2 {
+        let custom = name.starts_with('@');
+        if name.is_empty() || custom && name.len() < 2 {
             return Err(self.insufficient("window"));
         }
-        let existing = self.find_win(None, name);
+        let existing = if custom {
+            self.find_win(None, name)
+        } else {
+            self.find_win(conn, name)
+                .or_else(|| self.windows.iter().find(|w| w.name.eq_ignore_ascii_case(name)).map(|w| w.id))
+        };
+        if !custom && existing.is_none() {
+            return Err(self.t(Key::NoSuchWindow, &[("cmd", "window"), ("name", name)]));
+        }
         if sw.contains('c') {
             if let Some(w) = existing {
                 self.close_win(w);
@@ -999,16 +1021,28 @@ impl State {
             None => self.create_window(WinKind::Custom, conn, name),
         };
         if let Some(x) = self.win_mut(w) {
-            if sw.contains('l') {
+            if custom && sw.contains('l') {
                 x.listbox = true;
             }
-            if sw.contains('e') {
+            if custom && sw.contains('e') {
                 x.editbox = true;
             }
             x.touch();
         }
         if sw.contains('a') || existing.is_none() && !sw.contains('n') && !sw.contains('h') {
             self.activate(w);
+        }
+        let state = if sw.contains('n') {
+            Some(super::WinState::Minimize)
+        } else if sw.contains('x') {
+            Some(super::WinState::Maximize)
+        } else if sw.contains('r') {
+            Some(super::WinState::Restore)
+        } else {
+            None
+        };
+        if let Some(state) = state {
+            self.effects.push(Effect::WindowState { win: w, state });
         }
         Ok(())
     }
@@ -1212,6 +1246,12 @@ impl State {
     fn cmd_notify(&mut self, conn: Option<ConnId>, win: WinId, args: &str) -> Result<(), String> {
         let (sw, rest) = switches(args);
         let (nick, note) = split_word(rest);
+        if nick.is_empty() && !sw.contains('s') {
+            // Sans argument : la fenêtre Notify (pseudos et leur état, tenue à jour).
+            let w = self.notify_window();
+            self.activate(w);
+            return Ok(());
+        }
         if nick.is_empty() {
             let list: Vec<String> = self.settings.address_book.notify.iter().map(|e| e.nick.clone()).collect();
             let t = if list.is_empty() { self.t(Key::ListEmpty, &[]) } else { self.t(Key::NotifyList, &[("list", &list.join(", "))]) };
@@ -1255,5 +1295,228 @@ impl State {
     /// Texte d'une ligne, codes retirés.
     pub(crate) fn plain(text: &str) -> String {
         format::strip(text)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fenêtre Notify, aide, horodatage, absence automatique
+// ---------------------------------------------------------------------------------------------------------------
+
+impl State {
+    /// La fenêtre Notify (créée au besoin) : la liste Notify et l'état de chacun, tenue à jour par l'interface.
+    pub(crate) fn notify_window(&mut self) -> WinId {
+        if let Some(w) = self.windows.iter().find(|w| w.kind == WinKind::Notify) {
+            return w.id;
+        }
+        let w = self.create_window(WinKind::Notify, None, "Notify");
+        let title = self.t(Key::TitleNotify, &[]);
+        if let Some(x) = self.win_mut(w) {
+            x.title = title;
+            x.editbox = false;
+            x.touch();
+        }
+        w
+    }
+
+    /// `/help` (liste des commandes) et `/help commande` (usage et rôle).
+    fn cmd_help(&mut self, win: WinId, args: &str) {
+        let (cmd, _) = split_word(args);
+        if !cmd.is_empty() {
+            let t = match super::help::help_for(self.lang, cmd) {
+                Some(h) => format!("* {h}"),
+                None => self.t(Key::HelpNone, &[("cmd", cmd.trim_start_matches('/'))]),
+            };
+            self.print(win, LineKind::Info, t);
+            return;
+        }
+        let head = self.t(Key::HelpHead, &[]);
+        self.print(win, LineKind::Info, head);
+        let mut line = String::from("*");
+        for (c, _) in super::help::HELP {
+            if line.len() + c.len() + 2 > 100 {
+                self.print(win, LineKind::Info, std::mem::replace(&mut line, String::from("*")));
+            }
+            line.push_str(" /");
+            line.push_str(c);
+        }
+        if line.len() > 1 {
+            self.print(win, LineKind::Info, line);
+        }
+        let url = format!("{}#readme", super::irc::HOMEPAGE);
+        let more = self.t(Key::HelpMore, &[("url", &url)]);
+        self.print(win, LineKind::Info, more);
+    }
+
+    /// `/timestamp [on|off]` : horodatage de toutes les fenêtres (sans argument : dit où il en est).
+    fn cmd_timestamp(&mut self, win: WinId, args: &str) {
+        let (w, _) = split_word(args);
+        let on = match w.to_ascii_lowercase().as_str() {
+            "on" => Some(true),
+            "off" => Some(false),
+            _ => None,
+        };
+        if let Some(on) = on
+            && on != self.settings.irc.timestamps
+        {
+            self.settings.irc.timestamps = on;
+            self.effects.push(Effect::SaveSettings);
+        }
+        let key = if self.settings.irc.timestamps { Key::TimestampOn } else { Key::TimestampOff };
+        let t = self.t(key, &[]);
+        self.print(win, LineKind::Info, t);
+    }
+
+    /// La liste Notify a changé (carnet d'adresses) : MONITOR ou ISON remis à jour sur les connexions prêtes, sans
+    /// ligne « ajouté »/« retiré » ; seuls les pseudos ajoutés déjà en ligne sont annoncés, comme d'habitude.
+    pub(crate) fn notify_resync(&mut self) {
+        let ids: Vec<ConnId> = self.conns.iter().filter(|(_, c)| c.ready && c.connected()).map(|(id, _)| *id).collect();
+        for id in ids {
+            let nicks = self.notify_nicks(id);
+            let Some(c) = self.conns.get_mut(&id) else { continue };
+            let keep: std::collections::HashSet<String> = nicks.iter().map(|n| c.session.fold(n)).collect();
+            c.notify_online.retain(|k, _| keep.contains(k));
+            if c.monitor_sent {
+                // Tout est redemandé : le serveur répond pour chaque pseudo, et seuls les changements s'affichent.
+                let limit = c.session.isupport().monitor.unwrap_or(100).clamp(1, 100);
+                self.send_line(id, "MONITOR C");
+                for chunk in nicks.chunks(limit) {
+                    self.send_line(id, &format!("MONITOR + {}", chunk.join(",")));
+                }
+            } else {
+                c.next_ison = if nicks.is_empty() { None } else { Some(self.now) };
+            }
+        }
+    }
+
+    /// Absence automatique : après `away.auto_away_minutes` sans saisie, AWAY sur les connexions présentes.
+    pub(crate) fn auto_away_tick(&mut self) {
+        let mins = self.settings.away.auto_away_minutes;
+        if mins == 0 || self.now - self.last_input < mins as i64 * 60_000 {
+            return;
+        }
+        let msg = match self.settings.away.default_message.trim() {
+            "" => "Away".to_string(),
+            m => m.to_string(),
+        };
+        let ids: Vec<ConnId> = self
+            .conns
+            .iter()
+            .filter(|(id, c)| c.ready && c.connected() && c.session.away().is_none() && !self.is_bouncer_parent(**id))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            if let Some(c) = self.conns.get_mut(&id) {
+                c.session.set_away(Some(&msg));
+            }
+            self.drain_session(id);
+            if !self.auto_away.contains(&id) {
+                self.auto_away.push(id);
+            }
+        }
+    }
+
+    /// Prochaine échéance de l'absence automatique.
+    pub(crate) fn auto_away_next(&self) -> Option<i64> {
+        let mins = self.settings.away.auto_away_minutes;
+        let due = self.last_input + mins as i64 * 60_000;
+        (mins > 0 && due > self.now).then_some(due)
+    }
+
+    /// Saisie après une absence automatique : de retour sur les connexions mises absentes par elle.
+    pub(crate) fn auto_away_back(&mut self) {
+        for id in std::mem::take(&mut self.auto_away) {
+            let Some(c) = self.conns.get_mut(&id) else { continue };
+            if c.connected() && c.session.away().is_some() {
+                c.session.set_away(None);
+                self.drain_session(id);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Ce que l'hôte peut demander en plus des lignes tapées
+// ---------------------------------------------------------------------------------------------------------------
+
+impl super::Client {
+    /// Exécute une commande intégrée (`topic`, `msg`, `raw`…) avec ses arguments tels quels : sans passer par le
+    /// moteur de scripts (pas d'alias, pas d'évaluation, `|`, `{` et `}` gardés), mais avec la file anti-flood et
+    /// le même écho que la commande tapée. Pour les boîtes de l'interface qui envoient un texte libre (sujet…).
+    /// L'erreur éventuelle est aussi affichée dans la fenêtre.
+    pub fn builtin(&mut self, win: WinId, name: &str, args: &str, now_ms: i64) -> Result<(), String> {
+        self.st.now = now_ms;
+        let conn = self.st.win(win).and_then(|w| w.conn);
+        let ctx = self.st.ctx(conn, Some(win));
+        let name = name.trim_start_matches('/').to_ascii_lowercase();
+        self.st.dcc.user = true;
+        let r = self.st.run_builtin(&ctx, &name, args, false);
+        self.st.dcc.user = false;
+        if let Err(e) = &r {
+            let target = if self.st.win(win).is_some() { win } else { self.st.active.unwrap_or(win) };
+            self.st.print(target, LineKind::Error, if e.starts_with("* ") { e.clone() } else { format!("* {e}") });
+        }
+        self.finish();
+        r
+    }
+
+    /// Envoie une ligne brute au serveur de `conn`, telle quelle, par la file anti-flood, sans écho.
+    pub fn raw(&mut self, conn: ConnId, line: &str, now_ms: i64) {
+        self.st.now = now_ms;
+        self.st.send_line(conn, line);
+        self.finish();
+    }
+
+    /// La liste Notify des réglages a changé (carnet d'adresses) : MONITOR/ISON remis à jour sans rien afficher.
+    pub fn notify_changed(&mut self, now_ms: i64) {
+        self.st.now = now_ms;
+        self.st.notify_resync();
+        self.finish();
+    }
+
+    /// Touche appuyée (`up` faux) ou relâchée dans une fenêtre : `on KEYDOWN` / `on KEYUP` des scripts, avec
+    /// `$keyval` (code de touche à la manière de Windows : `65` pour A, `13` pour Entrée…) et `$keychar`. Rend vrai
+    /// si un script a fait `/haltdef` : l'interface ne traite alors pas la touche.
+    pub fn key_event(&mut self, win: WinId, keyval: u32, keychar: Option<char>, up: bool, now_ms: i64) -> bool {
+        self.st.now = now_ms;
+        let kind = if up { EventKind::KeyUp } else { EventKind::KeyDown };
+        if !self.st.settings.scripts.enabled || !self.engine.handles(kind) {
+            return false;
+        }
+        let Some(w) = self.st.win(win) else { return false };
+        let (conn, name) = (w.conn, w.name.clone());
+        let ev = alpirc_script::EventInfo {
+            kind: Some(kind),
+            conn,
+            target: Some(name),
+            extra: vec![
+                ("keyval".into(), keyval.to_string()),
+                ("keychar".into(), keychar.map(String::from).unwrap_or_default()),
+            ],
+            ..alpirc_script::EventInfo::default()
+        };
+        let ctx = self.st.ctx(conn, Some(win));
+        let super::Client { st, engine } = self;
+        let halted = engine.fire(st, &ctx, &ev).haltdef;
+        self.finish();
+        halted
+    }
+}
+
+/// Nom retenu dans `order.txt` pour une sorte de fichier qui ne se devine pas d'après son texte.
+pub(crate) fn script_kind_name(k: alpirc_script::ScriptKind) -> Option<&'static str> {
+    match k {
+        alpirc_script::ScriptKind::Aliases => Some("aliases"),
+        alpirc_script::ScriptKind::Popups => Some("popups"),
+        alpirc_script::ScriptKind::Remote => None,
+    }
+}
+
+/// Sorte d'un fichier d'après son nom dans `order.txt`.
+pub(crate) fn script_kind_from_name(s: &str) -> Option<alpirc_script::ScriptKind> {
+    match s.to_ascii_lowercase().as_str() {
+        "aliases" => Some(alpirc_script::ScriptKind::Aliases),
+        "popups" => Some(alpirc_script::ScriptKind::Popups),
+        "remote" => Some(alpirc_script::ScriptKind::Remote),
+        _ => None,
     }
 }

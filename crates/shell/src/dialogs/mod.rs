@@ -16,22 +16,26 @@
 pub mod abook;
 pub mod central;
 pub mod cert;
+pub mod chanlist;
 pub mod colors;
 pub mod connect;
 pub mod editor;
 pub mod folder;
 pub mod form;
+pub mod input;
+pub mod logs;
 pub mod network;
 pub mod options;
 pub mod script;
 mod text;
+pub mod welcome;
 
 /// Textes des boîtes de dialogue (voir [`crate::tr`]).
 pub const TR: crate::tr::Table = text::TR;
 
-/// Construit la boîte de l'interface demandée, si elle existe dans cette version.
-pub fn build(d: UiDialog, client: &Client) -> Option<Box<dyn DialogCtl>> {
-    Some(match d {
+/// Construit la boîte de l'interface demandée.
+pub fn build(d: UiDialog, client: &Client) -> Box<dyn DialogCtl> {
+    match d {
         UiDialog::Options(page) => Box::new(options::Options::new(client, page.as_deref())),
         UiDialog::AddressBook => Box::new(abook::AddressBook::new(client)),
         UiDialog::ChannelsFolder => Box::new(folder::ChannelsFolder::new(client)),
@@ -47,7 +51,7 @@ pub fn build(d: UiDialog, client: &Client) -> Option<Box<dyn DialogCtl>> {
         UiDialog::Connect => Box::new(connect::SelectServer::new(client)),
         UiDialog::About => Box::new(About),
         UiDialog::Find(w) => Box::new(FindDialog { win: w }),
-    })
+    }
 }
 
 use std::path::PathBuf;
@@ -96,6 +100,10 @@ pub enum Action {
         save: bool,
         suggested: Option<String>,
     },
+    /// Ouvrir un dossier (ou un fichier) dans le gestionnaire de fichiers du système.
+    OpenPath(PathBuf),
+    /// `/list` sur la connexion active, avec les choix de la boîte « Liste des canaux ».
+    ListChannels(chanlist::ListQuery),
 }
 
 /// Contexte donné aux contrôleurs.
@@ -103,6 +111,8 @@ pub struct Cx<'a> {
     pub client: &'a mut Client,
     pub now: i64,
     pub lang: Lang,
+    /// Décalage horaire de l'appareil (secondes), pour les dates affichées.
+    pub utc_offset: i32,
     pub actions: Vec<Action>,
 }
 
@@ -175,7 +185,7 @@ impl crate::Shell {
         let now = p.now_ms();
         let mut actions = Vec::new();
         if let Some(view) = self.modals.get_mut(key) {
-            let mut cx = Cx { client: &mut self.client, now, lang, actions: Vec::new() };
+            let mut cx = Cx { client: &mut self.client, now, lang, utc_offset: self.utc_offset, actions: Vec::new() };
             ctl.file_picked(path, view, &mut cx);
             actions = cx.actions;
         }
@@ -300,33 +310,6 @@ pub fn select_row(view: &mut DialogView, id: u32, i: Option<usize>) {
         Some(i) => view.set_selection(id, &[i]),
         None => view.set_selection(id, &[]),
     }
-}
-
-/// Texte libre à mettre au bout d'une commande (`/topic #canal texte`) : le moteur de scripts coupe la ligne sur
-/// un `|`, `{` ou `}` isolé entre deux espaces ; l'espace qui suit un tel caractère devient une espace insécable,
-/// qui ne se voit pas mais ne coupe plus rien.
-pub fn protect_args(text: &str) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    let mut out = String::with_capacity(text.len() + 4);
-    let ws = |c: char| c == ' ' || c == '\t';
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        out.push(c);
-        let prev_ws = i == 0 || ws(chars[i - 1]) || (c == '{' && chars[i - 1] == ')');
-        if matches!(c, '|' | '{' | '}') && prev_ws {
-            match chars.get(i + 1) {
-                None => out.push('\u{a0}'),
-                Some(&n) if ws(n) => {
-                    out.push('\u{a0}');
-                    i += 1;
-                }
-                _ => {}
-            }
-        }
-        i += 1;
-    }
-    out
 }
 
 /// Fenêtre Status à utiliser pour une commande de la boîte (celle de la fenêtre active, sinon la première).
@@ -585,11 +568,6 @@ impl DialogCtl for About {
     }
 }
 
-/// Boîte provisoire pour les fenêtres qui ne sont pas encore faites.
-pub fn coming_soon(lang: Lang, what: &str) -> MessageBox {
-    MessageBox::info(&format!("{} — {}", plain(what), t(lang, "soon.title")), &t(lang, "soon.text"), lang)
-}
-
 /// Confirmation de sortie quand des connexions sont ouvertes.
 pub fn quit_confirm(lang: Lang, n: usize) -> MessageBox {
     MessageBox {
@@ -637,21 +615,21 @@ pub(crate) mod testkit {
             let spec = ctl.spec(self.lang);
             let mut view = DialogView::new(&spec, &self.res);
             view.center_in(Rect::new(0, 0, 1024, 768));
-            let mut cx = Cx { client: &mut self.client, now: self.now, lang: self.lang, actions: Vec::new() };
+            let mut cx = Cx { client: &mut self.client, now: self.now, lang: self.lang, utc_offset: 0, actions: Vec::new() };
             ctl.init(&mut view, &mut cx);
             let a = cx.actions;
             (view, a)
         }
 
         pub fn send(&mut self, ctl: &mut dyn DialogCtl, view: &mut DialogView, msg: DialogMsg) -> (Outcome, Vec<Action>) {
-            let mut cx = Cx { client: &mut self.client, now: self.now, lang: self.lang, actions: Vec::new() };
+            let mut cx = Cx { client: &mut self.client, now: self.now, lang: self.lang, utc_offset: 0, actions: Vec::new() };
             let o = ctl.on(msg, view, &mut cx);
             let a = cx.actions;
             (o, a)
         }
 
         pub fn refresh(&mut self, ctl: &mut dyn DialogCtl, view: &mut DialogView) -> Vec<Action> {
-            let mut cx = Cx { client: &mut self.client, now: self.now, lang: self.lang, actions: Vec::new() };
+            let mut cx = Cx { client: &mut self.client, now: self.now, lang: self.lang, utc_offset: 0, actions: Vec::new() };
             ctl.refresh(view, &mut cx);
             cx.actions
         }
@@ -699,15 +677,6 @@ pub(crate) mod testkit {
                 }
             }
         }
-    }
-
-    #[test]
-    fn protect_args_keeps_pipes_and_braces() {
-        use super::protect_args;
-        assert_eq!(protect_args("a | b"), "a |\u{a0}b");
-        assert_eq!(protect_args("a|b { c }"), "a|b {\u{a0}c }\u{a0}");
-        assert_eq!(protect_args("|"), "|\u{a0}");
-        assert_eq!(protect_args("sans rien"), "sans rien");
     }
 
     /// Vérifie qu'aucun texte de la boîte n'est une clé de traduction oubliée (`opt.irc.x`).

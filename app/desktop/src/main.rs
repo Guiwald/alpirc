@@ -4,10 +4,17 @@
 //! interface) est dans `alpirc-shell`.
 
 mod app;
+#[cfg(target_os = "linux")]
+mod instance;
 mod keys;
 #[cfg(target_os = "macos")]
+mod macevents;
+#[cfg(target_os = "macos")]
 mod macmenu;
+#[cfg(target_os = "macos")]
+mod macnotify;
 mod platform;
+mod sound;
 
 use std::path::PathBuf;
 
@@ -21,6 +28,16 @@ pub enum UserEvent {
     Net(NetEvent),
     /// Un menu natif a été choisi (macOS).
     Menu,
+    /// Lien `irc://` ou `ircs://` venu du système (Apple Event sur Mac, seconde instance sous Linux).
+    OpenUrl(String),
+    /// Ramener la fenêtre devant (seconde instance lancée sans lien, clic sur une notification).
+    Raise,
+}
+
+/// Vrai pour un lien que `Shell::open_irc_url` sait ouvrir.
+pub fn is_irc_url(s: &str) -> bool {
+    let l = s.get(..7).unwrap_or(s).to_ascii_lowercase();
+    l.starts_with("irc://") || l.starts_with("ircs://")
 }
 
 /// Heure réelle en millisecondes depuis 1970.
@@ -57,6 +74,15 @@ fn main() {
     if let Some(parent) = settings_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
+    // Lien irc:// passé en argument (ouverture depuis le bureau sous Linux, ou `open --args` sur Mac).
+    let open_url = args.into_iter().find(|a| is_irc_url(a));
+    // Linux : si AlpIRC tourne déjà (même dossier de données), il prend le lien et ce processus s'arrête.
+    #[cfg(target_os = "linux")]
+    let instance = match instance::claim(&data_dir, open_url.as_deref()) {
+        instance::Claim::Primary(p) => Some(p),
+        instance::Claim::Handed => return,
+        instance::Claim::Alone => None,
+    };
     let event_loop = match EventLoop::<UserEvent>::with_user_event().build() {
         Ok(e) => e,
         Err(e) => {
@@ -64,6 +90,13 @@ fn main() {
             std::process::exit(1);
         }
     };
+    #[cfg(target_os = "linux")]
+    if let Some(p) = instance {
+        p.serve(event_loop.create_proxy());
+    }
+    // macOS : les liens arrivent par Apple Event, avant ou après le lancement.
+    #[cfg(target_os = "macos")]
+    macevents::install(event_loop.create_proxy());
     let proxy = event_loop.create_proxy();
     let net = Net::new(Box::new(move |ev| {
         let _ = proxy.send_event(UserEvent::Net(ev));
@@ -77,8 +110,6 @@ fn main() {
         now_ms: now,
     };
     let shell = Shell::new(cfg, net);
-    // Lien irc:// passé en argument (ouverture depuis le système).
-    let open_url = args.into_iter().find(|a| a.starts_with("irc://") || a.starts_with("ircs://"));
     let mut app = app::App::new(shell, event_loop.create_proxy(), open_url);
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("AlpIRC : {e}");

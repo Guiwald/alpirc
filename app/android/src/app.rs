@@ -19,6 +19,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
 use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowId};
 
+use crate::background::BackgroundTimer;
 use crate::host::{Host, Prefs, ServiceState, SysEvent, auto_scale, parse_event};
 use crate::keys;
 
@@ -80,13 +81,26 @@ impl ShellPlatform for Plat {
     fn notify(&mut self, title: &str, body: &str) {
         self.host.notify(title, body);
     }
-    /// Bip : une courte vibration.
+    /// Bip : `sounds/beep.wav` s'il existe, sinon le bip du système ; et une courte vibration si elle est
+    /// choisie (menu ⋮, Téléphone).
     fn beep(&mut self) {
-        self.host.vibrate(40);
+        let wav = self.data_dir.join("sounds").join("beep.wav");
+        if wav.is_file() {
+            self.host.play_sound(&wav);
+        } else {
+            self.host.beep_tone();
+        }
+        if self.prefs.vibrate {
+            self.host.vibrate(40);
+        }
     }
+    /// Son d'un événement (`/splay`, sons des réglages) : wav, mp3 ou ogg, au volume des notifications.
     fn play_sound(&mut self, path: &std::path::Path) {
-        log::info!("son demandé : {}", path.display());
-        self.host.vibrate(80);
+        if path.is_file() {
+            self.host.play_sound(path);
+        } else {
+            log::warn!("son introuvable : {}", path.display());
+        }
     }
     fn flash(&mut self) {}
     fn open_url(&mut self, url: &str) {
@@ -175,6 +189,12 @@ pub struct MobileApp {
     service: Option<ServiceState>,
     foreground: bool,
     service_running: bool,
+    /// Déconnexion après N minutes en arrière-plan (ADR 0006).
+    background: BackgroundTimer,
+    /// La déconnexion en arrière-plan a eu lieu (minutes) : la notification le dit jusqu'au retour.
+    bg_note: Option<u32>,
+    /// La notification du service montre ce mot (elle n'est plus celle d'un service au premier plan).
+    note_shown: bool,
     /// Le shell doit relire les marges.
     insets_dirty: bool,
 }
@@ -206,6 +226,8 @@ pub fn build(host: Box<dyn Host>, proxy: EventLoopProxy<UserEvent>) -> MobileApp
         log::info!("{n} polices de repli du système");
     }
     shell.set_native_input(host.native_input());
+    shell.set_phone_prefs(prefs.background_disconnect_min, prefs.vibrate);
+    let background = BackgroundTimer::new(prefs.background_disconnect_min);
     let plat = Plat {
         host,
         repaint: true,
@@ -236,6 +258,9 @@ pub fn build(host: Box<dyn Host>, proxy: EventLoopProxy<UserEvent>) -> MobileApp
         service: None,
         foreground: true,
         service_running: false,
+        background,
+        bg_note: None,
+        note_shown: false,
         insets_dirty: true,
     }
 }
@@ -338,6 +363,18 @@ impl MobileApp {
         self.shell.input(input, &mut self.plat);
     }
 
+    /// Touches du simulateur pour ce qui n'a pas de bouton sur ordinateur : F2 = bouton Historique du champ natif,
+    /// F9 / F10 = l'appli passe derrière / revient devant (déconnexion en arrière-plan).
+    fn sim_key(&mut self, key: alpirc_ui::Key) -> bool {
+        match key {
+            alpirc_ui::Key::F(2) => self.system_event(SysEvent::HistoryMenu),
+            alpirc_ui::Key::F(9) => self.system_event(SysEvent::Foreground(false)),
+            alpirc_ui::Key::F(10) => self.system_event(SysEvent::Foreground(true)),
+            _ => return false,
+        }
+        true
+    }
+
     /// Bouton Retour : ferme ce qui est ouvert, sinon l'appli passe derrière (connexions gardées, ADR 0006).
     fn back(&mut self) {
         if !self.shell.mobile_back(&mut self.plat) && !self.plat.host.to_back() {
@@ -367,7 +404,23 @@ impl MobileApp {
                 self.foreground = fg;
                 self.shell.set_app_focused(fg, &mut self.plat);
                 self.insets_dirty = true;
+                if fg {
+                    // Retour avant le délai : il est annulé ; après : reconnexion aux mêmes serveurs.
+                    self.bg_note = None;
+                    if self.background.foreground() {
+                        let n = self.shell.mobile_background_reconnect(&mut self.plat);
+                        log::info!("retour au premier plan : {n} reconnexion(s)");
+                    }
+                } else {
+                    self.background.background(wall_ms());
+                }
             }
+            SysEvent::History { older, text } => {
+                if let Some(t) = self.shell.mobile_history_step(older, &text) {
+                    self.plat.host.set_input_text(&t);
+                }
+            }
+            SysEvent::HistoryMenu => self.shell.mobile_history_menu(&mut self.plat),
             SysEvent::Quit => self.shell.exit_now(&mut self.plat),
             SysEvent::Destroyed { config } => {
                 // La boucle doit rendre la main pour que l'activité se termine, et ne pourra pas être recréée dans
@@ -390,11 +443,14 @@ impl MobileApp {
             if self.input_state.as_ref() != Some(&want) {
                 let lang = self.shell.language();
                 if self.input_state.is_none() {
-                    self.plat.host.set_input_labels(&t(lang, "mobile.send"), &t(lang, "mobile.tab"));
+                    self.plat.host.set_input_labels(&t(lang, "mobile.send"), &t(lang, "mobile.tab"), &t(lang, "mobile.history"));
                 }
                 self.plat.host.set_input(want.0, &want.1);
                 self.input_state = Some(want);
                 self.insets_dirty = true;
+            }
+            if let Some(text) = self.shell.take_native_input_text() {
+                self.plat.host.set_input_text(&text);
             }
             let kb = self.shell.mobile_text_focus();
             if kb != self.keyboard {
@@ -414,7 +470,12 @@ impl MobileApp {
             1 => t(lang, "mobile.service.one"),
             n => alpirc_shell::tr::tf(lang, "mobile.service.many", &[("n", &n.to_string())]),
         };
-        let keep = active > 0 || (self.service_running && !self.foreground);
+        // Après la déconnexion en arrière-plan, le service s'arrête et sa notification le dit.
+        let keep = active > 0 || (self.service_running && !self.foreground && self.bg_note.is_none());
+        let (text, note) = match self.bg_note {
+            Some(n) if active == 0 => (alpirc_shell::tr::tf(lang, "mobile.bg.done", &[("n", &n.to_string())]), true),
+            _ => (text, false),
+        };
         let st = ServiceState {
             active: if keep { active.max(1) } else { 0 },
             title: "AlpIRC".to_string(),
@@ -422,12 +483,14 @@ impl MobileApp {
             quit: t(lang, "mobile.service.quit"),
             channel: t(lang, "mobile.service.channel"),
             notify_channel: t(lang, "mobile.notify.channel"),
+            note,
         };
         if self.service.as_ref() != Some(&st) {
-            if st.active > 0 || self.service_running {
+            if st.active > 0 || self.service_running || self.note_shown || st.note {
                 self.plat.host.service(&st);
             }
             self.service_running = st.active > 0;
+            self.note_shown = st.note;
             self.service = Some(st);
         }
     }
@@ -447,6 +510,17 @@ impl MobileApp {
         if self.started {
             for (request, path) in std::mem::take(&mut self.plat.answers) {
                 self.shell.file_picked(request, path, &mut self.plat);
+            }
+            if let Some((minutes, vibrate)) = self.shell.take_phone_prefs_change() {
+                self.plat.prefs.background_disconnect_min = minutes;
+                self.plat.prefs.vibrate = vibrate;
+                self.plat.prefs.save(&self.plat.data_dir);
+                self.background.set_minutes(minutes);
+            }
+            if self.background.poll(now) {
+                let n = self.shell.mobile_background_disconnect(&mut self.plat);
+                log::info!("{} min en arrière-plan : {n} connexion(s) fermée(s)", self.background.minutes());
+                self.bg_note = Some(self.background.minutes());
             }
             self.sync_system();
         }
@@ -620,7 +694,9 @@ impl MobileApp {
                     } else {
                         let mods = keys::mods(self.mods);
                         if let Some((key, text)) = keys::map(&event, mods) {
-                            if key == alpirc_ui::Key::Escape && self.shell.mobile_back(&mut self.plat) {
+                            if self.plat.host.simulated_screen().is_some() && self.sim_key(key) {
+                                // Touche du simulateur (F2, F9, F10).
+                            } else if key == alpirc_ui::Key::Escape && self.shell.mobile_back(&mut self.plat) {
                                 // Échap du simulateur : comme Retour.
                             } else {
                                 self.send(Input::Key { key, mods, text, repeat: event.repeat });

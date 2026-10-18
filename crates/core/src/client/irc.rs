@@ -10,7 +10,7 @@ use super::window::{Activity, LineKind, WinKind};
 use super::{ChanEntry, ChanList, ConnId, ConnState, Effect, WinId};
 use crate::i18n::Key;
 use crate::session::{MsgKind, ReplyKind, SessionEvent as SE};
-use crate::settings::ControlKind;
+use crate::settings::{ControlKind, SoundEvent};
 use crate::timeutil;
 
 /// Sortes d'ignorance (`/ignore -pcntikd`).
@@ -156,10 +156,12 @@ impl super::state::State {
         self.active != Some(win) || !self.app_focused
     }
 
+    /// Effets d'une alerte (surlignage, privé) : bip, clignotement, notification. « Tout couper » (Options › Sons)
+    /// fait taire le bip.
     fn alert_effects(&self, win: WinId, beep: bool, flash: bool, notify: bool, title: String, body: &str) -> Vec<Effect> {
         let mut v = Vec::new();
         let unseen = self.unseen(win);
-        if unseen && beep {
+        if unseen && beep && !self.settings.sounds.mute {
             v.push(Effect::Beep);
         }
         if unseen && flash {
@@ -294,6 +296,9 @@ impl super::state::State {
                     if self.settings.irc.rejoin_on_kick {
                         p = p.send(conn, format!("JOIN {channel}"));
                     }
+                    if let Some(fx) = self.event_sound(SoundEvent::Kick) {
+                        p = p.effect(fx);
+                    }
                 } else if let Some(w) = win {
                     let t = self.t(Key::Kicked, &[("nick", &target), ("by", &by), ("reason", &r)]);
                     p = p.line(self.line_at(w, LineKind::Kick, t, time));
@@ -388,7 +393,7 @@ impl super::state::State {
             }
             SE::TopicWhoTime { channel, setter, time: when } => {
                 if let Some(w) = self.chan_win(conn, &channel) {
-                    let date = when.map(|s| self.asctime(s * 1000)).unwrap_or_default();
+                    let date = when.map(|s| self.date_text(s * 1000)).unwrap_or_default();
                     let t = self.t(Key::TopicSetBy, &[("nick", &setter), ("date", &date)]);
                     let p = Pres::new().line(self.line_at(w, LineKind::Topic, t, time));
                     self.push_pres(p);
@@ -411,7 +416,7 @@ impl super::state::State {
             SE::CreationTime { channel, time: when, auto } => {
                 if !auto {
                     let win = self.chan_win(conn, &channel).unwrap_or_else(|| self.active_for(conn));
-                    let date = self.asctime(when * 1000);
+                    let date = self.date_text(when * 1000);
                     let t = self.t(Key::CreatedOn, &[("chan", &channel), ("date", &date)]);
                     let p = Pres::new().line(self.line_at(win, LineKind::Mode, t, time));
                     self.push_pres(p);
@@ -429,7 +434,7 @@ impl super::state::State {
             SE::ListEntry { channel, entry, quiet, .. } => {
                 if !quiet {
                     let win = self.chan_win(conn, &channel).unwrap_or_else(|| self.active_for(conn));
-                    let date = entry.time.map(|s| self.asctime(s * 1000)).unwrap_or_default();
+                    let date = entry.time.map(|s| self.date_text(s * 1000)).unwrap_or_default();
                     let setter = entry.setter.clone().unwrap_or_default();
                     let t = self.t(Key::ListEntryFmt, &[("chan", &channel), ("mask", &entry.mask), ("setter", &setter), ("date", &date)]);
                     let p = Pres::new().line(self.line_at(win, LineKind::Normal, t, time));
@@ -465,6 +470,9 @@ impl super::state::State {
                     p = Pres::new().event(self.ctx(Some(conn), Some(win)), ev).line(self.line_at(win, LineKind::Invite, t, time));
                     if self.settings.irc.join_on_invite {
                         p = p.send(conn, format!("JOIN {channel}"));
+                    }
+                    if let Some(fx) = self.event_sound(SoundEvent::Invite) {
+                        p = p.effect(fx);
                     }
                 } else {
                     let win = self.chan_win(conn, &channel).unwrap_or_else(|| self.status(conn));
@@ -867,6 +875,10 @@ impl super::state::State {
 
     /// Pseudos de la liste Notify qui valent pour cette connexion.
     pub(crate) fn notify_nicks(&self, conn: ConnId) -> Vec<String> {
+        // La connexion parente d'un bouncer ne surveille personne : ses connexions liées le font.
+        if self.is_bouncer_parent(conn) {
+            return Vec::new();
+        }
         let net = self.conn_network(conn);
         let net_name = self.conns.get(&conn).and_then(|c| c.net_name.clone());
         self.settings
@@ -922,7 +934,10 @@ impl super::state::State {
         let mut ev = self.ev(kind, conn);
         ev.nick = nick.to_string();
         ev.address = address.to_string();
-        let p = Pres::new().event(self.ctx(Some(conn), Some(win)), ev).line(self.pl(win, LineKind::Notify, t));
+        let mut p = Pres::new().event(self.ctx(Some(conn), Some(win)), ev).line(self.pl(win, LineKind::Notify, t));
+        if let Some(fx) = self.event_sound(SoundEvent::Notify) {
+            p = p.effect(fx);
+        }
         self.push_pres(p);
     }
 
@@ -940,9 +955,16 @@ impl super::state::State {
         let st = c.status;
         let ctx = self.ctx(Some(conn), Some(st));
         let ev = self.ev(EventKind::Connect, conn);
-        self.push_pres(Pres::new().event(ctx.clone(), ev));
+        let mut p = Pres::new().event(ctx.clone(), ev);
+        if let Some(fx) = self.event_sound(SoundEvent::Connect) {
+            p = p.effect(fx);
+        }
+        self.push_pres(p);
         let net = net_name.as_deref().and_then(|n| self.settings.network(n)).cloned();
-        if let Some(n) = &net {
+        // Connexion parente d'un bouncer (non liée) : elle ne sert qu'à lister les réseaux ; perform, favoris et
+        // Notify sont pour les connexions liées.
+        let parent = self.is_bouncer_parent(conn);
+        if let Some(n) = net.as_ref().filter(|_| !parent) {
             for l in &n.perform {
                 let l = l.trim().trim_start_matches('/');
                 if !l.is_empty() {
@@ -950,7 +972,9 @@ impl super::state::State {
                 }
             }
         }
-        self.deferred.push_back(super::state::Deferred::AutoJoin(conn));
+        if !parent {
+            self.deferred.push_back(super::state::Deferred::AutoJoin(conn));
+        }
         // Notify.
         let nicks = self.notify_nicks(conn);
         if let Some(limit) = monitor {
@@ -966,10 +990,20 @@ impl super::state::State {
         } else if let Some(c) = self.conns.get_mut(&conn) {
             c.next_ison = if nicks.is_empty() { None } else { Some(self.now) };
         }
-        // Bouncer : liste des réseaux.
-        if bouncer_cap && !bound && net.as_ref().is_none_or(|n| n.bouncer) {
+        // Bouncer : liste des réseaux (avec bouncer-networks-notify, le bouncer l'envoie de lui-même).
+        let notify = self.conns.get(&conn).is_some_and(|c| c.session.cap("soju.im/bouncer-networks-notify"));
+        if bouncer_cap && !bound && !notify && net.as_ref().is_none_or(|n| n.bouncer) {
             self.send_line(conn, "BOUNCER LISTNETWORKS");
         }
+    }
+
+    /// Connexion parente d'un bouncer soju : `soju.im/bouncer-networks` négocié, pas liée à un réseau, et le
+    /// réglage du réseau veut une connexion par réseau du bouncer.
+    pub(crate) fn is_bouncer_parent(&self, conn: ConnId) -> bool {
+        let Some(c) = self.conns.get(&conn) else { return false };
+        c.bouncer_netid.is_none()
+            && c.session.cap("soju.im/bouncer-networks")
+            && c.net_name.as_deref().and_then(|n| self.settings.network(n)).is_none_or(|n| n.bouncer)
     }
 
     // --- STS ---
@@ -1022,14 +1056,32 @@ impl super::state::State {
         let net_name = c.net_name.clone();
         if deleted {
             c.bouncer_names.remove(&id);
+            c.bouncer_attrs.remove(&id);
             if let Some(n) = net_name.as_deref().and_then(|n| self.settings.network_mut(n)) {
                 n.bouncer_networks.retain(|b| b.id != id);
                 self.effects.push(Effect::SaveSettings);
             }
             return;
         }
-        let name = attrs.iter().find(|(k, _)| k == "name").map(|(_, v)| v.clone()).unwrap_or_else(|| id.clone());
+        // Une notification peut ne porter que ce qui a changé (`state=…`) : les attributs se fusionnent, et un
+        // attribut sans valeur est retiré. Le nom reste celui qu'on connaît s'il n'est pas redonné.
+        let known = c.bouncer_names.get(&id).cloned().or_else(|| {
+            let n = net_name.as_deref().and_then(|n| self.settings.network(n))?;
+            n.bouncer_networks.iter().find(|b| b.id == id).map(|b| b.name.clone())
+        });
+        let Some(c) = self.conns.get_mut(&conn) else { return };
+        let merged = c.bouncer_attrs.entry(id.clone()).or_default();
+        for (k, v) in &attrs {
+            if v.is_empty() {
+                merged.remove(k);
+            } else {
+                merged.insert(k.clone(), v.clone());
+            }
+        }
+        let name = merged.get("name").cloned().or(known).unwrap_or_else(|| id.clone());
+        let renamed = c.bouncer_names.get(&id) != Some(&name);
         c.bouncer_names.insert(id.clone(), name.clone());
+        let child = c.bouncer_children.get(&id).copied();
         let in_batch = c.bouncer_batch;
         let has_child = c.bouncer_children.contains_key(&id);
         let mut wanted = true;
@@ -1048,7 +1100,15 @@ impl super::state::State {
                 }
             }
         }
-        if !in_batch {
+        // La fenêtre Status de la connexion liée prend le nouveau nom.
+        if renamed
+            && let Some(ch) = child
+            && let Some(cc) = self.conns.get_mut(&ch)
+        {
+            cc.network = name.clone();
+            self.update_titles(ch);
+        }
+        if !in_batch && renamed {
             self.print_bouncer_networks(conn);
         }
         if wanted && !has_child {
@@ -1096,6 +1156,9 @@ impl super::state::State {
             return;
         }
         if own {
+            if kind == MsgKind::Privmsg && channel.is_none() {
+                self.own_private_elsewhere(conn, &target, &text);
+            }
             let lines = self.own_lines(conn, kind, &target, &text, time);
             let mut p = Pres::new();
             for mut l in lines {
@@ -1209,6 +1272,18 @@ impl super::state::State {
         p = p.line(l);
         // Alertes.
         let private = channel.is_none() && kind == MsgKind::Privmsg;
+        // Son (Options › Sons) : on vous nomme, sinon message privé, sinon message d'un canal ; un seul par message,
+        // et il remplace le bip des alertes.
+        let sound_ev = match (&hit, private, &channel, kind) {
+            (Some(_), _, _, _) => Some(SoundEvent::Highlight),
+            (None, true, _, _) => Some(SoundEvent::Query),
+            (None, false, Some(_), MsgKind::Privmsg) => Some(SoundEvent::ChannelMessage),
+            _ => None,
+        };
+        let sound = sound_ev.and_then(|e| self.message_sound(e, win, time));
+        if let Some(fx) = &sound {
+            p = p.effect(fx.clone());
+        }
         let hl = &self.settings.highlight;
         let (mut beep, mut flash, mut notify) = (false, false, false);
         if let Some(h) = &hit {
@@ -1227,12 +1302,33 @@ impl super::state::State {
             } else {
                 self.t(Key::NotifHighlight, &[("nick", &from), ("chan", channel.as_deref().unwrap_or(&target))])
             };
-            for e in self.alert_effects(win, beep, flash, notify, title, &body) {
+            for e in self.alert_effects(win, beep && sound.is_none(), flash, notify, title, &body) {
                 p = p.effect(e);
             }
         }
         self.push_pres(p);
         self.catch_urls(conn, &from, &window_name, &body, time);
+    }
+
+    /// Notre message privé renvoyé par le serveur. S'il n'a pas été envoyé d'ici (écrit sur un autre appareil et
+    /// renvoyé par un bouncer), il va dans le privé de la cible, ouvert au besoin comme pour un message reçu
+    /// (sans le rendre actif) ; l'écho d'un `/msg` tapé ici reste à la manière de mIRC (`-> *pseudo*`).
+    fn own_private_elsewhere(&mut self, conn: ConnId, target: &str, text: &str) {
+        let now = self.now;
+        let Some(c) = self.conns.get_mut(&conn) else { return };
+        let fold = c.session.fold(target);
+        c.own_sent.retain(|(t, _, _)| now - t <= super::state::OWN_ECHO_MS);
+        if let Some(i) = c.own_sent.iter().position(|(_, f, x)| *f == fold && x == text) {
+            c.own_sent.remove(i);
+            return;
+        }
+        let is_nick = !target.is_empty() && !target.starts_with(['$', '#', '&']) && !target.contains(['*', ',']);
+        let ctcp_other = ctcp::parse(text).is_some_and(|x| x.command != "ACTION");
+        if !is_nick || ctcp_other || !self.settings.irc.query_on_private || self.query_win(conn, target).is_some() {
+            return;
+        }
+        self.create_window(WinKind::Query, Some(conn), target);
+        self.request_history(conn, target, None);
     }
 
     /// Lignes de nos propres messages (écho du serveur, ou envoi sans echo-message).
@@ -1264,6 +1360,10 @@ impl super::state::State {
                     out.push(mk(self, w, LineKind::Action, t));
                 }
             },
+            // Demande de son (`/sound`) : voir `sounds.rs`.
+            Some(c) if c.command == "SOUND" && kind == MsgKind::Privmsg => {
+                out.extend(self.own_sound_lines(conn, target, target_win, c.params, time));
+            }
             Some(c) => {
                 if kind == MsgKind::Privmsg {
                     let w = self.active_for(conn);
@@ -1314,6 +1414,12 @@ impl super::state::State {
             self.push_pres(p);
             return;
         }
+        if cmd == "SOUND" {
+            // Demande de son : voir `sounds.rs`.
+            p = self.ctcp_sound(conn, from, chan, params, time, p);
+            self.push_pres(p);
+            return;
+        }
         let shown = match chan {
             Some(c) => format!("[{from}:{c} {cmd}]"),
             None => format!("[{from} {cmd}]"),
@@ -1350,7 +1456,7 @@ impl super::state::State {
             "VERSION" if o.reply_version => Some(o.version_reply.clone().filter(|v| !v.is_empty()).unwrap_or_else(version_reply)),
             "PING" if o.reply_ping => Some(params.to_string()),
             "TIME" if o.reply_time => Some(self.asctime(self.now)),
-            "CLIENTINFO" if o.reply_clientinfo => Some("ACTION CLIENTINFO DCC FINGER PING SOURCE TIME USERINFO VERSION".into()),
+            "CLIENTINFO" if o.reply_clientinfo => Some("ACTION CLIENTINFO DCC FINGER PING SOUND SOURCE TIME USERINFO VERSION".into()),
             "FINGER" if o.reply_finger => Some(o.finger_text.clone().unwrap_or_else(|| {
                 let idle = ((self.now - self.last_input) / 1000).max(0);
                 format!("{} ({}) Idle {idle} seconds", self.settings.identity.realname, self.settings.identity.username)
@@ -1488,7 +1594,7 @@ impl super::state::State {
             n::RPL_WHOISIDLE => {
                 let w = whois_win(self);
                 let idle = timeutil::duration(msg.param(2).parse().unwrap_or(0));
-                let signon = msg.param(3).parse::<i64>().map(|s| self.asctime(s * 1000)).unwrap_or_default();
+                let signon = msg.param(3).parse::<i64>().map(|s| self.date_text(s * 1000)).unwrap_or_default();
                 Some((w, LineKind::Whois, self.t(Key::WhoisIdle, &[("nick", &p(1)), ("idle", &idle), ("signon", &signon)])))
             }
             n::RPL_WHOISACCOUNT => {
@@ -1584,7 +1690,7 @@ impl super::state::State {
         if let Some(l) = self.chanlists.get_mut(&w) {
             let pass_filter = l.filter.as_deref().is_none_or(|f| {
                 let pat = if f.contains(['*', '?']) { f.to_string() } else { format!("*{f}*") };
-                mask::wildcard_match(&pat, name, cm) || mask::wildcard_match(&pat, topic, cm)
+                mask::wildcard_match(&pat, name, cm) || (!l.names_only && mask::wildcard_match(&pat, topic, cm))
             });
             if pass_filter && l.min_users.is_none_or(|m| users >= m) && l.max_users.is_none_or(|m| users <= m) {
                 l.entries.push(ChanEntry { name: name.to_string(), users, topic: topic.to_string() });
@@ -1608,7 +1714,7 @@ impl super::state::State {
     /// Prépare la fenêtre de `/list` (filtre côté client).
     pub(crate) fn chanlist_prepare(&mut self, conn: ConnId, filter: Option<String>, min: Option<u32>, max: Option<u32>) -> WinId {
         let w = self.list_window(conn);
-        self.chanlists.insert(w, ChanList { entries: Vec::new(), complete: false, filter, min_users: min, max_users: max });
+        self.chanlists.insert(w, ChanList { entries: Vec::new(), complete: false, filter, min_users: min, max_users: max, names_only: false });
         w
     }
 }

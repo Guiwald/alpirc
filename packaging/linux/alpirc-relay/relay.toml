@@ -80,6 +80,12 @@ reconnect_max_secs = 300
 ping_interval_secs = 90
 ping_timeout_secs = 240
 
+[clients]
+# Un appareil qui ne lit plus (téléphone injoignable, réseau saturé) et laisse s'accumuler plus que cette
+# quantité de lignes (en Kio) est déconnecté : il se reconnectera et rattrapera par l'historique. 0 : sans limite.
+# A device that stops reading and lets more than this (KiB) pile up is disconnected. 0: no limit.
+max_send_queue_kib = 4096
+
 # Utilisateurs : ajoutés par « alpirc-relay --add-user <nom> », à la fin de ce fichier ; leurs réseaux se
 # mettent à la suite de chaque [[users]].
 # Users: appended at the end of this file by "alpirc-relay --add-user <name>"; their networks go below them.

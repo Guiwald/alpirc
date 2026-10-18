@@ -145,6 +145,11 @@ pub(crate) struct Conn {
     pub bouncer_children: BTreeMap<String, ConnId>,
     pub bouncer_names: BTreeMap<String, String>,
     pub bouncer_batch: bool,
+    /// Attributs connus de chaque réseau du bouncer : les notifications partielles s'y fusionnent.
+    pub bouncer_attrs: BTreeMap<String, BTreeMap<String, String>>,
+    /// Nos PRIVMSG et NOTICE récents (heure, cible repliée, texte) quand echo-message est actif : leur écho se
+    /// reconnaît, à la différence des messages écrits sur un autre appareil et renvoyés par un bouncer.
+    pub own_sent: VecDeque<(i64, String, String)>,
     pub pending_bans: Vec<PendingBan>,
     pub pending_modes: Vec<PendingMode>,
     pub timed_unbans: Vec<(i64, String, String)>,
@@ -199,6 +204,8 @@ impl Conn {
             bouncer_children: BTreeMap::new(),
             bouncer_names: BTreeMap::new(),
             bouncer_batch: false,
+            bouncer_attrs: BTreeMap::new(),
+            own_sent: VecDeque::new(),
             pending_bans: Vec::new(),
             pending_modes: Vec::new(),
             timed_unbans: Vec::new(),
@@ -251,6 +258,12 @@ pub(crate) struct State {
     pub scram_nonce: Option<String>,
     /// Transferts et discussions DCC (voir `dcc.rs`).
     pub dcc: super::dcc::DccState,
+    /// Connexions mises en absence automatique (`away.auto_away_minutes`), à remettre présentes à la saisie.
+    pub auto_away: Vec<ConnId>,
+    /// Questions des scripts (`$?`, `$input`) en attente de réponse, et ce qu'il faudra relancer.
+    pub input: super::prompt::InputState,
+    /// Sons des événements : dernier son joué de chacun (voir `sounds.rs`).
+    pub sounds: super::sounds::SoundState,
 }
 
 impl State {
@@ -278,6 +291,12 @@ impl State {
 
     pub fn asctime(&self, ms: i64) -> String {
         timeutil::asctime(ms, self.offset(ms))
+    }
+
+    /// Date dans la langue de l'interface, pour les textes affichés (`asctime` reste en anglais : journaux,
+    /// réponse CTCP TIME).
+    pub fn date_text(&self, ms: i64) -> String {
+        timeutil::date_text(ms, self.offset(ms), self.lang)
     }
 
     pub fn stamp(&self, ms: i64) -> String {
@@ -580,7 +599,9 @@ impl State {
         if line.trim().is_empty() {
             return;
         }
+        let now = self.now;
         let Some(c) = self.conns.get_mut(&conn) else { return };
+        remember_own(c, &line, now);
         let bypass = !c.session.is_registered() || is_priority(&line);
         c.flood.push(line, bypass);
     }
@@ -602,8 +623,10 @@ impl State {
         let Some(c) = self.conns.get_mut(&conn) else { return };
         let out = c.session.take_outgoing();
         let registered = c.session.is_registered();
+        let now = self.now;
         for m in out {
             let l = m.to_line();
+            remember_own(c, &l, now);
             let bypass = !registered || is_priority(&l);
             c.flood.push(l, bypass);
         }
@@ -768,6 +791,28 @@ impl State {
             let extra = self.urls.len() - max;
             self.urls.drain(..extra);
         }
+    }
+}
+
+/// Durée pendant laquelle un message envoyé attend son écho (echo-message).
+pub(crate) const OWN_ECHO_MS: i64 = 120_000;
+
+/// Retient un PRIVMSG ou NOTICE envoyé d'ici, quand le serveur va le renvoyer (echo-message).
+fn remember_own(c: &mut Conn, line: &str, now: i64) {
+    if !c.session.cap("echo-message") || !(line.contains("PRIVMSG ") || line.contains("NOTICE ")) {
+        return;
+    }
+    let Ok(m) = Message::parse(line) else { return };
+    if m.command != "PRIVMSG" && m.command != "NOTICE" {
+        return;
+    }
+    let text = m.param(1).to_string();
+    for t in m.param(0).split(',').filter(|t| !t.is_empty()) {
+        let fold = c.session.fold(t);
+        c.own_sent.push_back((now, fold, text.clone()));
+    }
+    while c.own_sent.len() > 200 || c.own_sent.front().is_some_and(|(t, _, _)| now - t > OWN_ECHO_MS) {
+        c.own_sent.pop_front();
     }
 }
 

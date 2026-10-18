@@ -1,7 +1,7 @@
 //! Planche des grandes boîtes de dialogue : chaque boîte (et chaque page des Options, chaque onglet) ouverte dans
 //! l'application sans écran, dessinée dans un PNG.
 //!
-//! `cargo run -p alpirc-shell --example dialogs -- /tmp/dialogs [fr] [dark] [largeur hauteur]`
+//! `cargo run -p alpirc-shell --example dialogs -- /tmp/dialogs [fr|es|de|it|va|ga] [dark] [largeur hauteur]`
 //! écrit `/tmp/dialogs/<nom>.png`.
 
 use std::path::Path;
@@ -72,7 +72,8 @@ fn shots_with_tabs(shell: &mut Shell, p: &mut P, dir: &Path, name: &str, tabs: &
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let out = std::path::PathBuf::from(args.get(1).cloned().unwrap_or_else(|| "/tmp/dialogs".into()));
-    let fr = args.iter().any(|a| a == "fr");
+    // Langue de l'interface : fr, es, de, it, va ou ga (anglais sinon).
+    let lang = args.iter().skip(2).find(|a| ["fr", "es", "de", "it", "va", "ga"].contains(&a.as_str())).cloned();
     let dark = args.iter().any(|a| a == "dark");
     let nums: Vec<i32> = args.iter().skip(2).filter_map(|a| a.parse().ok()).collect();
     let (w, h) = if nums.len() >= 2 { (nums[0], nums[1]) } else { (800, 600) };
@@ -87,7 +88,7 @@ fn main() {
         data_dir: dir.clone(),
         layout: LayoutKind::Desktop,
         utc_offset: 7200,
-        locale: Some(if fr { "fr-FR" } else { "en-US" }.into()),
+        locale: Some(lang.unwrap_or_else(|| "en-US".into())),
         now_ms: p.now,
     };
     let mut shell = Shell::new(cfg, net);
@@ -147,7 +148,7 @@ fn main() {
     let chan = shell.client.find_window(Some(conn), "#lyon").unwrap();
 
     // Options : chaque page.
-    for page in ["connect", "servers", "options", "irc", "highlight", "messages", "flood", "logging", "catcher", "display", "notifications", "scripts", "dcc"] {
+    for page in ["connect", "servers", "options", "irc", "highlight", "messages", "flood", "logging", "catcher", "display", "notifications", "scripts", "dcc", "sounds"] {
         shell.open_ui_dialog(UiDialog::Options(Some(page.into())), &mut p);
         shot(&mut shell, &out, &format!("options-{page}"));
         close(&mut shell, &mut p);
@@ -202,5 +203,24 @@ fn main() {
     // Certificat refusé.
     shell.on_net(NetEvent::Failed { conn, error: "certificate signed by an unknown authority".into(), cert_sha256: Some("3f2a".repeat(16)) }, &mut p);
     shot(&mut shell, &out, "cert");
+    close(&mut shell, &mut p);
+    // Boîtes des menus et du premier lancement (pour vérifier la place prise par les traductions).
+    use alpirc_shell::menus::ids;
+    let menu_boxes = [
+        (ids::CHANLIST, "chanlist"),
+        (ids::LOGS, "logs"),
+        (ids::DCC_SEND, "dcc-send"),
+        (ids::DCC_CHAT, "dcc-chat"),
+        (ids::FIND, "find"),
+        (ids::ABOUT, "about"),
+        (ids::EXIT, "quit"),
+    ];
+    for (id, name) in menu_boxes {
+        shell.menu_action(id, &mut p);
+        shot(&mut shell, &out, name);
+        close(&mut shell, &mut p);
+    }
+    shell.open_dialog(Box::new(alpirc_shell::dialogs::welcome::Welcome::new(&shell.client)), &mut p);
+    shot(&mut shell, &out, "welcome");
     close(&mut shell, &mut p);
 }

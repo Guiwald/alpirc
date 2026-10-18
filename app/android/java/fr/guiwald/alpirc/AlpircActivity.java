@@ -21,7 +21,9 @@ import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.GestureDetector;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -65,7 +67,7 @@ public class AlpircActivity extends NativeActivity {
 
     LinearLayout panel;
     EditText edit;
-    Button tabButton, sendButton;
+    Button tabButton, sendButton, historyButton;
     boolean panelWanted, panelAttached, resumed;
     int panelHeight;
 
@@ -353,8 +355,36 @@ public class AlpircActivity extends NativeActivity {
                 if (ev.getAction() == KeyEvent.ACTION_DOWN) Bridge.post("tab\t" + edit.getText());
                 return true;
             }
+            // Clavier physique : ↑ / ↓ parcourent l'historique, comme dans mIRC.
+            if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (ev.getAction() == KeyEvent.ACTION_DOWN) history(code == KeyEvent.KEYCODE_DPAD_UP);
+                return true;
+            }
             return false;
         });
+        // Glisser vers le haut sur le champ : ligne précédente de l'historique ; vers le bas : la suivante.
+        GestureDetector swipes = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
+                if (e1 == null || e2 == null) return false;
+                float dy = e2.getY() - e1.getY(), dx = e2.getX() - e1.getX();
+                if (Math.abs(dy) < dp(20) || Math.abs(dy) < Math.abs(dx) * 1.5f) return false;
+                history(dy < 0);
+                return true;
+            }
+        });
+        edit.setOnTouchListener((v, ev) -> {
+            swipes.onTouchEvent(ev);
+            return false;
+        });
+
+        historyButton = button("▲");
+        historyButton.setContentDescription("History");
+        historyButton.setOnClickListener(v -> Bridge.post("histmenu"));
+        LinearLayout.LayoutParams lh = new LinearLayout.LayoutParams(dp(40), dp(44));
+        lh.rightMargin = dp(3);
+        panel.addView(historyButton, lh);
+
         panel.addView(edit, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         tabButton = button("Tab");
@@ -384,14 +414,20 @@ public class AlpircActivity extends NativeActivity {
         edit.setText("");
     }
 
+    /** Un pas dans l'historique de la fenêtre affichée (Rust répond par {@link #setInputText}). */
+    void history(boolean older) {
+        Bridge.post("hist\t" + (older ? "-1" : "1") + "\t" + edit.getText());
+    }
+
     void setInputText(String text) {
         edit.setText(text);
         edit.setSelection(edit.getText().length());
     }
 
-    void setInputLabels(String send, String tab) {
+    void setInputLabels(String send, String tab, String history) {
         if (send != null && !send.isEmpty()) sendButton.setText(send);
         if (tab != null && !tab.isEmpty()) tabButton.setText(tab);
+        if (history != null && !history.isEmpty()) historyButton.setContentDescription(history);
     }
 
     void setInputVisible(boolean visible, String hint) {

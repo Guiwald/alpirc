@@ -467,9 +467,12 @@ fn upstream_loss_and_relay_restart() {
     bob.send("PRIVMSG #test :avant la coupure");
     a.expect("avant", |m| is_privmsg(m, "#test", "avant la coupure"));
 
-    // Le réseau coupe : PART des canaux, notification, reconnexion, retour sur les canaux.
+    // Le réseau coupe : avis et notification (pas de PART : l'appareil garde ses canaux), reconnexion, retour
+    // sur les canaux.
     env.ircd.kill("Gui");
-    a.expect("PART", |m| m.command == "PART" && m.param(0) == "#test");
+    let notice =
+        a.expect("avis de coupure", |m| m.command == "NOTICE" && m.trailing().contains("Disconnected from Fake"));
+    assert!(notice.trailing().contains("reconnecting"));
     a.expect("déconnecté", |m| m.command == "BOUNCER" && m.param(2).contains("state=disconnected"));
     a.expect("reconnecté", |m| m.command == "BOUNCER" && m.param(2).contains("state=connected"));
     a.expect("JOIN #test", |m| m.command == "JOIN" && m.param(0) == "#test");
@@ -564,4 +567,51 @@ fn malformed_input_is_harmless() {
     // Toujours utilisable.
     a.send("PRIVMSG #test :encore là");
     env.ircd.wait_line("Gui", |l| l == "PRIVMSG #test :encore là");
+}
+
+#[test]
+fn slow_device_is_disconnected() {
+    use std::io::{Read, Write};
+    let env = Env::start_with("slow", |c| {
+        c.listen.push(alpirc_relay::config::ListenConfig { address: "127.0.0.1:0".into(), tls: false });
+        c.clients.max_send_queue_kib = 64;
+    });
+    let plain = env.relay.as_ref().unwrap().listeners()[1].0;
+    let bob = env.bob("Bob");
+    let mut a = env.client();
+    let reg = a.register("gui/Fake:secret", "Gui", &["server-time"], None);
+    joined_burst(&reg, &mut a);
+    // De quoi remplir l'historique : 300 longues lignes.
+    let long = "x".repeat(400);
+    for i in 0..300 {
+        bob.send(&format!("PRIVMSG #test :{i} {long}"));
+    }
+    bob.send("PRIVMSG #test :fin");
+    a.expect("fin", |m| is_privmsg(m, "#test", "fin"));
+
+    // Un appareil qui demande beaucoup d'historique et ne lit jamais.
+    let mut slow = std::net::TcpStream::connect(plain).unwrap();
+    let mut out = String::from("PASS gui/Fake:secret\r\nNICK lent\r\nUSER lent 0 * :lent\r\n");
+    for _ in 0..200 {
+        out.push_str("CHATHISTORY LATEST #test * 1000\r\n");
+    }
+    slow.write_all(out.as_bytes()).unwrap();
+    // Le relais le coupe (ERROR puis fermeture, 2 s au plus pour vider) : on lit ce qui est arrivé, puis la fin.
+    std::thread::sleep(std::time::Duration::from_secs(4));
+    slow.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut total = 0usize;
+    let ended = loop {
+        match slow.read(&mut buf) {
+            Ok(0) => break true,
+            Ok(n) => total += n,
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => break true,
+            Err(_) => break false,
+        }
+    };
+    assert!(ended, "le relais doit fermer l'appareil trop lent (lu {total} octets)");
+    assert!(total < 200 * 300 * 400, "tout n'a pas été envoyé : {total} octets");
+    // Les autres appareils continuent.
+    bob.send("PRIVMSG #test :toujours là");
+    a.expect("toujours là", |m| is_privmsg(m, "#test", "toujours là"));
 }

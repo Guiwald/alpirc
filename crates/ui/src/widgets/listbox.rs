@@ -304,7 +304,7 @@ impl ListBox {
     }
 
     pub fn item_height(&self, res: &Res) -> i32 {
-        res.fonts.line_height(self.style.kind)
+        res.fonts.line_height(self.style.kind).max(res.min_row_h)
     }
 
     fn inner(&self, rect: Rect) -> Rect {
@@ -389,7 +389,9 @@ impl ListBox {
                     canvas.blit(img, x, y + (ih - img.h as i32) / 2);
                     x += img.w as i32 + 2;
                 }
-                res.fonts.draw_text(canvas, x, y, &it.text, self.style, color);
+                // Texte centré dans la ligne (plus haute que le texte au toucher, voir `Res::min_row_h`).
+                let ty = y + (ih - res.fonts.line_height(self.style.kind)) / 2;
+                res.fonts.draw_text(canvas, x, ty, &it.text, self.style, color);
                 if self.focused && i == self.sel.cursor {
                     canvas.focus_rect(row, if selected { t.selection_text } else { fg });
                 }

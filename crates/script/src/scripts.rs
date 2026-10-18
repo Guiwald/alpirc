@@ -143,6 +143,46 @@ impl Engine {
         Ok(name)
     }
 
+    /// Comme [`Engine::restore_file`], avec la sorte de fichier retenue (`/load -a`, `/load -p…`) au lieu de la
+    /// sorte devinée d'après le texte.
+    pub fn restore_file_as(&mut self, path: &Path, trusted: bool, kind: ScriptKind) -> Result<String, ScriptError> {
+        let (real, text) = self.read_script_file(path, trusted)?;
+        let name = self.name_for(&real);
+        self.install(&name, Some(real), kind, &text, false)?;
+        Ok(name)
+    }
+
+    /// Vrai si un script chargé a un gestionnaire de cet événement (le client s'épargne les autres, comme
+    /// `on KEYDOWN` à chaque touche).
+    pub fn handles(&self, kind: EventKind) -> bool {
+        self.scripts.iter().any(|s| s.has_event(kind))
+    }
+
+    /// Noms des alias visibles de partout (scripts chargés et `/alias`), triés, pour la complétion par Tab.
+    pub fn alias_names(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.dyn_aliases.iter().filter(|a| !a.local).map(|a| a.name.clone()).collect();
+        for s in &self.scripts {
+            for a in &s.p.aliases {
+                if !a.local && s.group_on(&a.group) {
+                    v.push(a.name.clone());
+                }
+            }
+        }
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /// Retire un script sans `on UNLOAD` ni rien exécuter (chargement refusé par l'hôte).
+    fn forget(&mut self, name: &str) {
+        if let Some(i) = self.scripts.iter().position(|s| s.name == name) {
+            self.scripts.remove(i);
+            self.loaded.remove(i);
+            self.reindex();
+        }
+        self.pending.retain(|p| !matches!(p, crate::events::Pending::Events { script, .. } if script == name));
+    }
+
     /// Décharge un script ; son `on UNLOAD` est mis en attente (voir [`Engine::flush_pending`]).
     pub fn unload(&mut self, name: &str) -> bool {
         let Some(i) = self.find_script(name) else { return false };
@@ -237,7 +277,14 @@ impl Engine {
             self.install(&name, Some(path), ScriptKind::Popups, &text, false)
         } else {
             let k = detect_kind(&text);
-            self.install(&name, Some(path), k, &text, true)
+            let fresh = self.find_script(&name).is_none();
+            let r = self.install(&name, Some(path.clone()), k, &text, true);
+            // Nouveau script qui s'exécute dès son chargement : l'hôte peut demander d'abord (ADR 0007).
+            if r.is_ok() && fresh && self.runs_at_startup(&name) && !h.confirm_load(&name, &path) {
+                self.forget(&name);
+                return Ok(());
+            }
+            r
         };
         r.map_err(|e| self.err(e.to_string()))?;
         self.flush_pending_nested(h);

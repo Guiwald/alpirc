@@ -39,6 +39,7 @@ pub struct Config {
     pub history: HistoryConfig,
     pub away: AwayConfig,
     pub upstream: UpstreamConfig,
+    pub clients: ClientsConfig,
     pub users: Vec<UserConfig>,
 }
 
@@ -54,6 +55,7 @@ impl Default for Config {
             history: HistoryConfig::default(),
             away: AwayConfig::default(),
             upstream: UpstreamConfig::default(),
+            clients: ClientsConfig::default(),
             users: Vec::new(),
         }
     }
@@ -130,6 +132,21 @@ impl Default for UpstreamConfig {
             ping_interval_secs: 90,
             ping_timeout_secs: 240,
         }
+    }
+}
+
+/// Limites côté appareils.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClientsConfig {
+    /// Un appareil qui laisse s'accumuler plus que cela (Kio) de lignes non lues est déconnecté (ERROR), pour
+    /// que le relais ne garde pas en mémoire tout ce qu'un téléphone injoignable n'a pas reçu. 0 : sans limite.
+    pub max_send_queue_kib: usize,
+}
+
+impl Default for ClientsConfig {
+    fn default() -> ClientsConfig {
+        ClientsConfig { max_send_queue_kib: 4096 }
     }
 }
 
@@ -399,6 +416,9 @@ auto_away = false
 [upstream]
 flood_burst = 4
 
+[clients]
+max_send_queue_kib = 512
+
 [[users]]
 name = "guillaume"
 password_hash = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0$J+6wQu1PqJgRvZb0j4Pl9eK8V9eM3m7l5nB4w2y0ZlU"
@@ -441,6 +461,8 @@ tls = true
         assert!(!c.away.auto_away);
         assert_eq!(c.upstream.flood_burst, 4);
         assert_eq!(c.upstream.flood_interval_ms, 1500, "valeur par défaut gardée");
+        assert_eq!(c.clients.max_send_queue_kib, 512);
+        assert_eq!(Config::default().clients.max_send_queue_kib, 4096, "valeur par défaut");
         let u = c.user("Guillaume").unwrap();
         assert_eq!(u.networks.len(), 2);
         let n = &u.networks[0];

@@ -112,6 +112,8 @@ impl State {
         let a = |i: usize| args.get(i).map(String::as_str).unwrap_or("");
         let v = match name {
             "me" => self.me(conn.unwrap_or(0)),
+            // Texte de la dernière réponse à `$?` / `$input`.
+            "!" => self.input.last.clone(),
             "mnick" => self.settings.identity.nick.clone(),
             "anick" => self.settings.identity.alt_nick.clone(),
             "fullname" => self.settings.identity.realname.clone(),
@@ -414,5 +416,31 @@ impl Host for State {
 
     fn utc_offset(&self, unix_secs: i64) -> i32 {
         self.offset(unix_secs * 1000)
+    }
+
+    /// `/load` d'un script qui s'exécute dès son chargement : l'interface demande d'abord (ADR 0007), comme le
+    /// bouton Charger de l'éditeur de scripts.
+    /// `$?`, `$input(…)` : la réponse déjà donnée (relance), sinon la question est posée par l'interface et
+    /// l'exécution s'arrête (voir `prompt.rs`).
+    fn input(&mut self, ctx: &Ctx, req: &alpirc_script::InputRequest) -> Option<String> {
+        let (_, win) = self.resolve(ctx);
+        let win = self.win(win).map(|w| w.id).or(self.active);
+        match self.input.ask(req, win) {
+            Ok(v) => Some(v),
+            Err(q) => {
+                if let Some(q) = q {
+                    self.effects.push(super::Effect::AskInput(q));
+                }
+                None
+            }
+        }
+    }
+
+    fn confirm_load(&mut self, name: &str, path: &std::path::Path) -> bool {
+        if !self.settings.scripts.warn_on_load {
+            return true;
+        }
+        self.effects.push(super::Effect::ConfirmScriptLoad { name: name.to_string(), path: path.to_path_buf() });
+        false
     }
 }

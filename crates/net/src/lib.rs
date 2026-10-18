@@ -25,7 +25,7 @@ mod tls;
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -207,6 +207,8 @@ pub(crate) struct ConnEntry {
     cmds: mpsc::UnboundedSender<Cmd>,
     closing: watch::Sender<bool>,
     state: Arc<AtomicU8>,
+    /// Octets mis en file par [`Net::send`] et pas encore écrits dans la socket (CRLF compris).
+    pending: Arc<AtomicUsize>,
     task: Option<JoinHandle<()>>,
 }
 
@@ -224,6 +226,8 @@ pub(crate) struct ConnHandles {
     pub(crate) cmds: mpsc::UnboundedReceiver<Cmd>,
     pub(crate) closing: watch::Receiver<bool>,
     pub(crate) state: Arc<AtomicU8>,
+    /// Compteur des octets en attente d'écriture (partagé avec [`ConnEntry`]).
+    pub(crate) pending: Arc<AtomicUsize>,
 }
 
 struct ListenerEntry {
@@ -265,8 +269,16 @@ impl Inner {
         let (close_tx, close_rx) = watch::channel(false);
         let state = Arc::new(AtomicU8::new(CONNECTING));
         let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
-        let entry = ConnEntry { generation, cmds: cmd_tx, closing: close_tx, state: state.clone(), task: None };
-        (entry, ConnHandles { conn, generation, cmds: cmd_rx, closing: close_rx, state })
+        let pending = Arc::new(AtomicUsize::new(0));
+        let entry = ConnEntry {
+            generation,
+            cmds: cmd_tx,
+            closing: close_tx,
+            state: state.clone(),
+            pending: pending.clone(),
+            task: None,
+        };
+        (entry, ConnHandles { conn, generation, cmds: cmd_rx, closing: close_rx, state, pending })
     }
 
     /// Fin d'une tâche de connexion : état final, événement final éventuel, retrait du registre.
@@ -385,8 +397,19 @@ impl Net {
         if let Some(e) = lock(&self.inner.conns).get(&conn)
             && e.state.load(Ordering::Acquire) != ENDED
         {
-            let _ = e.cmds.send(Cmd::Line(line));
+            let n = line.len() + 2;
+            if e.cmds.send(Cmd::Line(line)).is_ok() {
+                e.pending.fetch_add(n, Ordering::Relaxed);
+            }
         }
+    }
+
+    /// Octets mis en file par [`Net::send`] et pas encore écrits dans la socket (CRLF compris), pour une
+    /// connexion ; 0 pour une connexion inconnue ou terminée. Une écriture compte comme faite quand le
+    /// système l'a acceptée : le nombre grandit quand le pair ne lit plus (contre-pression). Le relais s'en sert
+    /// pour couper un appareil qui ne suit plus.
+    pub fn pending_bytes(&self, conn: u32) -> usize {
+        lock(&self.inner.conns).get(&conn).map(|e| e.pending.load(Ordering::Relaxed)).unwrap_or(0)
     }
 
     /// Ferme : vide les écritures en attente (2 s au plus), termine TLS (close_notify) puis TCP ; produit

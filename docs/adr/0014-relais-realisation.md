@@ -65,8 +65,9 @@ n'est pas fait.
   (étendu s'il le veut), sujet (332/333), NAMES, `MARKREAD` (avant 366), 366. Ensuite tout ce qui arrive du
   réseau, mis en forme pour lui : étiquettes non négociées retirées, JOIN étendu ramené, préfixes multiples et
   adresses retirés des NAMES et des WHO, AWAY/ACCOUNT/CHGHOST/SETNAME/TAGMSG/BATCH écartés s'il ne les connaît pas.
-- Si le réseau est coupé, les appareils reçoivent un PART par canal et un avis ; au retour, les JOIN du réseau
-  leur arrivent, et le pseudo et l'ISUPPORT sont remis à jour.
+- Si le réseau est coupé, les appareils reçoivent un avis (et la notification `state=disconnected`) mais gardent
+  leurs canaux : un PART fermerait les fenêtres d'AlpIRC. Au retour, les JOIN et NAMES du réseau leur arrivent,
+  et le pseudo et l'ISUPPORT sont remis à jour.
 - `QUIT` détache l'appareil sans quitter le réseau. Un appareil non lié ne sert qu'à la gestion des réseaux
   (`BOUNCER`) ; il reçoit des réponses locales aux commandes courantes (ISON, USERHOST, WHO, MODE, AWAY…) pour
   ne pas afficher d'erreurs. Un client qui ne connaît pas bouncer-networks, sur un compte à un seul réseau, y
@@ -114,8 +115,8 @@ n'est pas fait.
   error ; jamais le mot de passe. `ADDNETWORK`, `CHANGENETWORK` (un changement de pseudo seul envoie `NICK`, le
   reste reconnecte), `DELNETWORK`, `BIND` avant l'enregistrement, erreurs de la spécification (`INVALID_NETID`,
   `INVALID_ATTRIBUTE`, `READ_ONLY_ATTRIBUTE`, `UNKNOWN_ATTRIBUTE`, `NEED_ATTRIBUTE`, `UNKNOWN_COMMAND`,
-  `REGISTRATION_IS_COMPLETED`). Notifications à qui a `bouncer-networks-notify`, liste initiale comprise ; le nom
-  est toujours joint aux changements d'état.
+  `REGISTRATION_IS_COMPLETED`). Notifications à qui a `bouncer-networks-notify`, liste initiale comprise ; un
+  changement ne porte que ce qui change (`state`, `error` posée puis retirée), le client fusionne.
 - Identifiants (`1`, `2`…) stables et jamais réutilisés, dans `<données>/users/<nom>/networks.json` avec les
   réseaux ajoutés depuis un client, les changements faits aux réseaux de `relay.toml` et les canaux rejoints. Un
   réseau de `relay.toml` ne se supprime pas depuis un client (`FAIL BOUNCER NETWORK_IN_CONFIG`).
@@ -127,6 +128,9 @@ n'est pas fait.
   `--passwd <nom>`, `--version`. Journal par `RUST_LOG` (`info` par défaut). SIGTERM ou SIGINT : QUIT aux réseaux,
   ERROR aux appareils, puis fin.
 - Le modèle commenté `packaging/linux/alpirc-relay/relay.toml` est aussi celui qu'écrit `--init`.
+- File d'envoi par appareil bornée (`[clients] max_send_queue_kib`, 4 Mio par défaut) : un appareil qui ne lit
+  plus (téléphone injoignable) est coupé avec ERROR et une ligne de journal ; il rattrapera par l'historique. La
+  taille de la file vient d'`alpirc-net` (`Net::pending_bytes`).
 - Robustesse : lignes des appareils de plus de 512 octets (hors étiquettes) refusées (417), 64 lignes au plus
   avant l'enregistrement, 60 s pour s'enregistrer, anti-flood à l'entrée (500 lignes puis 25 par seconde, coupure
   après 50 lignes jetées), PING aux appareils silencieux (120 s) puis coupure (300 s), aucune panique sur une
@@ -138,8 +142,6 @@ n'est pas fait.
   l'historique).
 - Le relais renvoie aux autres appareils un message dès qu'il part, sans attendre le réseau : un message refusé
   (404, canal modéré) est quand même montré et gardé ; l'erreur du réseau est transmise.
-- Pas de limite de file d'envoi par appareil : `alpirc-net` ne dit pas combien d'octets attendent sur une
-  connexion (à ajouter là-bas : taille de la file, ou contre-pression).
 - SASL côté appareils : PLAIN seulement (ni SCRAM ni certificat client).
 - Pas de rechargement des réglages à chaud (redémarrer le service), pas d'administration depuis IRC.
 - STS des réseaux : ignoré (c'est le réglage du serveur qui décide du TLS).
@@ -152,8 +154,8 @@ n'est pas fait.
   mise en forme), d'intégration dans le processus (faux serveur IRC, relais, deux appareils en TLS épinglé),
   d'interopérabilité avec le moteur du client AlpIRC, et en vrai (ngircd, deux AlpIRC de bureau sur un écran
   virtuel).
-- Remarques pour le client AlpIRC, vues pendant les essais : une notification `BOUNCER NETWORK` partielle (sans
-  `name`) remplace le nom du réseau par son identifiant ; un message privé envoyé depuis un autre appareil, sans
-  fenêtre de privé ouverte, s'affiche dans la fenêtre active (`-> *pseudo*`) au lieu d'ouvrir le privé ; la
-  connexion parente (non liée) lance le perform et la liste Notify ; `LISTNETWORKS` est demandé même après la
-  liste initiale des notifications.
+- Remarques pour le client AlpIRC vues pendant les essais, corrigées au lot 3 : notifications `BOUNCER NETWORK`
+  partielles fusionnées (le nom n'est plus remplacé par l'identifiant) ; un message privé écrit sur un autre
+  appareil ouvre le privé ; la connexion parente (non liée) ne lance plus perform, favoris ni Notify ;
+  `LISTNETWORKS` n'est plus demandé avec `bouncer-networks-notify`. Le relais garde ses réponses locales aux
+  commandes courantes sur une connexion non liée, pour les autres clients.

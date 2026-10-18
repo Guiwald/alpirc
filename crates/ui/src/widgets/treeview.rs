@@ -183,7 +183,7 @@ impl TreeView {
     }
 
     pub fn row_height(&self, res: &Res) -> i32 {
-        res.fonts.line_height(self.style.kind) + 2
+        (res.fonts.line_height(self.style.kind) + 2).max(res.min_row_h)
     }
 
     fn inner(&self, rect: Rect) -> Rect {
@@ -276,7 +276,8 @@ impl TreeView {
                     let bx = x - self.indent / 2 - 5;
                     let b = Rect::new(bx, cy - 4, 9, 9);
                     canvas.fill(b, bg);
-                    canvas.frame(b, t.shadow);
+                    // Gris des traits : l'ombre en classique, visible aussi sur le fond sombre.
+                    canvas.frame(b, line_c);
                     canvas.hline(bx + 2, cy, 5, fg);
                     if !row.expanded {
                         canvas.vline(bx + 4, cy - 2, 5, fg);

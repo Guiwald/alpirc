@@ -50,17 +50,18 @@ Au début des années 2000, sous Windows, on y allait presque tous avec **mIRC**
 
 ## Où on en est
 
-AlpIRC est **en chantier** : la version 0.1 se prépare. Voici le plan (l'ordre peut encore bouger) :
+AlpIRC est **presque prêt** : tout ce qui est prévu pour la 1.0 est écrit et testé automatiquement (plus de
+850 tests). Il reste à l'essayer pour de vrai sur un Mac et sur un téléphone Android, puis la 1.0 sortira.
 
-| Version | Ce qu'elle apporte | Où on en est |
-|---|---|---|
-| 0.1 | Le socle : le protocole IRC, le moteur de scripts, la fabrication des fichiers à télécharger | **en cours** |
-| 0.2 | Se connecter et discuter : la fenêtre principale, Status, canaux, privés, Undernet et les autres réseaux | à venir |
-| 0.3 | Le confort de mIRC : la boîte Options, les favoris, Notify, Ignore, Control, Perform, les journaux | à venir |
-| 0.4 | Les scripts dans l'appli (éditeur Alt+R, menus, dialogues), DCC | à venir |
-| 0.5 | Android au complet : connexion permanente, notifications, saisie native | à venir |
-| 0.6 | Le relais : le téléphone et l'ordinateur sur la même session | à venir |
-| 1.0 | Version finale, essayée sur Mac, Android et Linux | à venir |
+| Partie | Où on en est |
+|---|---|
+| Se connecter et discuter : Status, canaux, privés, Undernet et les autres réseaux, TLS, SASL, compte X | écrit, testé |
+| Le confort de mIRC : Options, favoris, Notify, Ignore, Control, Perform, journaux, sons, thèmes | écrit, testé |
+| Les scripts mSL (éditeur Alt+R, menus, dialogues) et le DCC | écrit, testé |
+| Android : disposition téléphone, connexion permanente, notifications, saisie native | écrit, à essayer sur un vrai téléphone |
+| Le relais : le téléphone et l'ordinateur sur la même session | écrit, testé ; pas encore installé sur un serveur |
+| Les 7 langues (anglais, français, espagnol, allemand, italien, valencien, irlandais) | écrit ; relecture bienvenue |
+| 1.0 : version finale, essayée sur Mac, Android et Linux | en cours d'essai |
 
 Ce qu'il faut savoir avant d'installer :
 
@@ -215,7 +216,7 @@ Les détails : [ADR 0007](docs/adr/0007-scripts-msl.md).
 
 ## Le relais : le même IRC sur le téléphone et l'ordinateur
 
-*Bientôt, et facultatif : AlpIRC marche très bien sans.*
+*Facultatif : AlpIRC marche très bien sans.*
 
 Quand on se connecte à IRC depuis deux appareils, on y apparaît deux fois, sous deux pseudos. Le **relais**
 (`alpirc-relay`, un « bouncer ») règle ça : c'est un petit programme qui tourne sur une machine toujours allumée
@@ -223,9 +224,22 @@ Quand on se connecte à IRC depuis deux appareils, on y apparaît deux fois, sou
 l'**historique**, et ton Mac comme ton téléphone se connectent à lui : ce qui est écrit sur l'un apparaît sur
 l'autre, et ce que tu as lu sur le téléphone est marqué lu sur le Mac.
 
-Il s'installera sur un serveur Debian ou Ubuntu par le même dépôt APT (`sudo apt install alpirc-relay`), comme un
-service du système. D'autres applis IRC peuvent aussi s'y connecter (il parle comme le bouncer soju). Les détails :
-[ADR 0009](docs/adr/0009-relais.md).
+Il s'installe sur un serveur Debian ou Ubuntu par le même dépôt APT (`sudo apt install alpirc-relay`), comme un
+service du système. D'autres applis IRC peuvent aussi s'y connecter (il parle comme le bouncer soju).
+
+En bref, sur le serveur :
+
+```sh
+sudo apt install alpirc-relay
+sudo -u alpirc-relay alpirc-relay --init      # crée le certificat et affiche son empreinte
+sudo alpirc-relay --add-user guillaume        # demande le mot de passe (deux fois)
+sudo nano /etc/alpirc-relay/relay.toml        # tes réseaux, pseudos et canaux
+sudo systemctl enable --now alpirc-relay
+```
+
+Puis dans AlpIRC, ajoute un réseau dont le serveur est le relais : TLS, vérification « épinglée » avec l'empreinte
+affichée par `--init`, et le mot de passe de serveur `guillaume:ton-mot-de-passe`. Les détails :
+[ADR 0009](docs/adr/0009-relais.md) et [ADR 0014](docs/adr/0014-relais-realisation.md).
 
 ## Vie privée
 
@@ -338,13 +352,13 @@ connects to several networks at once (Undernet first, then Libera.Chat, OFTC, IR
 Rizon, EpiKnet) over TLS, with SASL, Undernet's X login, IRCv3, favourites (Channels Folder), Notify, Ignore,
 Control, Perform, logs, DCC, and sandboxed mIRC scripts (mSL: aliases, popups, remotes, dialogs). On Android it
 uses a phone-friendly layout, the native keyboard, and keeps connections open in the background. An optional relay
-(bouncer, `alpirc-relay`) will let your phone and your computer share the same session and history. It runs on
+(bouncer, `alpirc-relay`) lets your phone and your computer share the same session and history. It runs on
 **macOS**, **Android** and **Linux**. Free, no ads, no tracking, MIT licensed. Not affiliated with mIRC or
 mIRC Co. Ltd.; no mIRC code or images are used.
 
-**Status:** work in progress — version 0.1 (protocol, script engine, release tooling) is under way; see the table
-in [Où on en est](#où-on-en-est) (0.2: connecting and chatting; 0.3: options, favourites, Notify/Ignore/Control,
-logs; 0.4: scripts and DCC in the app; 0.5: full Android; 0.6: relay; then 1.0).
+**Status:** almost there. Everything planned for 1.0 is written and covered by automated tests (over 850); what
+remains is trying it for real on a Mac and an Android phone, then 1.0 ships. The interface speaks English, French,
+Spanish, German, Italian, Valencian and Irish (reviews from native speakers welcome).
 
 **Install:** download the file for your device from the
 [latest release](https://github.com/Guiwald/alpirc/releases/latest):

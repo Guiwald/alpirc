@@ -217,7 +217,7 @@ pub(crate) struct DccState {
     token_seq: u32,
 }
 
-/// Textes du DCC (anglais, français ; les autres langues retombent sur l'anglais).
+/// Textes du DCC (anglais, français ; les cinq autres langues sont dans [`TEXTS_I18N`]).
 const TEXTS: &[(&str, &str, &str)] = &[
     ("send.offer", "* DCC Send: offering {file} ({size}) to {nick}", "* DCC Send : {file} ({size}) proposé à {nick}"),
     ("send.start", "* DCC Send: sending {file} to {nick}", "* DCC Send : envoi de {file} à {nick}"),
@@ -281,7 +281,362 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("what.chat", "Chat", "Chat"),
 ];
 
+/// Textes du DCC dans les autres langues : (clé, [es, de, it, va, ga]) ; une clé absente retombe sur l'anglais.
+const TEXTS_I18N: &[(&str, [&str; 5])] = &[
+    (
+        "send.offer",
+        [
+            "* DCC Send: ofreciendo {file} ({size}) a {nick}",
+            "* DCC Send: biete {nick} {file} ({size}) an",
+            "* DCC Send: offerta di {file} ({size}) a {nick}",
+            "* DCC Send: s'oferix {file} ({size}) a {nick}",
+            "* DCC Send: ag tairiscint {file} ({size}) do {nick}",
+        ],
+    ),
+    (
+        "send.start",
+        [
+            "* DCC Send: enviando {file} a {nick}",
+            "* DCC Send: sende {file} an {nick}",
+            "* DCC Send: invio di {file} a {nick}",
+            "* DCC Send: enviant {file} a {nick}",
+            "* DCC Send: ag seoladh {file} chuig {nick}",
+        ],
+    ),
+    (
+        "send.resume",
+        [
+            "* DCC Send: {nick} reanuda {file} en {pos}",
+            "* DCC Send: {nick} setzt {file} bei {pos} fort",
+            "* DCC Send: {nick} riprende {file} da {pos}",
+            "* DCC Send: {nick} reprén {file} a partir de {pos}",
+            "* DCC Send: atosaíonn {nick} {file} ag {pos}",
+        ],
+    ),
+    (
+        "send.done",
+        [
+            "* DCC Send de {file} a {nick} completado ({size}, {speed}/s)",
+            "* DCC Send von {file} an {nick} abgeschlossen ({size}, {speed}/s)",
+            "* DCC Send di {file} a {nick} completato ({size}, {speed}/s)",
+            "* DCC Send de {file} a {nick} completat ({size}, {speed}/s)",
+            "* DCC Send de {file} chuig {nick} críochnaithe ({size}, {speed}/s)",
+        ],
+    ),
+    (
+        "send.failed",
+        [
+            "* DCC Send de {file} a {nick} fallido: {error}",
+            "* DCC Send von {file} an {nick} fehlgeschlagen: {error}",
+            "* DCC Send di {file} a {nick} non riuscito: {error}",
+            "* DCC Send de {file} a {nick} fallit: {error}",
+            "* Theip ar DCC Send de {file} chuig {nick}: {error}",
+        ],
+    ),
+    (
+        "get.start",
+        [
+            "* DCC Get: recibiendo {file} de {nick}",
+            "* DCC Get: empfange {file} von {nick}",
+            "* DCC Get: ricezione di {file} da {nick}",
+            "* DCC Get: rebent {file} de {nick}",
+            "* DCC Get: ag fáil {file} ó {nick}",
+        ],
+    ),
+    (
+        "get.resume",
+        [
+            "* DCC Get: pidiendo a {nick} que reanude {file} en {pos}",
+            "* DCC Get: bitte {nick}, {file} bei {pos} fortzusetzen",
+            "* DCC Get: richiesta a {nick} di riprendere {file} da {pos}",
+            "* DCC Get: es demana a {nick} que reprenga {file} a partir de {pos}",
+            "* DCC Get: ag iarraidh ar {nick} {file} a atosú ag {pos}",
+        ],
+    ),
+    (
+        "get.done",
+        [
+            "* DCC Get de {file} de {nick} completado ({size}, {speed}/s): {path}",
+            "* DCC Get: {file} von {nick} empfangen ({size}, {speed}/s): {path}",
+            "* DCC Get di {file} da {nick} completato ({size}, {speed}/s): {path}",
+            "* DCC Get de {file} de {nick} completat ({size}, {speed}/s): {path}",
+            "* DCC Get de {file} ó {nick} críochnaithe ({size}, {speed}/s): {path}",
+        ],
+    ),
+    (
+        "get.failed",
+        [
+            "* DCC Get de {file} de {nick} fallido: {error}",
+            "* DCC Get: Empfang von {file} von {nick} fehlgeschlagen: {error}",
+            "* DCC Get di {file} da {nick} non riuscito: {error}",
+            "* DCC Get de {file} de {nick} fallit: {error}",
+            "* Theip ar DCC Get de {file} ó {nick}: {error}",
+        ],
+    ),
+    (
+        "get.auto",
+        [
+            "* DCC Get: aceptando automáticamente {file} de {nick}",
+            "* DCC Get: {file} von {nick} wird automatisch angenommen",
+            "* DCC Get: accetto automaticamente {file} da {nick}",
+            "* DCC Get: s'accepta automàticament {file} de {nick}",
+            "* DCC Get: ag glacadh le {file} ó {nick} go huathoibríoch",
+        ],
+    ),
+    (
+        "get.dangerous",
+        [
+            "* DCC: {file} es un programa o un script: nunca se acepta automáticamente",
+            "* DCC: {file} ist ein Programm oder Script und wird nie automatisch angenommen",
+            "* DCC: {file} è un programma o uno script: non viene mai accettato automaticamente",
+            "* DCC: {file} és un programa o un script: mai s'accepta automàticament",
+            "* DCC: is ríomhchlár nó script é {file}: ní ghlactar leis go huathoibríoch riamh",
+        ],
+    ),
+    (
+        "offer.ignored",
+        [
+            "* DCC: oferta de {nick} ignorada ({file})",
+            "* DCC: Angebot von {nick} ignoriert ({file})",
+            "* DCC: offerta di {nick} ignorata ({file})",
+            "* DCC: oferta de {nick} ignorada ({file})",
+            "* DCC: rinneadh neamhaird den tairiscint ó {nick} ({file})",
+        ],
+    ),
+    (
+        "offer.rejected",
+        [
+            "* DCC: oferta de {nick} rechazada ({file})",
+            "* DCC: Angebot von {nick} abgelehnt ({file})",
+            "* DCC: offerta di {nick} rifiutata ({file})",
+            "* DCC: oferta de {nick} rebutjada ({file})",
+            "* DCC: diúltaíodh don tairiscint ó {nick} ({file})",
+        ],
+    ),
+    (
+        "offer.expired",
+        [
+            "* DCC: la oferta de {nick} ha caducado ({file})",
+            "* DCC: Angebot von {nick} abgelaufen ({file})",
+            "* DCC: l'offerta di {nick} è scaduta ({file})",
+            "* DCC: l'oferta de {nick} ha caducat ({file})",
+            "* DCC: tá an tairiscint ó {nick} as feidhm ({file})",
+        ],
+    ),
+    (
+        "offer.invalid",
+        [
+            "* DCC: oferta no válida de {nick}",
+            "* DCC: ungültiges Angebot von {nick}",
+            "* DCC: offerta non valida da {nick}",
+            "* DCC: oferta no vàlida de {nick}",
+            "* DCC: tairiscint neamhbhailí ó {nick}",
+        ],
+    ),
+    (
+        "chat.offer.sent",
+        [
+            "* DCC Chat: esperando a que {nick} acepte…",
+            "* DCC Chat: warte, bis {nick} annimmt…",
+            "* DCC Chat: in attesa che {nick} accetti…",
+            "* DCC Chat: s'espera que {nick} accepte…",
+            "* DCC Chat: ag fanacht go nglacfaidh {nick} leis…",
+        ],
+    ),
+    (
+        "chat.connecting",
+        [
+            "* DCC Chat: conectando con {nick}…",
+            "* DCC Chat: verbinde mit {nick}…",
+            "* DCC Chat: connessione a {nick}…",
+            "* DCC Chat: connectant amb {nick}…",
+            "* DCC Chat: ag ceangal le {nick}…",
+        ],
+    ),
+    (
+        "chat.open",
+        [
+            "* DCC Chat: conexión establecida con {nick}",
+            "* DCC Chat: Verbindung mit {nick} hergestellt",
+            "* DCC Chat: connessione stabilita con {nick}",
+            "* DCC Chat: connexió establida amb {nick}",
+            "* DCC Chat: ceangal bunaithe le {nick}",
+        ],
+    ),
+    (
+        "chat.closed",
+        [
+            "* DCC Chat: sesión con {nick} cerrada",
+            "* DCC Chat: Sitzung mit {nick} beendet",
+            "* DCC Chat: sessione con {nick} chiusa",
+            "* DCC Chat: sessió amb {nick} tancada",
+            "* DCC Chat: seisiún le {nick} dúnta",
+        ],
+    ),
+    (
+        "chat.failed",
+        [
+            "* DCC Chat con {nick} fallido: {error}",
+            "* DCC Chat mit {nick} fehlgeschlagen: {error}",
+            "* DCC Chat con {nick} non riuscita: {error}",
+            "* DCC Chat amb {nick} fallit: {error}",
+            "* Theip ar DCC Chat le {nick}: {error}",
+        ],
+    ),
+    (
+        "chat.notconn",
+        [
+            "* El DCC Chat con {nick} no está conectado",
+            "* DCC Chat mit {nick} ist nicht verbunden",
+            "* La DCC Chat con {nick} non è connessa",
+            "* El DCC Chat amb {nick} no està connectat",
+            "* Níl DCC Chat le {nick} ceangailte",
+        ],
+    ),
+    (
+        "chat.auto",
+        [
+            "* DCC Chat: aceptando automáticamente a {nick}",
+            "* DCC Chat: {nick} wird automatisch angenommen",
+            "* DCC Chat: accetto automaticamente {nick}",
+            "* DCC Chat: s'accepta automàticament {nick}",
+            "* DCC Chat: ag glacadh le {nick} go huathoibríoch",
+        ],
+    ),
+    (
+        "cancelled",
+        [
+            "* DCC {what} de {file} con {nick} cancelado",
+            "* DCC {what} von {file} mit {nick} abgebrochen",
+            "* DCC {what} di {file} con {nick} annullato",
+            "* DCC {what} de {file} amb {nick} cancel·lat",
+            "* Cealaíodh DCC {what} de {file} le {nick}",
+        ],
+    ),
+    ("err.timeout", ["tiempo agotado", "Zeitüberschreitung", "tempo scaduto", "temps esgotat", "thar am"]),
+    ("err.cancelled", ["cancelado", "abgebrochen", "annullato", "cancel·lat", "cealaithe"]),
+    (
+        "err.incomplete",
+        [
+            "incompleto ({pos} de {size})",
+            "unvollständig ({pos} von {size})",
+            "incompleto ({pos} di {size})",
+            "incomplet ({pos} de {size})",
+            "neamhiomlán ({pos} as {size})",
+        ],
+    ),
+    (
+        "err.nofile",
+        [
+            "* /dcc send: no existe el archivo: {file}",
+            "* /dcc send: Datei nicht gefunden: {file}",
+            "* /dcc send: file inesistente: {file}",
+            "* /dcc send: no existix el fitxer: {file}",
+            "* /dcc send: níl a leithéid de chomhad ann: {file}",
+        ],
+    ),
+    (
+        "err.script",
+        [
+            "* /dcc {cmd}: no permitido desde un script (entorno aislado)",
+            "* /dcc {cmd}: aus einem Script nicht erlaubt (Sandbox)",
+            "* /dcc {cmd}: non consentito da uno script (sandbox)",
+            "* /dcc {cmd}: no es permet des d'un script (entorn aïllat)",
+            "* /dcc {cmd}: ní cheadaítear é ó script (bosca gainimh)",
+        ],
+    ),
+    (
+        "err.nooffer",
+        [
+            "* /dcc {cmd}: no hay ninguna oferta DCC de {nick}",
+            "* /dcc {cmd}: kein DCC-Angebot von {nick}",
+            "* /dcc {cmd}: nessuna offerta DCC da {nick}",
+            "* /dcc {cmd}: no hi ha cap oferta DCC de {nick}",
+            "* /dcc {cmd}: níl tairiscint DCC ó {nick}",
+        ],
+    ),
+    (
+        "err.nomatch",
+        [
+            "* /dcc close: no hay ningún DCC {what} con {nick}",
+            "* /dcc close: kein DCC {what} mit {nick}",
+            "* /dcc close: nessun DCC {what} con {nick}",
+            "* /dcc close: no hi ha cap DCC {what} amb {nick}",
+            "* /dcc close: níl DCC {what} le {nick}",
+        ],
+    ),
+    (
+        "err.usage",
+        [
+            "* /dcc: uso: /dcc send [-c] nick [archivo] | chat nick | get nick [archivo] | close send|get|chat nick \
+             [archivo] | list",
+            "* /dcc: Aufruf: /dcc send [-c] Nick [Datei] | chat Nick | get Nick [Datei] | close send|get|chat Nick \
+             [Datei] | list",
+            "* /dcc: uso: /dcc send [-c] nick [file] | chat nick | get nick [file] | close send|get|chat nick [file] \
+             | list",
+            "* /dcc: ús: /dcc send [-c] sobrenom [fitxer] | chat sobrenom | get sobrenom [fitxer] | close \
+             send|get|chat sobrenom [fitxer] | list",
+            "* /dcc: úsáid: /dcc send [-c] leasainm [comhad] | chat leasainm | get leasainm [comhad] | close \
+             send|get|chat leasainm [comhad] | list",
+        ],
+    ),
+    (
+        "err.folder",
+        [
+            "no se puede crear la carpeta {path}: {error}",
+            "Ordner {path} kann nicht erstellt werden: {error}",
+            "impossibile creare la cartella {path}: {error}",
+            "no es pot crear la carpeta {path}: {error}",
+            "ní féidir an fillteán {path} a chruthú: {error}",
+        ],
+    ),
+    (
+        "list.empty",
+        [
+            "* No hay transferencias DCC",
+            "* Keine DCC-Übertragungen",
+            "* Nessun trasferimento DCC",
+            "* No hi ha cap transferència DCC",
+            "* Níl aistrithe DCC ann",
+        ],
+    ),
+    (
+        "list.head",
+        [
+            "* Transferencias DCC:",
+            "* DCC-Übertragungen:",
+            "* Trasferimenti DCC:",
+            "* Transferències DCC:",
+            "* Aistrithe DCC:",
+        ],
+    ),
+    ("st.offered", ["ofrecido", "angeboten", "offerto", "oferit", "tairgthe"]),
+    ("st.waiting", ["en espera", "wartend", "in attesa", "en espera", "ag fanacht"]),
+    ("st.connecting", ["conectando", "verbinde", "connessione", "connectant", "ag ceangal"]),
+    ("st.active", ["en curso", "aktiv", "in corso", "en curs", "ar siúl"]),
+    ("st.done", ["terminado", "fertig", "completato", "acabat", "críochnaithe"]),
+    ("st.failed", ["fallido", "fehlgeschlagen", "non riuscito", "fallit", "theip air"]),
+    ("st.cancelled", ["cancelado", "abgebrochen", "annullato", "cancel·lat", "cealaithe"]),
+    ("what.send", ["Send", "Send", "Send", "Send", "Send"]),
+    ("what.get", ["Get", "Get", "Get", "Get", "Get"]),
+    ("what.chat", ["Chat", "Chat", "Chat", "Chat", "Chat"]),
+];
+
 fn text(lang: Lang, key: &str) -> &'static str {
+    let col = match lang {
+        Lang::En | Lang::Fr => None,
+        Lang::Es => Some(0),
+        Lang::De => Some(1),
+        Lang::It => Some(2),
+        Lang::Va => Some(3),
+        Lang::Ga => Some(4),
+    };
+    let other = col
+        .and_then(|c| TEXTS_I18N.iter().find(|(k, _)| *k == key).map(|(_, v)| v[c]))
+        .filter(|s| !s.is_empty());
+    if let Some(s) = other {
+        return s;
+    }
     match TEXTS.iter().find(|(k, _, _)| *k == key) {
         Some((_, en, fr)) => {
             if lang == Lang::Fr {
@@ -1073,6 +1428,10 @@ impl State {
             };
             self.effects.push(Effect::Notify { win, title: "DCC".into(), body: body.trim_start_matches("* ").to_string() });
         }
+        // Son de l'offre (Options › Sons).
+        if let Some(fx) = self.event_sound(crate::settings::SoundEvent::Dcc) {
+            self.effects.push(fx);
+        }
         self.effects.push(Effect::DccPrompt(p));
     }
 
@@ -1490,12 +1849,17 @@ impl State {
             l.color = h.color;
         }
         p = p.line(l);
+        // Son d'un message privé (Options › Sons) ; il remplace le bip.
+        let sound = self.message_sound(crate::settings::SoundEvent::Query, win, self.now);
+        if let Some(fx) = &sound {
+            p = p.effect(fx.clone());
+        }
         let hl = &self.settings.highlight;
         let unseen = self.unseen(win);
         if unseen && hl.flash {
             p = p.effect(Effect::Flash { win });
         }
-        if unseen && hl.beep_on_query {
+        if unseen && hl.beep_on_query && sound.is_none() && !self.settings.sounds.mute {
             p = p.effect(Effect::Beep);
         }
         let n = &self.settings.notifications;
@@ -1734,5 +2098,44 @@ impl Client {
         self.st.now = now_ms;
         self.st.dcc_ended(id, bytes, error);
         self.finish();
+    }
+}
+
+#[cfg(test)]
+mod i18n_tests {
+    use super::*;
+
+    fn marks(s: &str) -> Vec<String> {
+        let mut v: Vec<String> =
+            s.split('{').skip(1).filter_map(|p| p.split_once('}').map(|(a, _)| a.to_string())).collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn translations_keep_the_placeholders() {
+        for (k, v) in TEXTS_I18N {
+            let (_, en, _) = TEXTS.iter().find(|(e, _, _)| e == k).unwrap_or_else(|| panic!("{k} : clé inconnue"));
+            for s in v.iter().filter(|s| !s.is_empty()) {
+                assert_eq!(marks(en), marks(s), "{k} : « {s} »");
+            }
+        }
+        assert_eq!(text(Lang::De, "list.empty"), "* Keine DCC-Übertragungen");
+        assert_eq!(text(Lang::Ga, "nope"), "");
+    }
+
+    /// Textes qui restent ceux de l'anglais dans toutes les langues (noms des commandes DCC).
+    const SAME_AS_ENGLISH: &[&str] = &["what.send", "what.get", "what.chat"];
+
+    // Toute nouvelle clé doit être traduite dans les 7 langues (voir l'ADR 0012).
+    #[test]
+    fn every_text_in_seven_languages() {
+        for (k, en, _) in TEXTS {
+            let v = TEXTS_I18N.iter().find(|(e, _)| e == k).map(|(_, v)| v);
+            let v = v.unwrap_or_else(|| panic!("{k} : non traduit"));
+            assert!(v.iter().all(|s| !s.is_empty()), "{k} : traduction manquante");
+            // Les cinq langues identiques à l'anglais : sans doute un copier-coller.
+            assert!(SAME_AS_ENGLISH.contains(k) || v.iter().any(|s| s != en), "{k} : identique à l'anglais partout");
+        }
     }
 }

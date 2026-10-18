@@ -285,7 +285,15 @@ impl State {
         if was != ConnState::Connecting {
             let ev = self.ev(EventKind::Disconnect, conn);
             let ctx = self.ctx(Some(conn), Some(st));
-            self.push_pres(Pres::new().event(ctx, ev));
+            let mut p = Pres::new().event(ctx, ev);
+            // Son de la déconnexion (Options › Sons), sauf si on l'a demandée.
+            if !user_quit
+                && !sts
+                && let Some(fx) = self.event_sound(crate::settings::SoundEvent::Disconnect)
+            {
+                p = p.effect(fx);
+            }
+            self.push_pres(p);
         }
         if sts {
             self.do_connect(conn);

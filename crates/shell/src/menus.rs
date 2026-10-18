@@ -15,6 +15,8 @@ pub mod ids {
     pub const SELECT_SERVER: u32 = 4;
     pub const OPTIONS: u32 = 5;
     pub const EXIT: u32 = 6;
+    /// Absent / de retour, sur la connexion active.
+    pub const AWAY: u32 = 7;
     pub const TOOLBAR: u32 = 10;
     pub const SWITCHBAR: u32 = 11;
     pub const TREEBAR: u32 = 12;
@@ -61,6 +63,8 @@ pub struct MenuState {
     pub nicklist: bool,
     pub dark: bool,
     pub connected: bool,
+    /// La connexion active est marquée absente.
+    pub away: bool,
     pub native: bool,
 }
 
@@ -125,6 +129,8 @@ pub fn menubar(client: &mut Client, active: Option<WinId>, st: &MenuState) -> (V
         m(CONNECT, "file.connect"),
         m(DISCONNECT, "file.disconnect"),
         m(SELECT_SERVER, "file.select_server"),
+        MenuItem::separator(),
+        m(AWAY, "file.away").checked(st.away),
     ];
     if !mac {
         file.push(MenuItem::separator());
@@ -137,6 +143,7 @@ pub fn menubar(client: &mut Client, active: Option<WinId>, st: &MenuState) -> (V
     } else {
         file[3].enabled = false;
     }
+    file[6].enabled = st.connected;
 
     let view = vec![
         m(TOOLBAR, "view.toolbar").checked(st.toolbar),

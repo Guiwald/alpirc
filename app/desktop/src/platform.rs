@@ -6,7 +6,10 @@ use std::rc::Rc;
 
 use alpirc_shell::ShellPlatform;
 use alpirc_ui::{Cursor, Platform, Rect};
+use winit::event_loop::EventLoopProxy;
 use winit::window::{CursorIcon, UserAttentionType, Window};
+
+use crate::UserEvent;
 
 pub struct DesktopPlatform {
     pub window: Option<Rc<Window>>,
@@ -21,10 +24,14 @@ pub struct DesktopPlatform {
     pub menus_changed: bool,
     /// Fichiers choisis (`pick_file`), rendus au shell par la boucle d'événements (`Shell::file_picked`).
     pub picked: Vec<(u64, Option<PathBuf>)>,
+    sound: crate::sound::Sound,
+    #[cfg(target_os = "macos")]
+    notifier: crate::macnotify::Notifier,
 }
 
 impl DesktopPlatform {
-    pub fn new() -> DesktopPlatform {
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    pub fn new(proxy: EventLoopProxy<UserEvent>) -> DesktopPlatform {
         DesktopPlatform {
             window: None,
             clipboard: arboard::Clipboard::new().ok(),
@@ -36,6 +43,9 @@ impl DesktopPlatform {
             native_menus: cfg!(target_os = "macos"),
             menus_changed: true,
             picked: Vec::new(),
+            sound: crate::sound::Sound::new(),
+            #[cfg(target_os = "macos")]
+            notifier: crate::macnotify::Notifier::new(proxy),
         }
     }
 }
@@ -98,22 +108,14 @@ impl Platform for DesktopPlatform {
     }
 }
 
-/// Échappe une chaîne pour AppleScript.
-#[cfg(target_os = "macos")]
-fn applescript_string(s: &str) -> String {
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
 impl ShellPlatform for DesktopPlatform {
     fn notify(&mut self, title: &str, body: &str) {
-        let (title, body) = (title.to_string(), body.to_string());
+        // macOS : centre de notifications du système depuis AlpIRC.app, sinon osascript (voir macnotify.rs).
         #[cfg(target_os = "macos")]
-        {
-            let script = format!("display notification {} with title {}", applescript_string(&body), applescript_string(&title));
-            let _ = std::process::Command::new("osascript").args(["-e", &script]).spawn();
-        }
+        self.notifier.notify(title, body);
         #[cfg(target_os = "linux")]
         {
+            let (title, body) = (title.to_string(), body.to_string());
             std::thread::spawn(move || {
                 let _ = notify_rust::Notification::new().appname("AlpIRC").summary(&title).body(&body).icon("alpirc").show();
             });
@@ -122,15 +124,18 @@ impl ShellPlatform for DesktopPlatform {
         let _ = (title, body);
     }
 
+    /// Bip : celui du système sur Mac ; ailleurs, une note courte synthétisée (pas de bip du système sous Linux).
     fn beep(&mut self) {
         #[cfg(target_os = "macos")]
         objc2_app_kit::NSBeep();
+        #[cfg(not(target_os = "macos"))]
+        self.sound.beep();
     }
 
+    /// Joue un son (wav, mp3, ogg, flac) sans attendre ; un nouveau son remplace celui qui joue.
     fn play_sound(&mut self, path: &Path) {
-        // Lecture des sons : arrive avec les sons d'événements ; en attendant, le bip du système.
-        log::info!("son demandé : {}", path.display());
-        self.beep();
+        log::info!("son : {}", path.display());
+        self.sound.play_file(path);
     }
 
     fn flash(&mut self) {
@@ -170,7 +175,7 @@ impl ShellPlatform for DesktopPlatform {
 
     /// Boîte de choix du système (bloquante, dans le fil de l'interface) ; la réponse attend dans `picked`.
     fn pick_file(&mut self, request: u64, save: bool, suggested_name: Option<&str>) {
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
         let path = {
             let mut d = rfd::FileDialog::new();
             if let Some(w) = &self.window {
@@ -181,7 +186,7 @@ impl ShellPlatform for DesktopPlatform {
             }
             if save { d.save_file() } else { d.pick_file() }
         };
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         let path = {
             let _ = (save, suggested_name);
             None

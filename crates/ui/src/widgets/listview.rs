@@ -142,7 +142,7 @@ impl ListView {
     }
 
     pub fn row_height(&self, res: &Res) -> i32 {
-        res.ui_line() + 1
+        (res.ui_line() + 1).max(res.min_row_h)
     }
 
     pub fn header_height(&self, res: &Res) -> i32 {
@@ -296,7 +296,7 @@ impl ListView {
                         fg
                     };
                     canvas.with_clip(cell, |canvas| {
-                        res.fonts.draw_text(canvas, lx, y, &label, TextStyle::UI, color);
+                        res.fonts.draw_text(canvas, lx, y + (rh - 1 - res.ui_line()) / 2, &label, TextStyle::UI, color);
                     });
                     if self.focused && ci == 0 && i == self.sel.cursor {
                         canvas.focus_rect(Rect::new(lx - 2, y, lw + 4, rh), if selected { t.selection_text } else { t.window_text });

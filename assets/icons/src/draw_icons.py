@@ -434,7 +434,8 @@ icon("toolbar/cascade", [
     "................",
 ])
 
-icon("toolbar/tile_h", [
+# Mosaïque verticale : fenêtres côte à côte.
+icon("toolbar/tile_v", [
     "................",
     "kkkkkkkkkkkkkkkk",
     "knnnnnnkkddddddk",
@@ -453,7 +454,8 @@ icon("toolbar/tile_h", [
     "................",
 ])
 
-icon("toolbar/tile_v", [
+# Mosaïque horizontale (comme Windows et mIRC) : fenêtres empilées, chacune sur toute la largeur.
+icon("toolbar/tile_h", [
     "................",
     "kkkkkkkkkkkkkkkk",
     "knnnnnnnnnnnnnnk",

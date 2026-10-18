@@ -521,7 +521,13 @@ fn dialogs_and_exit() {
 fn help_and_linesep() {
     let (mut h, w) = chan();
     h.input(w, "/help");
-    assert_eq!(h.last(w), "* AlpIRC help: https://github.com/Guiwald/alpirc#readme");
+    assert_eq!(h.last(w), "* Full guide: https://github.com/Guiwald/alpirc#readme");
+    assert!(h.lines(w).iter().any(|l| l == "* AlpIRC commands (type /help command for details):"));
+    assert!(h.lines(w).iter().any(|l| l.contains(" /join ") && l.starts_with("* /")));
+    h.input(w, "/help join");
+    assert_eq!(h.last(w), "* /join #channel[,#other] [key] — join channels");
+    h.input(w, "/help nope");
+    assert_eq!(h.last(w), "* No help for /nope");
     h.input(w, "/linesep");
     assert_eq!(h.last(w), "-");
 }

@@ -42,8 +42,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Compilation
         run: cargo build --release -p alpirc
+      # Les tests de l'appli de bureau passent aussi sur Mac : c'est là que le code propre à macOS s'exécute
+      # (touche Option, décodage des sons) ; en --release pour réutiliser la compilation ci-dessus.
+      - name: Tests (appli de bureau)
+        run: cargo test --release -p alpirc
       - name: AlpIRC.app et .dmg (essai)
         run: ALPIRC_DIST="$RUNNER_TEMP/dist" cargo xtask bundle-mac target/release/alpirc
+      # Pour l'essayer sur le Mac (Apple Silicon) sans attendre une version.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-essai
+          path: ${{ runner.temp }}/dist/*.dmg
+          retention-days: 14
 
   android:
     name: Compilation (Android)

@@ -22,6 +22,6 @@ pub mod timeutil;
 pub use client::{
     Activity, CaughtUrl, ChanEntry, ChanList, Client, ConnId, ConnInfo, ConnState, DccAnswer, DccId, DccPrompt, DccType,
     DccUi, Effect, Line, LineKind, NickEntry, NotifyStatus, TlsVerify, Transfer, TransferState, UiDialog, WinId, WinKind,
-    Window,
+    WinState, Window,
 };
 pub use settings::Settings;

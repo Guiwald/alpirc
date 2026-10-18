@@ -16,9 +16,12 @@ mod conn;
 mod dcc;
 mod defaults;
 mod flood;
+mod help;
 mod host;
 mod irc;
 pub mod logging;
+pub mod prompt;
+mod sounds;
 mod state;
 mod util;
 mod window;
@@ -30,11 +33,14 @@ use alpirc_proto::encoding::Encoding;
 use alpirc_script::{Ctx, DialogEvent, Engine, EventInfo, EventKind, MenuItem, PopupKind, ScriptKind};
 
 pub use self::commands::BUILTINS;
+pub use self::defaults::TEXTS as DEFAULT_SCRIPT_TEXTS;
+pub use self::help::HELP;
 pub use self::dcc::{DccAnswer, DccId, DccPrompt, DccType, DccUi, Transfer, TransferState, state_label as dcc_state_label};
 pub use self::irc::{HOMEPAGE, VERSION, version_reply};
 pub use self::logging::{FileSink, LogSink};
 pub use self::util::{contains_word, find_urls};
 pub use self::window::{Activity, Line, LineKind, NickEntry, WinKind, Window};
+use self::commands::{script_kind_from_name, script_kind_name};
 use self::state::{Deferred, State};
 use crate::i18n::{Key, Lang};
 use crate::session::ChannelState;
@@ -67,6 +73,14 @@ pub enum UiDialog {
     About,
     Find(WinId),
     Connect,
+}
+
+/// État d'une fenêtre interne demandé par `/window -n|-x|-r`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WinState {
+    Minimize,
+    Maximize,
+    Restore,
 }
 
 /// Ce que l'hôte doit faire.
@@ -122,6 +136,14 @@ pub enum Effect {
     DccPickFile { conn: ConnId, nick: String },
     /// DCC : ouvrir une fenêtre de l'interface (boîte d'envoi, de discussion, transferts).
     DccWindow(DccUi),
+    /// `/load` d'un script qui s'exécute dès son chargement (`on LOAD`, `on START`) : il n'est pas chargé ;
+    /// l'interface demande d'abord (ADR 0007) et, si oui, appelle `engine_mut().load_file(path, true)` puis
+    /// [`Client::run_pending_scripts`] et [`Client::save_scripts`].
+    ConfirmScriptLoad { name: String, path: PathBuf },
+    /// Réduire, agrandir ou restaurer une fenêtre interne (`/window -n|-x|-r`).
+    WindowState { win: WinId, state: WinState },
+    /// Poser une question d'un script (`$?`, `$input`) ; l'hôte rend la réponse par [`Client::answer_input`].
+    AskInput(prompt::InputPrompt),
 }
 
 /// État d'une connexion.
@@ -168,6 +190,8 @@ pub struct ChanList {
     pub filter: Option<String>,
     pub min_users: Option<u32>,
     pub max_users: Option<u32>,
+    /// Le texte cherché seulement dans les noms des canaux, pas dans les sujets (boîte « Liste des canaux »).
+    pub names_only: bool,
 }
 
 /// Une entrée de la liste Notify avec son état.
@@ -202,6 +226,12 @@ impl Client {
     /// leurs variables et la liste des utilisateurs, ouvre une première fenêtre Status (non connectée) et
     /// déclenche `on START`. Rien ne se connecte ici : voir [`Client::connect_startup`].
     pub fn new(settings: Settings, data_dir: PathBuf, now_ms: i64) -> Client {
+        Client::new_localized(settings, data_dir, now_ms, None)
+    }
+
+    /// Comme [`Client::new`], avec la langue du système (`fr_FR.UTF-8`…) connue dès la création : les scripts
+    /// par défaut écrits au premier démarrage sont dans cette langue (si les réglages n'en imposent pas une).
+    pub fn new_localized(settings: Settings, data_dir: PathBuf, now_ms: i64, locale: Option<&str>) -> Client {
         let engine = Engine::new(data_dir.join("scripts"));
         let burst = settings.flood.burst;
         let _ = burst;
@@ -233,8 +263,12 @@ impl Client {
             scripts_fp: 0,
             scram_nonce: None,
             dcc: Default::default(),
+            auto_away: Vec::new(),
+            input: Default::default(),
+            sounds: Default::default(),
         };
         let mut c = Client { st, engine };
+        c.st.system_locale = locale.map(str::to_string);
         c.st.apply_language();
         c.st.new_status_window();
         c.load_scripts();
@@ -254,16 +288,17 @@ impl Client {
         let dir = self.engine.root().to_path_buf();
         let _ = std::fs::create_dir_all(&dir);
         let order_file = dir.join("order.txt");
-        let first = !order_file.exists() && defaults::FILES.iter().all(|(n, _)| !dir.join(n).exists());
+        let first = !order_file.exists() && defaults::NAMES.iter().all(|n| !dir.join(n).exists());
         if first {
-            for (n, text) in defaults::FILES {
+            // Premier démarrage : scripts par défaut dans la langue de l'interface (jamais réécrits ensuite).
+            for (n, text) in defaults::files(self.st.lang) {
                 let _ = std::fs::write(dir.join(n), text);
             }
         }
         let order: Vec<String> = match std::fs::read_to_string(&order_file) {
             Ok(t) => t.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect(),
             Err(_) => {
-                let mut v: Vec<String> = defaults::FILES.iter().map(|(n, _)| n.to_string()).collect();
+                let mut v: Vec<String> = defaults::NAMES.iter().map(|n| n.to_string()).collect();
                 let mut others: Vec<String> = std::fs::read_dir(&dir)
                     .map(|rd| {
                         rd.filter_map(|e| e.ok())
@@ -278,12 +313,21 @@ impl Client {
             }
         };
         let status = self.st.windows.first().map(|w| w.id).unwrap_or(0);
-        for name in order {
+        for entry in order {
+            // `nom` (sorte devinée d'après le texte) ou `nom<TAB>aliases|popups` (sorte retenue : `/load -a`, `-p`).
+            let (name, kind) = match entry.split_once('\t') {
+                Some((n, k)) => (n.trim().to_string(), script_kind_from_name(k.trim())),
+                None => (entry, None),
+            };
             let path = dir.join(&name);
             if !path.is_file() {
                 continue;
             }
-            if let Err(e) = self.engine.restore_file(&path, true) {
+            let r = match kind {
+                Some(k) => self.engine.restore_file_as(&path, true, k),
+                None => self.engine.restore_file(&path, true),
+            };
+            if let Err(e) = r {
                 let t = self.st.t(Key::ScriptLoadError, &[("file", &name), ("error", &e.to_string())]);
                 self.st.print(status, LineKind::Error, t);
             }
@@ -309,10 +353,16 @@ impl Client {
                 }
                 std::fs::write(&path, text)?;
             }
-            order.push(match path.strip_prefix(&root) {
+            let mut line = match path.strip_prefix(&root) {
                 Ok(rel) => rel.to_string_lossy().into_owned(),
                 Err(_) => path.display().to_string(),
-            });
+            };
+            // La sorte d'un fichier d'alias ou de popups qui ne se devine pas d'après son texte est retenue.
+            if let Some(k) = script_kind_name(s.kind) {
+                line.push('\t');
+                line.push_str(k);
+            }
+            order.push(line);
         }
         std::fs::write(root.join("order.txt"), order.join("\n") + "\n")?;
         std::fs::write(root.join("vars.txt"), self.engine.vars_text())?;
@@ -496,13 +546,15 @@ impl Client {
         self.st.now = now_ms;
         self.st.tick_conns();
         self.st.dcc_tick();
+        self.st.auto_away_tick();
         if self.st.settings.scripts.enabled {
             let Client { st, engine } = self;
             engine.tick(st, now_ms);
         }
         self.finish();
         let engine_next = if self.st.settings.scripts.enabled { self.engine.next_timer_due() } else { None };
-        [self.st.next_wake(), engine_next, self.st.dcc_next_wake()].into_iter().flatten().min()
+        let wakes = [self.st.next_wake(), engine_next, self.st.dcc_next_wake(), self.st.auto_away_next()];
+        wakes.into_iter().flatten().min()
     }
 
     /// Se connecte aux réseaux à ouvrir au démarrage (`connect_on_startup` et `auto_connect`).
@@ -537,6 +589,8 @@ impl Client {
     pub fn input(&mut self, win: WinId, text: &str, now_ms: i64) {
         self.st.now = now_ms;
         self.st.last_input = now_ms;
+        // De retour : fin de l'absence automatique.
+        self.st.auto_away_back();
         for line in text.split('\n') {
             let line = line.trim_end_matches('\r');
             if line.trim().is_empty() {
@@ -573,7 +627,11 @@ impl Client {
     fn run_line(&mut self, win: WinId, ctx: &Ctx, line: &str) {
         let Client { st, engine } = self;
         if st.settings.scripts.enabled {
-            if let Err(e) = engine.run_line(st, ctx, line) {
+            // Relancée après la réponse si elle pose une question (`$?`).
+            let owner = st.input.begin(prompt::Replay::Line { win, line: line.to_string() });
+            let r = engine.run_line(st, ctx, line);
+            st.input.end(owner);
+            if let Err(e) = r {
                 st.print(win, LineKind::Error, e.to_string());
             }
         } else {
@@ -849,10 +907,52 @@ impl Client {
         let ctx = self.popup_ctx(kind, win, selected);
         let Client { st, engine } = self;
         st.dcc.user = true;
+        // L'entrée est gardée pour être relancée si elle pose une question (`$$?="Canal :"`).
+        let owner = match engine.popup_token(action) {
+            Some(token) => st.input.begin(prompt::Replay::Popup { win, selected: selected.to_vec(), token }),
+            None => false,
+        };
         if let Err(e) = engine.popup_run(st, &ctx, action) {
             st.print(win, LineKind::Error, e.to_string());
         }
+        st.input.end(owner);
         st.dcc.user = false;
+        self.finish();
+    }
+
+    /// Réponse de l'utilisateur à une question d'un script ([`Effect::AskInput`]) : ce qui l'avait posée est relancé
+    /// avec la réponse (et celles déjà données). Une réponse à une question qui n'attend plus est ignorée.
+    pub fn answer_input(&mut self, q: &prompt::InputPrompt, answer: &prompt::InputAnswer, now_ms: i64) {
+        self.st.now = now_ms;
+        let (value, shown) = q.value(answer);
+        let Some((replay, answers)) = self.st.input.answer(q.id, value, shown) else { return };
+        self.st.input.answers = answers;
+        match replay {
+            prompt::Replay::Line { win, line } => {
+                let conn = self.st.win(win).and_then(|w| w.conn);
+                let ctx = self.st.ctx(conn, Some(win));
+                self.st.dcc.user = true;
+                self.run_line(win, &ctx, &line);
+                self.st.dcc.user = false;
+            }
+            prompt::Replay::Popup { win, selected, token } => {
+                let kind = match self.st.win(win).map(|w| w.kind) {
+                    Some(WinKind::Query) => PopupKind::Query,
+                    _ => PopupKind::Nicklist,
+                };
+                let ctx = self.popup_ctx(kind, win, &selected);
+                let Client { st, engine } = self;
+                st.dcc.user = true;
+                let owner = st.input.begin(prompt::Replay::Popup { win, selected: selected.clone(), token: token.clone() });
+                if let Err(e) = engine.popup_replay(st, &ctx, &token) {
+                    st.print(win, LineKind::Error, e.to_string());
+                }
+                st.input.end(owner);
+                st.dcc.user = false;
+            }
+        }
+        // Réponses non consommées (la ligne a changé de chemin) : oubliées.
+        self.st.input.answers.clear();
         self.finish();
     }
 
@@ -890,6 +990,37 @@ impl Client {
     /// Résultats de `/list` d'une fenêtre de liste des canaux.
     pub fn chanlist(&self, win: WinId) -> Option<&ChanList> {
         self.st.chanlists.get(&win)
+    }
+
+    /// `/list` lancé par la boîte « Liste des canaux » : le motif (`*`, `?` ; un seul mot), le nombre de personnes,
+    /// et la recherche dans les sujets aussi (sinon dans les noms seulement). Rend la fenêtre de la liste.
+    pub fn list_channels(
+        &mut self,
+        win: WinId,
+        pattern: &str,
+        min: Option<u32>,
+        max: Option<u32>,
+        topics: bool,
+        now_ms: i64,
+    ) -> Option<WinId> {
+        let mut cmd = String::from("/list");
+        if let Some(p) = pattern.split_whitespace().next() {
+            cmd.push(' ');
+            cmd.push_str(p);
+        }
+        if let Some(m) = min {
+            cmd.push_str(&format!(" -min {m}"));
+        }
+        if let Some(m) = max {
+            cmd.push_str(&format!(" -max {m}"));
+        }
+        self.command(win, &cmd, now_ms);
+        let conn = self.window(win)?.conn?;
+        let lw = self.st.conns.get(&conn)?.list_win?;
+        if let Some(l) = self.st.chanlists.get_mut(&lw) {
+            l.names_only = !topics;
+        }
+        Some(lw)
     }
 
     /// La liste Notify et l'état de chaque pseudo.
@@ -933,8 +1064,18 @@ impl Client {
         let prefix = lower(word);
         let mut cands: Vec<String> = Vec::new();
         if let Some(cmd) = word.strip_prefix('/') {
+            // Commandes intégrées, commandes du moteur de scripts (`set`, `timer`, `load`…) et alias des scripts.
             let p = cmd.to_ascii_lowercase();
-            cands = BUILTINS.iter().filter(|b| b.starts_with(&p)).map(|b| format!("/{b}")).collect();
+            let mut v: Vec<String> = BUILTINS
+                .iter()
+                .chain(alpirc_script::ENGINE_COMMANDS.iter())
+                .map(|b| b.to_string())
+                .chain(self.engine.alias_names())
+                .filter(|b| b.starts_with(&p))
+                .collect();
+            v.sort();
+            v.dedup();
+            cands = v.into_iter().map(|b| format!("/{b}")).collect();
         } else if conn.is_some_and(|c| c.session.is_channel(word)) || (conn.is_none() && word.starts_with('#')) {
             let mut v: Vec<String> = self
                 .st
