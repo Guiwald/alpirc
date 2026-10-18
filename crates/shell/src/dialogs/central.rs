@@ -1,6 +1,6 @@
-//! Channel Central (`/channel`, menu du canal « Modes du canal ») : le sujet, les modes du canal (t, n, i, m,
-//! p, s, clé, limite) et les listes de bans, d'exceptions et d'invitations, qui se remplissent au fil des
-//! réponses du serveur. OK ou Appliquer n'envoie que ce qui a changé (`/topic`, `/mode #canal +k clé -b
+//! Channel Central (`/channel`, menu du canal « Modes du canal », double-clic dans le canal) : le sujet (avec la
+//! liste des derniers sujets du canal, comme mIRC), les modes du canal (t, n, i, m, p, s, clé, limite) et les
+//! listes de bans, d'exceptions et d'invitations, qui se remplissent au fil des réponses du serveur. OK ou Appliquer n'envoie que ce qui a changé (`/topic`, `/mode #canal +k clé -b
 //! masque`…). Sans le rang d'opérateur, tout est montré mais rien n'est modifiable (le sujet reste modifiable
 //! si le canal n'est pas `+t`).
 
@@ -193,6 +193,7 @@ impl ChannelCentral {
     }
 
     fn show_topic(&self, view: &mut DialogView, client: &Client, lang: Lang) {
+        view.set_items(TOPIC, &client.topic_history(self.win));
         view.set_text(TOPIC, &self.topic0);
         let cs = client.channel_state(self.win);
         let by = match (cs.and_then(|c| c.topic_setter.clone()), cs.and_then(|c| c.topic_time)) {
@@ -367,7 +368,7 @@ impl DialogCtl for ChannelCentral {
         let gw = W - 2 * MARGIN;
         let mut c: Vec<ControlSpec> = vec![
             group(10, (MARGIN, MARGIN, gw, 76), &tr("cc.topic")),
-            edit(TOPIC, (20, 28, W - 40, EDIT_H), ""),
+            combo_edit(TOPIC, (20, 28, W - 40, EDIT_H + 8 * 16), &[] as &[&str], ""),
             text(SETBY, (20, 56, W - 40, LABEL_H), "").style("nowrap"),
             group(20, (MARGIN, 92, gw, 118), &tr("cc.modes")),
         ];
@@ -435,6 +436,14 @@ impl DialogCtl for ChannelCentral {
             }
             DialogMsg::Changed(TOPIC) => {
                 self.dirty_topic = true;
+                Outcome::Keep
+            }
+            DialogMsg::SelectionChanged(TOPIC) => {
+                // Un ancien sujet choisi dans la liste.
+                if let Some(t) = sel(view, TOPIC).and_then(|i| view.items(TOPIC).get(i).cloned()) {
+                    view.set_text(TOPIC, &t);
+                    self.dirty_topic = true;
+                }
                 Outcome::Keep
             }
             DialogMsg::Changed(KEY | LIMIT) => {
@@ -589,6 +598,25 @@ mod tests {
         let sent = k.sent();
         assert!(sent.contains(&"TOPIC #dlg-test :Nouveau sujet".to_string()), "{sent:?}");
         assert!(sent.iter().any(|l| l.starts_with("MODE #dlg-test -t+m-k+kl")), "{sent:?}");
+    }
+
+    #[test]
+    fn topic_history_like_mirc() {
+        let mut k = Kit::new("central4");
+        let win = setup(&mut k, true);
+        let conn = k.client.conns()[0];
+        k.line(conn, ":Kaelis!k@h TOPIC #dlg-test :Soirée vendredi");
+        let mut d = ChannelCentral::new(&k.client, win).unwrap();
+        let (mut v, _) = k.open(&mut d);
+        assert_eq!(text_of(&v, TOPIC), "Soirée vendredi");
+        assert_eq!(v.items(TOPIC), vec!["Soirée vendredi".to_string(), "Bienvenue".to_string()]);
+        // Reprendre l'ancien sujet.
+        v.set_selection(TOPIC, &[1]);
+        k.send(&mut d, &mut v, DialogMsg::SelectionChanged(TOPIC));
+        assert_eq!(text_of(&v, TOPIC), "Bienvenue");
+        assert_eq!(d.commands(&v)[0], ("topic".to_string(), "#dlg-test Bienvenue".to_string()));
+        // Gardés dans les réglages.
+        assert_eq!(k.client.settings().topic_history("UnderNet", "#DLG-TEST").len(), 2);
     }
 
     #[test]

@@ -375,8 +375,11 @@ impl State {
                 }
             }
             "join" => {
-                let (_sw, rest) = switches(args);
+                let (sw, rest) = switches(args);
                 let (chans, keys) = split_word(rest);
+                // `/join -i` : le dernier canal où l'on nous a invités, comme dans mIRC.
+                let invited = if sw.contains('i') { conn.and_then(|c| self.conns.get(&c)).and_then(|c| c.last_invite.clone()) } else { None };
+                let chans = invited.as_deref().unwrap_or(chans);
                 if chans.is_empty() {
                     return Err(self.insufficient(&name));
                 }

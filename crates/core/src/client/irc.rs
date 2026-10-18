@@ -92,6 +92,12 @@ impl super::state::State {
         l
     }
 
+    /// Retient un sujet pour la liste de Channel Central (réseau des réglages, sinon celui annoncé).
+    fn remember_topic(&mut self, conn: ConnId, channel: &str, topic: &str) {
+        let net = self.conns.get(&conn).map(|c| c.net_name.clone().unwrap_or_else(|| self.conn_network(conn))).unwrap_or_default();
+        self.settings.remember_topic(&net, channel, topic);
+    }
+
     fn conn_network(&self, conn: ConnId) -> String {
         self.conns.get(&conn).map(|c| if c.network.is_empty() { c.host.clone() } else { c.network.clone() }).unwrap_or_default()
     }
@@ -374,6 +380,7 @@ impl super::state::State {
                 self.on_channel_mode(conn, channel, setter, setter_address.unwrap_or_default(), modes, changes, time)
             }
             SE::Topic { channel, setter, address, topic } => {
+                self.remember_topic(conn, &channel, &topic);
                 let win = self.chan_win(conn, &channel).unwrap_or_else(|| self.status(conn));
                 let mut ev = self.ev(EventKind::Topic, conn);
                 ev.nick = setter.clone();
@@ -386,6 +393,7 @@ impl super::state::State {
                 self.push_pres(p);
             }
             SE::TopicIs { channel, topic } => {
+                self.remember_topic(conn, &channel, &topic);
                 let (win, t) = match self.chan_win(conn, &channel) {
                     Some(w) => (w, self.t(Key::TopicIs, &[("topic", &topic)])),
                     None => (self.active_for(conn), format!("{channel}: {topic}")),
@@ -470,6 +478,9 @@ impl super::state::State {
                 ev.target = Some(target.clone());
                 let mut p;
                 if own {
+                    if let Some(c) = self.conns.get_mut(&conn) {
+                        c.last_invite = Some(channel.clone());
+                    }
                     let win = self.active_for(conn);
                     let t = self.t(Key::Invites, &[("nick", &from), ("address", &addr), ("chan", &channel)]);
                     p = Pres::new().event(self.ctx(Some(conn), Some(win)), ev).line(self.line_at(win, LineKind::Invite, t, time));

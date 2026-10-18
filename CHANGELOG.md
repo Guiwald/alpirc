@@ -7,6 +7,15 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.16.0] - 2026-10-19
+
+> Mise en service : rien à faire, installer par-dessus la 0.15.0 (réglages conservés).
+
+### Ajouté
+- Channel Central : le sujet propose la liste des derniers sujets du canal (les 10 derniers vus), comme dans mIRC,
+  pour en remettre un ancien.
+- Commandes : `/join -i` rejoint le dernier canal où l'on t'a invité, comme dans mIRC.
+
 ## [0.15.0] - 2026-10-19
 
 > Mise en service : rien à faire, installer par-dessus la 0.14.0 (réglages conservés).

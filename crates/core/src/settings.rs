@@ -38,6 +38,53 @@ pub struct Settings {
     pub scripts: ScriptOptions,
     pub address_book: AddressBook,
     pub dcc: DccOptions,
+    /// Sujets vus sur chaque canal, pour la liste du sujet de Channel Central (comme mIRC).
+    pub topics: Vec<TopicHistory>,
+}
+
+/// Les derniers sujets d'un canal (le plus récent d'abord).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct TopicHistory {
+    pub network: String,
+    pub channel: String,
+    pub topics: Vec<String>,
+}
+
+/// Sujets gardés par canal, et canaux gardés (les plus anciens partent).
+pub const TOPICS_PER_CHANNEL: usize = 10;
+pub const TOPIC_CHANNELS: usize = 50;
+
+impl Settings {
+    /// Retient un sujet vu sur un canal (en tête de sa liste, sans doublon).
+    pub fn remember_topic(&mut self, network: &str, channel: &str, topic: &str) {
+        let topic = topic.trim();
+        if topic.is_empty() {
+            return;
+        }
+        let i = self.topics.iter().position(|t| t.network.eq_ignore_ascii_case(network) && t.channel.eq_ignore_ascii_case(channel));
+        let mut e = match i {
+            Some(i) => self.topics.remove(i),
+            None => TopicHistory { network: network.to_string(), channel: channel.to_string(), topics: Vec::new() },
+        };
+        e.topics.retain(|t| t != topic);
+        e.topics.insert(0, topic.to_string());
+        e.topics.truncate(TOPICS_PER_CHANNEL);
+        self.topics.push(e);
+        if self.topics.len() > TOPIC_CHANNELS {
+            let extra = self.topics.len() - TOPIC_CHANNELS;
+            self.topics.drain(..extra);
+        }
+    }
+
+    /// Les derniers sujets d'un canal, le plus récent d'abord.
+    pub fn topic_history(&self, network: &str, channel: &str) -> &[String] {
+        self.topics
+            .iter()
+            .find(|t| t.network.eq_ignore_ascii_case(network) && t.channel.eq_ignore_ascii_case(channel))
+            .map(|t| t.topics.as_slice())
+            .unwrap_or(&[])
+    }
 }
 
 impl Default for Settings {
@@ -71,6 +118,7 @@ impl Default for Settings {
             scripts: ScriptOptions::default(),
             address_book: AddressBook::default(),
             dcc: DccOptions::default(),
+            topics: Vec::new(),
         }
     }
 }

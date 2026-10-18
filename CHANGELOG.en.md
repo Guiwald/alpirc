@@ -7,6 +7,15 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-19
+
+> Rollout: nothing to do, install over 0.15.0 (settings are kept).
+
+### Added
+- Channel Central: the topic offers the list of the channel's last topics (the last 10 seen), as in mIRC, to put
+  an old one back.
+- Commands: `/join -i` joins the last channel you were invited to, as in mIRC.
+
 ## [0.15.0] - 2026-10-19
 
 > Rollout: nothing to do, install over 0.14.0 (settings are kept).

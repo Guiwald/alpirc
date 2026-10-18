@@ -103,6 +103,8 @@ fn main() {
         if dark {
             s.display.theme = "dark".into();
         }
+        // Pas de dossier des canaux à la connexion : chaque boîte est photographiée seule.
+        s.connect.folder_on_connect = false;
         s.networks.insert(0, Network::new("Local", vec![Server::new("127.0.0.1", 16667, false), Server::new("localhost", 16697, true)]));
         s.address_book.notify.push(NotifyEntry { nick: "Elisa".into(), note: "de Lyon".into(), network: None });
         s.address_book.people.push(alpirc_core::settings::PersonEntry {

@@ -686,13 +686,13 @@ pub const HELP: &[(&str, [&str; 7])] = &[
     (
         "join",
         [
-            "/join #channel[,#other] [key] — join channels",
-            "/join #canal[,#autre] [clé] — rejoindre des canaux",
-            "/join #channel[,#other] [key] — entrar en canales",
-            "/join #channel[,#other] [key] — Channels betreten",
-            "/join #channel[,#other] [key] — entra nei canali",
-            "/join #channel[,#other] [key] — entrar en canals",
-            "/join #channel[,#other] [key] — téigh isteach i gcainéil",
+            "/join [-i] #channel[,#other] [key] — join channels (-i: where you were last invited)",
+            "/join [-i] #canal[,#autre] [clé] — rejoindre des canaux (-i : là où l'on vous a invité en dernier)",
+            "/join [-i] #channel[,#other] [key] — entrar en canales (-i: donde te invitaron por última vez)",
+            "/join [-i] #channel[,#other] [key] — Channels betreten (-i: wohin Sie zuletzt eingeladen wurden)",
+            "/join [-i] #channel[,#other] [key] — entra nei canali (-i: dove sei stato invitato l'ultima volta)",
+            "/join [-i] #channel[,#other] [key] — entrar en canals (-i: on us van convidar per última vegada)",
+            "/join [-i] #channel[,#other] [key] — téigh isteach i gcainéil (-i: an áit ar tugadh cuireadh duit go deireanach)",
         ],
     ),
     (
@@ -1544,7 +1544,7 @@ mod tests {
         let n = keys.len();
         keys.dedup();
         assert_eq!(n, keys.len(), "commande en double");
-        assert_eq!(help_for(Lang::De, "/JOIN"), Some("/join #channel[,#other] [key] — Channels betreten"));
+        assert_eq!(help_for(Lang::De, "/JOIN"), Some("/join [-i] #channel[,#other] [key] — Channels betreten (-i: wohin Sie zuletzt eingeladen wurden)"));
         assert!(help_for(Lang::Fr, "join").unwrap().contains("rejoindre"));
         assert_eq!(help_for(Lang::En, "nope"), None);
     }

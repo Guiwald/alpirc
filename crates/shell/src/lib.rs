@@ -389,7 +389,7 @@ impl Shell {
                 self.client.on_connect_failed(conn, &error, cert_sha256.as_deref(), now)
             }
             NetEvent::Accepted { .. } | NetEvent::ListenerClosed { .. } => {}
-            NetEvent::Resolved { id, result, .. } => self.client.on_resolved(id, result.as_ref().map(Vec::clone), now),
+            NetEvent::Resolved { id, result, .. } => self.client.on_resolved(id, result.as_deref(), now),
             ev @ (NetEvent::DccConnected { .. } | NetEvent::DccLine { .. } | NetEvent::DccProgress { .. } | NetEvent::DccEnded { .. }) => {
                 self.dcc_net(ev, now)
             }

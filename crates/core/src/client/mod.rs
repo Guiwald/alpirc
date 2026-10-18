@@ -849,6 +849,14 @@ impl Client {
         self.st.conns.get(&w.conn?)?.session.channel(&w.name)
     }
 
+    /// Les derniers sujets vus sur le canal de la fenêtre `win` (le plus récent d'abord), pour Channel Central.
+    pub fn topic_history(&self, win: WinId) -> Vec<String> {
+        let Some(w) = self.st.win(win) else { return Vec::new() };
+        let Some(c) = w.conn.and_then(|c| self.st.conns.get(&c)) else { return Vec::new() };
+        let net = c.net_name.clone().unwrap_or_else(|| if c.network.is_empty() { c.host.clone() } else { c.network.clone() });
+        self.st.settings.topic_history(&net, &w.name).to_vec()
+    }
+
     /// Demande les listes de bans, d'exceptions et d'invitations du canal (sans affichage).
     pub fn request_lists(&mut self, win: WinId) {
         self.st.request_lists(win);
@@ -884,7 +892,7 @@ impl Client {
     }
 
     /// Réponse à [`Effect::Resolve`] (`/dns`) : les adresses trouvées, ou l'échec.
-    pub fn on_resolved(&mut self, id: u32, result: Result<Vec<std::net::IpAddr>, &NetError>, now_ms: i64) {
+    pub fn on_resolved(&mut self, id: u32, result: Result<&[std::net::IpAddr], &NetError>, now_ms: i64) {
         self.st.now = now_ms;
         self.st.dns_answer(id, result.map(|v| v.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ")));
         self.finish();

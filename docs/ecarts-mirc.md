@@ -85,6 +85,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | fichiers binaires (`/bread`…), fichiers ouverts (`/fopen`…), images (`/draw…`), `/filter`, `/loadbuf`, `/speak`, `/vol`… | scripts avancés | absent : hors ADR 0007 pour la 1.0 (question 5) |
 | `/dccserver`, `/fserve`, `/dll`, `/com…`, `/run`, `/dde`, `/tray`, `/showmirc`, `/setlayer`, `/tips`, `/background`, `/proxy`, `/sock…` | | hors périmètre |
 | `/nick` | change le pseudo **et** le pseudo des Options (`/tnick` pour un changement temporaire) | **différent** : temporaire dans AlpIRC → question 2 |
+| `/join -i` | rejoindre le dernier canal où l'on nous a invités | **fait (0.16.0)** (l'option était ignorée) |
 
 ## Clavier et souris
 
@@ -118,6 +119,14 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | DCC › Folders (un dossier par type de fichier) | un seul dossier | absent, peu utile |
 | DCC › Ignore (types de fichiers refusés : `*.exe *.com *.bat *.dll *.ini *.mrc *.vbs *.js *.pif *.scr *.lnk *.pl *.shs *.htm *.html`) | une liste fixe de types à risque, toujours demandés même en acceptation automatique | différent (suffit) |
 | DCC › Server, Fserve | | hors périmètre |
+
+## Channel Central
+
+| Élément | mIRC 6.x | AlpIRC | État |
+|---|---|---|---|
+| Sujet, modes (t, n, i, m, p, s, clé, limite), listes de bans, d'exceptions, d'invitations | | idem | présent |
+| Liste des derniers sujets du canal (depuis la 5.8) | | champ simple | **fait (0.16.0)** : les 10 derniers sujets vus, gardés dans les réglages |
+| Ouverture par double-clic dans le canal | | rien | **fait (0.15.0)** |
 
 ## Carnet d'adresses
 
@@ -178,6 +187,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 - **0.14.0** : menus de la liste des canaux et du capteur d'URL, « Enregistrer le texte » dans le menu d'une
   fenêtre.
 - **0.15.0** : double-clic dans le texte comme mIRC (Channel Central dans un canal…), raccourcis Alt de mIRC.
+- **0.16.0** : liste des derniers sujets dans Channel Central, `/join -i`.
 
 ## Questions pour Guillaume
 

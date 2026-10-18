@@ -554,7 +554,7 @@ fn help_and_linesep() {
     assert!(h.lines(w).iter().any(|l| l == "* AlpIRC commands (type /help command for details):"));
     assert!(h.lines(w).iter().any(|l| l.contains(" /join ") && l.starts_with("* /")));
     h.input(w, "/help join");
-    assert_eq!(h.last(w), "* /join #channel[,#other] [key] — join channels");
+    assert_eq!(h.last(w), "* /join [-i] #channel[,#other] [key] — join channels (-i: where you were last invited)");
     h.input(w, "/help nope");
     assert_eq!(h.last(w), "* No help for /nope");
     h.input(w, "/linesep");
@@ -711,7 +711,8 @@ fn dns_host_nick_and_ip() {
         _ => None,
     });
     let id = id.expect("recherche demandée à l'hôte");
-    h.c.on_resolved(id, Ok(vec!["192.0.2.1".parse().unwrap(), "2001:db8::1".parse().unwrap()]), h.now);
+    let addrs: Vec<std::net::IpAddr> = vec!["192.0.2.1".parse().unwrap(), "2001:db8::1".parse().unwrap()];
+    h.c.on_resolved(id, Ok(&addrs), h.now);
     assert_eq!(h.last(st), "* Dns resolved irc.undernet.org to 192.0.2.1, 2001:db8::1");
     // Un pseudo dont l'adresse n'est pas connue : USERHOST d'abord, sans rien afficher de la réponse.
     h.input(st, "/dns Bob");
@@ -747,4 +748,15 @@ fn debug_window_shows_both_directions() {
     assert_eq!(h.last(st), "* Debug output is off");
     h.feed(":Bob!b@h PRIVMSG Guiwald :encore");
     assert_eq!(h.lines(raw).len(), l.len());
+}
+
+#[test]
+fn join_last_invite() {
+    let mut h = H::new();
+    h.up();
+    let st = h.status;
+    h.feed(":Kaelis!k@h INVITE Guiwald :#secret");
+    h.clear();
+    h.input(st, "/join -i");
+    assert_eq!(h.sends(), vec!["JOIN #secret"]);
 }

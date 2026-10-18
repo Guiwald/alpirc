@@ -159,6 +159,8 @@ pub(crate) struct Conn {
     pub whois: HashMap<String, super::whois::WhoisInfo>,
     /// `/dns pseudo` en attente de l'adresse du pseudo (USERHOST) : (pseudo, fenêtre).
     pub pending_dns: Vec<(String, WinId)>,
+    /// Dernier canal où l'on nous a invités (`/join -i`).
+    pub last_invite: Option<String>,
     /// `/debug` : les lignes échangées avec le serveur vont dans cette fenêtre `@` ou ce fichier.
     pub debug: Option<super::mirc_cmds::DebugTarget>,
     pub list_win: Option<WinId>,
@@ -219,6 +221,7 @@ impl Conn {
             whois: HashMap::new(),
             pending_dns: Vec::new(),
             debug: None,
+            last_invite: None,
             list_win: None,
             sts_upgrade: None,
             ready: false,
