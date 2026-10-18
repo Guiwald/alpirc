@@ -13,6 +13,7 @@ mod keys;
 mod layout;
 pub mod menus;
 mod mobile;
+pub use mobile::service_text;
 mod notify;
 #[cfg(test)]
 mod shell_tests;

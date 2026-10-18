@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::client::LineKind;
 
 /// Version du format du fichier (voir [`Settings::upgrade`]).
-pub const SETTINGS_VERSION: u32 = 2;
+pub const SETTINGS_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -298,6 +298,8 @@ pub struct ConnectOptions {
     pub connect_on_startup: bool,
     pub startup_networks: Vec<String>,
     pub new_window_for_server: bool,
+    /// Ouvrir le dossier des canaux à la connexion (pas aux reconnexions automatiques), comme mIRC.
+    pub folder_on_connect: bool,
     /// Sans rien recevoir pendant ce temps, la connexion est tenue pour morte.
     pub ping_timeout_secs: u64,
     /// Intervalle des PING de mesure de la latence.
@@ -315,6 +317,7 @@ impl Default for ConnectOptions {
             connect_on_startup: false,
             startup_networks: Vec::new(),
             new_window_for_server: false,
+            folder_on_connect: true,
             ping_timeout_secs: 240,
             lag_interval_secs: 60,
         }
@@ -1277,10 +1280,15 @@ impl Settings {
     ///
     /// - 2 : « Whois dans la fenêtre active » cochée sur le téléphone (une seule fenêtre visible à la fois : la
     ///   réponse dans Status passerait inaperçue). Sur l'ordinateur, la case reste décochée, comme dans mIRC.
+    /// - 3 : le dossier des canaux s'ouvre à la connexion sur l'ordinateur, comme dans mIRC ; pas sur le téléphone
+    ///   (une boîte à chaque connexion y gênerait).
     pub fn upgrade(&mut self, mobile: bool, new_install: bool) -> bool {
         let old = self.version;
         if mobile && (new_install || old < 2) {
             self.irc.whois_in_active = true;
+        }
+        if mobile && (new_install || old < 3) {
+            self.connect.folder_on_connect = false;
         }
         self.version = self.version.max(SETTINGS_VERSION);
         self.version != old || (mobile && new_install)

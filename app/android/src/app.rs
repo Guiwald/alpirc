@@ -497,14 +497,10 @@ impl MobileApp {
         // premier plan (en arrière-plan, il reste pour laisser les reconnexions se faire).
         let infos: Vec<_> = self.shell.client.conns().into_iter().filter_map(|c| self.shell.client.conn_info(c)).collect();
         let active = infos.iter().filter(|i| i.state != ConnState::Disconnected).count();
-        let connected = infos.iter().filter(|i| i.state == ConnState::Connected).count();
         let lang = self.shell.language();
-        let text = match connected {
-            0 if active > 0 => t(lang, "mobile.service.connecting"),
-            0 => t(lang, "mobile.service.waiting"),
-            1 => t(lang, "mobile.service.one"),
-            n => alpirc_shell::tr::tf(lang, "mobile.service.many", &[("n", &n.to_string())]),
-        };
+        let list: Vec<(String, bool, bool)> =
+            infos.iter().map(|i| (i.network.clone(), i.state == ConnState::Connected, i.state != ConnState::Disconnected)).collect();
+        let text = alpirc_shell::service_text(lang, &list);
         // Après la déconnexion en arrière-plan, le service s'arrête et sa notification le dit.
         let keep = active > 0 || (self.service_running && !self.foreground && self.bg_note.is_none());
         let (text, note) = match self.bg_note {

@@ -173,6 +173,106 @@ pub const TEXTS: &[(&str, [&str; 7])] = &[
     ("ping", ["Ping", "Ping", "Ping", "Ping", "Ping", "Ping", "Ping"]),
     ("ctcp.time", ["Time", "Heure", "Hora", "Uhrzeit", "Ora", "Hora", "Am"]),
     ("version", ["Version", "Version", "Versión", "Version", "Versione", "Versió", "Leagan"]),
+    ("unignore", ["Unignore", "Ne plus ignorer", "Dejar de ignorar", "Nicht mehr ignorieren", "Non ignorare più", "Deixar d'ignorar", "Stop an neamhaird"]),
+    // Menu Commandes (barre de menus), comme celui de mIRC.
+    (
+        "part.chan",
+        ["Part channel", "Quitter un canal", "Salir de un canal", "Einen Channel verlassen", "Esci da un canale", "Eixir d'un canal", "Fág cainéal"],
+    ),
+    (
+        "query.user",
+        ["Query user", "Discuter en privé", "Hablar en privado", "Query mit Benutzer", "Query con un utente", "Parlar en privat", "Comhrá príobháideach"],
+    ),
+    (
+        "query.ask",
+        [
+            "Enter nickname and message:",
+            "Pseudo et message :",
+            "Nick y mensaje:",
+            "Nickname und Nachricht:",
+            "Nick e messaggio:",
+            "Sobrenom i missatge:",
+            "Leasainm agus teachtaireacht:",
+        ],
+    ),
+    ("notice.send", ["Send notice", "Envoyer une notice", "Enviar un notice", "Notice senden", "Invia un notice", "Enviar un notice", "Seol fógra"]),
+    (
+        "whois.user",
+        ["Whois user", "Whois d'un pseudo", "Whois de un nick", "Whois eines Benutzers", "Whois di un utente", "Whois d'un sobrenom", "Whois úsáideora"],
+    ),
+    ("nick.ask", ["Enter nickname:", "Pseudo :", "Nick:", "Nickname:", "Nick:", "Sobrenom:", "Leasainm:"]),
+    ("ctcp.send", ["Send CTCP", "Envoyer un CTCP", "Enviar un CTCP", "CTCP senden", "Invia un CTCP", "Enviar un CTCP", "Seol CTCP"]),
+    ("away.set", ["Set Away", "Absence", "Ausencia", "Abwesenheit", "Assenza", "Absència", "Stádas"]),
+    ("away.on", ["On", "Absent", "Ausente", "Abwesend", "Assente", "Absent", "Imithe"]),
+    ("away.off", ["Off", "De retour", "De vuelta", "Zurück", "Di ritorno", "De tornada", "Ar ais"]),
+    (
+        "away.ask",
+        [
+            "Enter away message:",
+            "Message d'absence :",
+            "Mensaje de ausencia:",
+            "Abwesenheitsnachricht:",
+            "Messaggio di assenza:",
+            "Missatge d'absència:",
+            "Teachtaireacht as láthair:",
+        ],
+    ),
+    (
+        "invite.user",
+        ["Invite user", "Inviter quelqu'un", "Invitar a alguien", "Jemanden einladen", "Invita qualcuno", "Convidar algú", "Tabhair cuireadh do dhuine"],
+    ),
+    (
+        "invite.ask",
+        [
+            "Enter nickname and channel:",
+            "Pseudo et canal :",
+            "Nick y canal:",
+            "Nickname und Channel:",
+            "Nick e canale:",
+            "Sobrenom i canal:",
+            "Leasainm agus cainéal:",
+        ],
+    ),
+    ("ban.user", ["Ban user", "Bannir quelqu'un", "Banear a alguien", "Jemanden bannen", "Banna qualcuno", "Bandejar algú", "Toirmisc duine"]),
+    ("kick.user", ["Kick user", "Expulser quelqu'un", "Expulsar a alguien", "Jemanden kicken", "Espelli qualcuno", "Expulsar algú", "Caith duine amach"]),
+    (
+        "chan_nick.ask",
+        [
+            "Enter channel and nickname:",
+            "Canal et pseudo :",
+            "Canal y nick:",
+            "Channel und Nickname:",
+            "Canale e nick:",
+            "Canal i sobrenom:",
+            "Cainéal agus leasainm:",
+        ],
+    ),
+    (
+        "ignore.user",
+        ["Ignore user", "Ignorer quelqu'un", "Ignorar a alguien", "Jemanden ignorieren", "Ignora qualcuno", "Ignorar algú", "Déan neamhaird de dhuine"],
+    ),
+    (
+        "unignore.user",
+        [
+            "Unignore user",
+            "Ne plus ignorer quelqu'un",
+            "Dejar de ignorar a alguien",
+            "Jemanden nicht mehr ignorieren",
+            "Non ignorare più qualcuno",
+            "Deixar d'ignorar algú",
+            "Stop an neamhaird de dhuine",
+        ],
+    ),
+    ("usermodes", ["My user modes", "Mes modes", "Mis modos", "Meine Modi", "I miei modi", "Els meus modes", "Mo mhódanna"]),
+    ("mode.invisible", ["Invisible (+i)", "Invisible (+i)", "Invisible (+i)", "Unsichtbar (+i)", "Invisibile (+i)", "Invisible (+i)", "Dofheicthe (+i)"]),
+    ("mode.wallops", ["Wallops (+w)", "Wallops (+w)", "Wallops (+w)", "Wallops (+w)", "Wallops (+w)", "Wallops (+w)", "Wallops (+w)"]),
+    ("mode.normal", ["Normal (-iw)", "Normal (-iw)", "Normal (-iw)", "Normal (-iw)", "Normale (-iw)", "Normal (-iw)", "Gnáth (-iw)"]),
+    ("nick.change", ["Change nick", "Changer de pseudo", "Cambiar de nick", "Nickname ändern", "Cambia nick", "Canviar de sobrenom", "Athraigh leasainm"]),
+    (
+        "nick.new.ask",
+        ["Enter new nickname:", "Nouveau pseudo :", "Nuevo nick:", "Neuer Nickname:", "Nuovo nick:", "Nou sobrenom:", "Leasainm nua:"],
+    ),
+    ("quit.irc", ["Quit IRC", "Quitter IRC", "Salir de IRC", "IRC beenden", "Esci da IRC", "Eixir d'IRC", "Scoir IRC"]),
     ("slap", ["Slap!", "Claque !", "¡Bofetón!", "Ohrfeige!", "Schiaffo!", "Bufetada!", "Leadóg!"]),
     (
         "slap.text",
@@ -257,6 +357,121 @@ menu query {
   {whois}:whois $$1
   {query}:query $$1
   -
+  {ctcp}
+  .{ping}:ctcp $$1 ping
+  .{ctcp.time}:ctcp $$1 time
+  .{version}:ctcp $$1 version
+  {dcc}
+  .{dcc.send}:dcc send $$1
+  .{dcc.chat}:dcc chat $$1
+  -
+  {ignore}:ignore $$1 1 | close -m $$1
+  {close}:close -m $$1
+}
+
+menu nicklist {
+  {info}:uwho $$1
+  {whois}:whois $$1
+  {query}:query $$1
+  -
+  {control}
+  .{ignore}:ignore $$1 1
+  .{unignore}:ignore -r $$1 1
+  .-
+  .{op}:op $$1-
+  .{deop}:deop $$1-
+  .{voice}:voice $$1-
+  .{devoice}:devoice $$1-
+  .-
+  .{kick}:kick # $$1
+  .{kick.why}:kick # $$1 $$?="{reason.ask}"
+  .{ban}:ban # $$1 2
+  .{ban.kick}:ban -k # $$1 2
+  .{ban.kick.why}:ban -k # $$1 2 $$?="{reason.ask}"
+  {ctcp}
+  .{ping}:ctcp $$1 ping
+  .{ctcp.time}:ctcp $$1 time
+  .{version}:ctcp $$1 version
+  {dcc}
+  .{dcc.send}:dcc send $$1
+  .{dcc.chat}:dcc chat $$1
+  -
+  {slap}:me {slap.text}
+}
+
+menu menubar {
+  {join}:join $$?="{join.ask}"
+  {part.chan}:part $$?="{join.ask}"
+  {query.user}:query $$?="{query.ask}"
+  {notice.send}:notice $$?="{query.ask}"
+  {whois.user}:whois $$?="{nick.ask}"
+  {ctcp.send}
+  .{ping}:ctcp $$?="{nick.ask}" ping
+  .{ctcp.time}:ctcp $$?="{nick.ask}" time
+  .{version}:ctcp $$?="{nick.ask}" version
+  -
+  {away.set}
+  .{away.on}:away $$?="{away.ask}"
+  .{away.off}:away
+  -
+  {invite.user}:invite $$?="{invite.ask}"
+  {ban.user}:ban $$?="{chan_nick.ask}"
+  {kick.user}:kick $$?="{chan_nick.ask}"
+  -
+  {ignore.user}:ignore $$?="{nick.ask}" 1
+  {unignore.user}:ignore -r $$?="{nick.ask}" 1
+  -
+  {usermodes}
+  .{mode.invisible}:mode $me +i
+  .{mode.wallops}:mode $me +w
+  .{mode.normal}:mode $me -iw
+  -
+  {nick.change}:nick $$?="{nick.new.ask}"
+  {quit.irc}:quit
+}
+"#;
+
+/// Modèle de `aliases.mrc`.
+const ALIASES: &str = r#"; {aliases.comment}
+alias j join $1-
+alias p part $1-
+alias n names $1-
+alias w whois $1-
+alias k kick $1-
+alias kb ban -k # $$1 2 $2-
+alias q query $1-
+alias send dcc send $1-
+alias chat dcc chat $1-
+alias ping ctcp $1 ping
+"#;
+
+/// Modèles de `popups.mrc` des versions précédentes : 0.9.0 et 0.10.0 (« Infos » faisait un `/whois`), 0.11.0 (sans
+/// le menu Commandes).
+const OLD_POPUPS: &[&str] = &[POPUPS_0_9, POPUPS_0_11];
+
+const POPUPS_0_11: &str = r#"; {popups.comment}
+menu status {
+  {lusers}:lusers
+  {motd}:motd
+  {time}:time
+  -
+  {join}:join $$?="{join.ask}"
+  -
+  {quit}:quit
+}
+
+menu channel {
+  {modes}:channel
+  {folder}:folder
+  -
+  {part}:part #
+}
+
+menu query {
+  {info}:uwho $$1
+  {whois}:whois $$1
+  {query}:query $$1
+  -
   {dcc}
   .{dcc.send}:dcc send $$1
   .{dcc.chat}:dcc chat $$1
@@ -294,23 +509,6 @@ menu nicklist {
   {ignore}:ignore $$1 1
 }
 "#;
-
-/// Modèle de `aliases.mrc`.
-const ALIASES: &str = r#"; {aliases.comment}
-alias j join $1-
-alias p part $1-
-alias n names $1-
-alias w whois $1-
-alias k kick $1-
-alias kb ban -k # $$1 2 $2-
-alias q query $1-
-alias send dcc send $1-
-alias chat dcc chat $1-
-alias ping ctcp $1 ping
-"#;
-
-/// Modèles de `popups.mrc` des versions précédentes (0.9.0 et 0.10.0 : « Infos » faisait un `/whois`).
-const OLD_POPUPS: &[&str] = &[POPUPS_0_9];
 
 /// Modèles de `aliases.mrc` des versions précédentes.
 const OLD_ALIASES: &[&str] = &[];
@@ -388,6 +586,13 @@ pub fn is_generated(name: &str, text: &str) -> bool {
     std::iter::once(current).chain(old.iter().copied()).any(|tpl| Lang::ALL.iter().any(|&l| fill(tpl, l) == text))
 }
 
+/// Fichiers par défaut écrits par les versions précédentes (nom, texte), du plus ancien au plus récent : pour les
+/// essais de mise à jour.
+#[doc(hidden)]
+pub fn previous_files(lang: Lang) -> Vec<(&'static str, String)> {
+    OLD_ALIASES.iter().map(|t| (NAMES[0], fill(t, lang))).chain(OLD_POPUPS.iter().map(|t| (NAMES[1], fill(t, lang)))).collect()
+}
+
 /// Noms des fichiers par défaut, dans l'ordre de chargement.
 pub const NAMES: [&str; 2] = ["aliases.mrc", "popups.mrc"];
 
@@ -446,7 +651,7 @@ mod tests {
     }
 
     /// Libellés qui restent ceux de l'anglais dans toutes les langues (commandes IRC).
-    const SAME_AS_ENGLISH: &[&str] = &["whois", "dcc", "ctcp", "ping"];
+    const SAME_AS_ENGLISH: &[&str] = &["whois", "dcc", "ctcp", "ping", "mode.wallops"];
 
     // Toute nouvelle clé doit être traduite dans les 7 langues (voir l'ADR 0012).
     #[test]

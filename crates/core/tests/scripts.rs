@@ -177,10 +177,11 @@ fn isban_isnotify_isignore() {
 fn default_popups() {
     let (mut h, w) = setup("");
     let m = h.c.popup(PopupKind::Nicklist, w, &["Bob".to_string()]);
-    assert_eq!(labels(&m), vec!["Info", "Whois", "Query", "-", "Control", "CTCP", "DCC", "-", "Slap!", "-", "Ignore"]);
+    assert_eq!(labels(&m), vec!["Info", "Whois", "Query", "-", "Control", "CTCP", "DCC", "-", "Slap!"]);
+    // Comme dans mIRC : Ignore et Unignore en tête du sous-menu Control.
     assert_eq!(
         labels(&find(&m, "Control").children),
-        vec!["Op", "Deop", "Voice", "Devoice", "-", "Kick", "Kick (why)", "Ban", "Ban, Kick", "Ban, Kick (why)"]
+        vec!["Ignore", "Unignore", "-", "Op", "Deop", "Voice", "Devoice", "-", "Kick", "Kick (why)", "Ban", "Ban, Kick", "Ban, Kick (why)"]
     );
     assert_eq!(labels(&find(&m, "CTCP").children), vec!["Ping", "Time", "Version"]);
     let sel = vec!["Bob".to_string()];
@@ -188,16 +189,57 @@ fn default_popups() {
     assert_eq!(h.sends(), vec!["PRIVMSG #lyon :\x01ACTION slaps Bob around a bit with a large trout\x01"]);
     assert_eq!(h.last(w), "* Guiwald slaps Bob around a bit with a large trout");
     let m = h.c.popup(PopupKind::Nicklist, w, &sel);
-    h.c.popup_run(w, &sel, find(&m, "Control").children[0].action.unwrap(), h.now);
+    h.c.popup_run(w, &sel, find(&m, "Control").children[3].action.unwrap(), h.now);
     assert_eq!(h.sends(), vec!["MODE #lyon +o Bob"]);
     let m = h.c.popup(PopupKind::Nicklist, w, &sel);
-    h.c.popup_run(w, &sel, find(&m, "Control").children[8].action.unwrap(), h.now);
+    h.c.popup_run(w, &sel, find(&m, "Control").children[11].action.unwrap(), h.now);
     assert_eq!(h.sends(), vec!["MODE #lyon +b *!*@bob.host", "KICK #lyon Bob"]);
     // Plusieurs pseudos : /op $$1- les prend tous.
     let two = vec!["Bob".to_string(), "Pat".to_string()];
     let m = h.c.popup(PopupKind::Nicklist, w, &two);
-    h.c.popup_run(w, &two, find(&m, "Control").children[1].action.unwrap(), h.now);
+    h.c.popup_run(w, &two, find(&m, "Control").children[4].action.unwrap(), h.now);
     assert_eq!(h.sends(), vec!["MODE #lyon -oo Bob Pat"]);
+}
+
+#[test]
+fn default_commands_menu_like_mirc() {
+    let (mut h, w) = setup("");
+    let m = h.c.popup(PopupKind::Menubar, w, &[]);
+    assert_eq!(
+        labels(&m),
+        vec![
+            "Join channel",
+            "Part channel",
+            "Query user",
+            "Send notice",
+            "Whois user",
+            "Send CTCP",
+            "-",
+            "Set Away",
+            "-",
+            "Invite user",
+            "Ban user",
+            "Kick user",
+            "-",
+            "Ignore user",
+            "Unignore user",
+            "-",
+            "My user modes",
+            "-",
+            "Change nick",
+            "Quit IRC"
+        ]
+    );
+    assert_eq!(labels(&find(&m, "My user modes").children), vec!["Invisible (+i)", "Wallops (+w)", "Normal (-iw)"]);
+    h.c.popup_run(w, &[], find(&m, "My user modes").children[0].action.unwrap(), h.now);
+    assert_eq!(h.sends(), vec!["MODE Guiwald +i"]);
+    let m = h.c.popup(PopupKind::Menubar, w, &[]);
+    h.c.popup_run(w, &[], find(&m, "Set Away").children[1].action.unwrap(), h.now);
+    assert_eq!(h.sends(), vec!["AWAY"]);
+    // Une entrée qui demande un pseudo pose la question.
+    let m = h.c.popup(PopupKind::Menubar, w, &[]);
+    h.c.popup_run(w, &[], find(&m, "Whois user").action.unwrap(), h.now);
+    assert!(h.effects().iter().any(|e| matches!(e, Effect::AskInput(_))));
 }
 
 #[test]
@@ -211,7 +253,7 @@ fn status_channel_query_popups() {
     h.feed(":Bob!bob@bob.host PRIVMSG Guiwald :yo");
     let q = h.win("Bob");
     let m = h.c.popup(PopupKind::Query, q, &[]);
-    assert_eq!(labels(&m), vec!["Info", "Whois", "Query", "-", "DCC", "-", "Ignore", "Close"]);
+    assert_eq!(labels(&m), vec!["Info", "Whois", "Query", "-", "CTCP", "DCC", "-", "Ignore", "Close"]);
     h.c.popup_run(q, &[], find(&m, "Whois").action.unwrap(), h.now);
     assert_eq!(h.sends(), vec!["WHOIS Bob"]);
     // Info : la boîte User Central (/uwho), comme dans mIRC.
@@ -236,11 +278,17 @@ fn default_popups_follow_the_language_and_old_files_are_upgraded() {
     drop(H::with_dir(with_lang("fr"), dir.clone()));
     let path = dir.join("scripts/popups.mrc");
     let fr = std::fs::read_to_string(&path).unwrap();
-    assert!(fr.contains("  Infos:uwho $$1"), "{fr}");
-    // Le fichier écrit par les versions 0.9 et 0.10 (« Infos » faisait un /whois) est mis à jour au démarrage.
-    std::fs::write(&path, fr.replace("Infos:uwho", "Infos:whois")).unwrap();
+    assert!(fr.contains("  Infos:uwho $$1") && fr.contains("menu menubar {"), "{fr}");
+    // Les fichiers écrits par les versions précédentes (0.9 et 0.10 : « Infos » faisait un /whois ; 0.11 : pas de
+    // menu Commandes) sont mis à jour au démarrage.
+    let old = alpirc_core::client::previous_default_scripts(alpirc_core::i18n::Lang::Fr);
+    assert!(old.len() >= 2);
+    for (name, text) in old.iter().filter(|(n, _)| *n == "popups.mrc") {
+        std::fs::write(dir.join("scripts").join(name), text).unwrap();
+        drop(H::with_dir(with_lang("fr"), dir.clone()));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), fr);
+    }
     let mut h = H::with_dir(with_lang("fr"), dir.clone());
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), fr);
     // Changement de langue (boîte de bienvenue, Options) : les menus non modifiés suivent.
     h.c.settings_mut().language = Some("es".into());
     h.c.settings_changed(h.now);

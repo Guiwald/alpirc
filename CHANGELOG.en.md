@@ -7,6 +7,26 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-19
+
+> Rollout: nothing to do, install over 0.11.0 (settings are kept). On the Mac and Linux, the Channels Folder now
+> opens on every connection, as in mIRC: uncheck "Pop up on connect" in the folder (Favorites › Channels Folder, Alt+J) if
+> you don't want it.
+
+### Added
+- Interface: the menu bar's **Commands** menu, like mIRC's (it was empty): join or part a channel, query, send a
+  notice, whois, CTCP, away, invite, ban, kick, ignore or unignore someone, your user modes, change nick, quit
+  IRC.
+- Interface: the Channels Folder opens on connect, as in mIRC (not on automatic reconnections). The "Pop up on
+  connect" box, in the folder, stops it. On the phone, it is unchecked.
+- Docs: `docs/ecarts-mirc.md`, the inventory of what still differs from mIRC 6.x, with the open questions.
+
+### Changed
+- Scripts: the default menus follow mIRC's: "Ignore" and the new "Unignore" at the top of the nick list's Control
+  submenu; a CTCP submenu in a private window's menu. Menus you haven't modified are updated automatically.
+- Android: the service notification counts each network once ("Connected to Undernet (2 connections)" instead of
+  "Connected to 2 networks").
+
 ## [0.11.0] - 2026-10-19
 
 > Rollout: nothing to do, install over 0.10.0 (settings are kept). Mac: open the `.dmg` and replace AlpIRC in

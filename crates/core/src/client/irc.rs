@@ -947,6 +947,8 @@ impl super::state::State {
 
     fn on_ready(&mut self, conn: ConnId) {
         let Some(c) = self.conns.get_mut(&conn) else { return };
+        // Une reconnexion automatique (essais en cours, canaux à rejoindre) n'ouvre pas le dossier des canaux.
+        let reconnecting = c.attempts > 0 || !c.rejoin.is_empty();
         c.ready = true;
         c.state = ConnState::Connected;
         c.attempts = 0;
@@ -976,6 +978,10 @@ impl super::state::State {
         }
         if !parent {
             self.deferred.push_back(super::state::Deferred::AutoJoin(conn));
+        }
+        // Comme mIRC : le dossier des canaux s'ouvre à la connexion (case « Ouvrir à la connexion » du dossier).
+        if self.settings.connect.folder_on_connect && !parent && !bound && !reconnecting {
+            self.effects.push(Effect::OpenDialog(super::UiDialog::ChannelsFolder));
         }
         // Notify.
         let nicks = self.notify_nicks(conn);

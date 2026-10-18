@@ -7,6 +7,27 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.12.0] - 2026-10-19
+
+> Mise en service : rien à faire, installer par-dessus la 0.11.0 (réglages conservés). Sur Mac et Linux, le dossier
+> des canaux s'ouvre désormais à chaque connexion, comme dans mIRC : décoche « Ouvrir à la connexion » dans le
+> dossier (Favoris › Dossier des canaux, Alt+J) si tu n'en veux pas.
+
+### Ajouté
+- Interface : le menu **Commandes** de la barre de menus, comme celui de mIRC (il était vide) : rejoindre ou
+  quitter un canal, discuter en privé, envoyer une notice, whois, CTCP, absence, inviter, bannir, expulser, ignorer
+  ou ne plus ignorer quelqu'un, ses modes, changer de pseudo, quitter IRC.
+- Interface : le dossier des canaux s'ouvre à la connexion, comme dans mIRC (pas aux reconnexions automatiques).
+  La case « Ouvrir à la connexion », dans le dossier, l'arrête. Sur le téléphone, elle est décochée.
+- Docs : `docs/ecarts-mirc.md`, l'inventaire de ce qui diffère encore de mIRC 6.x, avec les questions ouvertes.
+
+### Modifié
+- Scripts : les menus par défaut suivent ceux de mIRC : « Ignorer » et le nouveau « Ne plus ignorer » en tête du
+  sous-menu Contrôle de la liste des pseudos ; un sous-menu CTCP dans le menu d'un privé. Les menus que tu n'as pas
+  modifiés sont mis à jour tout seuls.
+- Android : la notification du service compte chaque réseau une fois (« Connecté à Undernet (2 connexions) » au
+  lieu de « Connecté à 2 réseaux »).
+
 ## [0.11.0] - 2026-10-19
 
 > Mise en service : rien à faire, installer par-dessus la 0.10.0 (réglages conservés). Mac : ouvrir le `.dmg` et

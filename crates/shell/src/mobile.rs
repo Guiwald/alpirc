@@ -117,15 +117,27 @@ pub const TR: crate::tr::Table = &[
     ("mobile.send", ["Send", "Envoyer", "Enviar", "Senden", "Invia", "Enviar", "Seol"]),
     ("mobile.tab", ["Tab", "Tab", "Tab", "Tab", "Tab", "Tab", "Tab"]),
     (
-        "mobile.service.one",
+        "mobile.service.net",
         [
-            "Connected to 1 network",
-            "Connecté à 1 réseau",
-            "Conectado a 1 red",
-            "Mit 1 Netzwerk verbunden",
-            "Connesso a 1 rete",
-            "Connectat a 1 xarxa",
-            "Ceangailte le líonra amháin",
+            "Connected to {net}",
+            "Connecté à {net}",
+            "Conectado a {net}",
+            "Mit {net} verbunden",
+            "Connesso a {net}",
+            "Connectat a {net}",
+            "Ceangailte le {net}",
+        ],
+    ),
+    (
+        "mobile.service.conns",
+        [
+            "{text} ({n} connections)",
+            "{text} ({n} connexions)",
+            "{text} ({n} conexiones)",
+            "{text} ({n} Verbindungen)",
+            "{text} ({n} connessioni)",
+            "{text} ({n} connexions)",
+            "{text} ({n} ceangal)",
         ],
     ),
     (
@@ -563,6 +575,26 @@ fn mobile_menubar(model: Vec<(String, Vec<MenuItem>)>) -> Vec<MenuItem> {
             (!items.is_empty()).then(|| MenuItem::submenu(&title, items))
         })
         .collect()
+}
+
+/// Texte de la notification du service de connexion, d'après les connexions : (réseau, connectée, en cours). Les
+/// réseaux sont comptés une fois (deux connexions à Undernet : « Connecté à Undernet (2 connexions) »).
+pub fn service_text(lang: Lang, conns: &[(String, bool, bool)]) -> String {
+    let connected: Vec<&str> = conns.iter().filter(|c| c.1).map(|c| c.0.as_str()).collect();
+    let mut nets: Vec<String> = connected.iter().map(|n| n.to_lowercase()).collect();
+    nets.sort();
+    nets.dedup();
+    let text = match nets.len() {
+        0 if conns.iter().any(|c| c.2) => return t(lang, "mobile.service.connecting"),
+        0 => return t(lang, "mobile.service.waiting"),
+        1 => tf(lang, "mobile.service.net", &[("net", connected[0])]),
+        n => tf(lang, "mobile.service.many", &[("n", &n.to_string())]),
+    };
+    if connected.len() > nets.len() {
+        tf(lang, "mobile.service.conns", &[("text", &text), ("n", &connected.len().to_string())])
+    } else {
+        text
+    }
 }
 
 /// Un pas dans l'historique de saisie (`len` lignes, la plus récente à la fin) depuis `pos` (`None` : le
@@ -2257,6 +2289,18 @@ mod tests {
         assert_eq!(m[1].submenu.len(), 1, "barres d'outils retirées, séparateur de tête retiré");
         assert_eq!(m[1].submenu[0].id, ids::FIND);
         assert_eq!(m[2].submenu.iter().map(|i| i.id).collect::<Vec<_>>(), vec![ids::CLOSE], "mosaïque et liste des fenêtres retirées");
+    }
+
+    #[test]
+    fn notification_du_service() {
+        let c = |n: &str, up: bool| (n.to_string(), up, true);
+        assert_eq!(service_text(Lang::Fr, &[c("Undernet", true)]), "Connecté à Undernet");
+        assert_eq!(service_text(Lang::Fr, &[c("Undernet", true), c("UnderNet", true)]), "Connecté à Undernet (2 connexions)");
+        assert_eq!(service_text(Lang::Fr, &[c("Undernet", true), c("Libera.Chat", true)]), "Connecté à 2 réseaux");
+        assert_eq!(service_text(Lang::En, &[c("Undernet", true), c("Undernet", true), c("Libera.Chat", true)]), "Connected to 2 networks (3 connections)");
+        assert_eq!(service_text(Lang::Fr, &[c("Undernet", false)]), "Connexion en cours...");
+        assert_eq!(service_text(Lang::Fr, &[("Undernet".into(), false, false)]), "Déconnecté, reconnexion en attente");
+        assert_eq!(service_text(Lang::Fr, &[c("Undernet", true), c("Libera.Chat", false)]), "Connecté à Undernet");
     }
 
     #[test]

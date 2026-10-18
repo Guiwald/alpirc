@@ -360,3 +360,26 @@ fn adhoc_server_uses_known_network_settings() {
     assert!(h.sends().contains(&"NICK AutreNick".to_string()));
     assert_eq!(h.c.conn_info(h.conn).unwrap().network, "Other");
 }
+
+#[test]
+fn channels_folder_pops_up_on_connect_like_mirc() {
+    let folder = |fx: &[Effect]| fx.iter().filter(|e| matches!(e, Effect::OpenDialog(alpirc_core::UiDialog::ChannelsFolder))).count();
+    let mut h = H::new();
+    h.connect();
+    h.register();
+    assert_eq!(folder(&h.effects()), 1, "à la connexion");
+    // Reconnexion automatique : pas de boîte.
+    h.join("#lyon", "Guiwald");
+    h.c.on_closed(h.conn, Some(&NetError::Io(IoKind::Reset)), h.now);
+    h.advance(10_000);
+    h.c.on_connected(h.conn, h.now);
+    h.register();
+    assert_eq!(folder(&h.effects()), 0, "reconnexion");
+    // Case décochée : jamais.
+    let mut s = settings();
+    s.connect.folder_on_connect = false;
+    let mut h = H::with(s);
+    h.connect();
+    h.register();
+    assert_eq!(folder(&h.effects()), 0);
+}

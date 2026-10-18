@@ -213,7 +213,7 @@ fn rich() -> Settings {
 fn toml_roundtrip() {
     let s = rich();
     let text = s.to_toml().unwrap();
-    assert!(text.contains("version = 2"), "{text}");
+    assert!(text.contains("version = 3"), "{text}");
     let back = Settings::from_toml(&text).unwrap();
     assert_eq!(back, s);
 }
@@ -401,4 +401,10 @@ fn upgrade_checks_whois_in_active_once_on_the_phone() {
     let mut old = Settings::from_toml("version = 1\n").unwrap();
     assert!(old.upgrade(false, false));
     assert!(!old.irc.whois_in_active);
+    // Version 3 : le dossier des canaux à la connexion, sur l'ordinateur seulement.
+    assert!(old.connect.folder_on_connect);
+    let mut tel = Settings::from_toml("version = 2\n[irc]\nwhois_in_active = false\n").unwrap();
+    assert!(tel.upgrade(true, false));
+    assert!(!tel.connect.folder_on_connect && !tel.irc.whois_in_active, "la v2 est déjà faite");
+    assert!(!phone.connect.folder_on_connect && desk.connect.folder_on_connect);
 }

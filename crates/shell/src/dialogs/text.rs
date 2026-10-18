@@ -2904,6 +2904,18 @@ pub(super) const TR: crate::tr::Table = &[
         "fold.favorites",
         ["&Favorites:", "&Favoris :", "&Favoritos:", "&Favoriten:", "&Preferiti:", "&Preferits:", "C&eanáin:"],
     ),
+    (
+        "fold.popup",
+        [
+            "&Pop up on connect",
+            "&Ouvrir à la connexion",
+            "Abrir al &conectar",
+            "Beim &Verbinden öffnen",
+            "Apri alla &connessione",
+            "Obrir en &connectar",
+            "Oscail ag an &gceangal",
+        ],
+    ),
     ("fold.col.channel", ["Channel", "Canal", "Canal", "Channel", "Canale", "Canal", "Cainéal"]),
     ("fold.col.network", ["Network", "Réseau", "Red", "Netzwerk", "Rete", "Xarxa", "Líonra"]),
     (

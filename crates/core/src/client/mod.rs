@@ -36,6 +36,8 @@ use alpirc_script::{Ctx, DialogEvent, Engine, EventInfo, EventKind, MenuItem, Po
 
 pub use self::commands::BUILTINS;
 pub use self::defaults::TEXTS as DEFAULT_SCRIPT_TEXTS;
+#[doc(hidden)]
+pub use self::defaults::previous_files as previous_default_scripts;
 pub use self::help::HELP;
 pub use self::dcc::{DccAnswer, DccId, DccPrompt, DccType, DccUi, Transfer, TransferState, state_label as dcc_state_label};
 pub use self::irc::{HOMEPAGE, VERSION, version_reply};

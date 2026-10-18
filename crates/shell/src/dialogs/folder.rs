@@ -1,6 +1,7 @@
 //! Dossier des canaux (Channels Folder, Alt+J) : les favoris (canal, réseau, clé, description, rejoindre à la
 //! connexion), à rejoindre d'un double-clic sur la bonne connexion (ouverte au besoin). Comme dans mIRC, les
-//! changements de la liste sont enregistrés tout de suite.
+//! changements de la liste sont enregistrés tout de suite, et la boîte s'ouvre d'elle-même à la connexion (case
+//! « Ouvrir à la connexion »).
 
 use alpirc_core::i18n::Lang;
 use alpirc_core::settings::Favorite;
@@ -18,6 +19,7 @@ const FAVS: u32 = 13;
 const ADD: u32 = 14;
 const EDIT: u32 = 15;
 const DELETE: u32 = 16;
+const POPUP: u32 = 17;
 const CLOSE: u32 = 2;
 
 /// Le dossier des canaux.
@@ -157,6 +159,7 @@ impl DialogCtl for ChannelsFolder {
             button(ADD, (bx, 78, 96, BTN_H), &tr("dlg.add_dots")),
             button(EDIT, (bx, 105, 96, BTN_H), &tr("dlg.edit_dots")),
             button(DELETE, (bx, 132, 96, BTN_H), &tr("dlg.delete")),
+            check(POPUP, (MARGIN, H - MARGIN - BTN_H + 3, bx - 8 - MARGIN, CHECK_H), &tr("fold.popup")),
             button(CLOSE, (W - MARGIN - BTN_W, H - MARGIN - BTN_H, BTN_W, BTN_H), &tr("dlg.close")).style("cancel"),
         ];
         spec(&tr("fold.title"), W, H, c)
@@ -169,6 +172,7 @@ impl DialogCtl for ChannelsFolder {
             &[(t(lang, "fold.col.channel"), 110), (t(lang, "fold.col.network"), 100), (t(lang, "fold.col.description"), 112), (t(lang, "fold.col.auto"), 48)],
         );
         self.fill(view, cx, None);
+        view.set_checked(POPUP, cx.client.settings().connect.folder_on_connect);
         view.set_text(CHAN, "#");
         view.set_focus(CHAN);
     }
@@ -203,6 +207,11 @@ impl DialogCtl for ChannelsFolder {
             }
             DialogMsg::Clicked(ADD) => {
                 self.edit(None, cx);
+                Outcome::Keep
+            }
+            DialogMsg::Clicked(POPUP) => {
+                cx.client.settings_mut().connect.folder_on_connect = view.checked(POPUP);
+                cx.actions.push(Action::SettingsChanged);
                 Outcome::Keep
             }
             DialogMsg::Clicked(EDIT) => {
@@ -274,5 +283,11 @@ mod tests {
         v.set_selection(FAVS, &[n0]);
         k.send(&mut d, &mut v, DialogMsg::Clicked(DELETE));
         assert_eq!(k.client.settings().favorites.len(), n0);
+        // « Ouvrir à la connexion », enregistré tout de suite.
+        assert!(v.checked(POPUP));
+        v.set_checked(POPUP, false);
+        let (_, a) = k.send(&mut d, &mut v, DialogMsg::Clicked(POPUP));
+        assert!(matches!(a.first(), Some(Action::SettingsChanged)));
+        assert!(!k.client.settings().connect.folder_on_connect);
     }
 }
