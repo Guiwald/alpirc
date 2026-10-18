@@ -21,6 +21,11 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
   réduit ; les boutons de la switchbar prennent la largeur de leur nom.
 
 ### Corrigé
+- Android : le clavier s'ouvre en touchant un champ d'une boîte, même après Retour ou quand la demande
+  d'autorisation des notifications l'avait empêché au premier lancement (boîte de bienvenue) ; en paysage,
+  l'interface ne passe plus sous l'encoche de la caméra ; une liste déroulante ouverte suit sa boîte quand le
+  clavier se ferme ; les boutons « Envoyer » et « Tab » changent de langue avec l'interface ; « 1 personne » au
+  singulier dans la liste des pseudos.
 - Interface : la liste des canaux et le capteur d'URL se mettent à jour même quand le nombre de lignes ne change
   pas ; la dernière ligne de « À propos » n'est plus coupée.
 - Publication : l'archive du site APT n'est plus jointe aux fichiers d'une version.

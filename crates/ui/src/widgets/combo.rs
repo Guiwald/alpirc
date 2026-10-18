@@ -107,6 +107,11 @@ impl ComboBox {
         self.open
     }
 
+    /// La boîte a bougé (clavier du téléphone ouvert ou fermé…) : la liste ouverte la suit.
+    pub fn shift_popup(&mut self, dx: i32, dy: i32) {
+        self.popup = self.popup.offset(dx, dy);
+    }
+
     pub fn preferred_height(&self, res: &Res) -> i32 {
         res.ui_line() + 6
     }

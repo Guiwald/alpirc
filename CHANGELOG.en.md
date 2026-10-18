@@ -20,6 +20,10 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
   take the width of their name.
 
 ### Fixed
+- Android: the keyboard opens when you touch a field in a dialog, even after Back or when the notification
+  permission request prevented it on first run (welcome dialog); in landscape, the interface no longer goes under
+  the camera cutout; an open drop-down list follows its dialog when the keyboard closes; the Send and Tab buttons
+  change language with the interface; "1 user" in the singular in the nick list.
 - Interface: the channel list and the URL catcher update even when the number of rows doesn't change; the last
   line of About is no longer cut off.
 - Release: the APT site archive is no longer attached to a version's files.

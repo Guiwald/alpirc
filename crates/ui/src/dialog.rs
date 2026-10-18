@@ -429,7 +429,18 @@ impl DialogView {
 
     /// Centre la boîte dans `bounds`.
     pub fn center_in(&mut self, bounds: Rect) {
-        self.rect = bounds.center_size(self.rect.size()).clamp_inside(&bounds);
+        self.move_to(bounds.center_size(self.rect.size()).clamp_inside(&bounds));
+    }
+
+    /// Place la boîte ; une liste déroulante ouverte la suit.
+    fn move_to(&mut self, r: Rect) {
+        let (dx, dy) = (r.x - self.rect.x, r.y - self.rect.y);
+        self.rect = r;
+        if (dx, dy) != (0, 0) {
+            if let Some(Widget::Combo(c)) = self.open_combo.and_then(|i| self.controls.get_mut(i)).map(|c| &mut c.widget) {
+                c.shift_popup(dx, dy);
+            }
+        }
     }
 
     /// Vrai si l'utilisateur a déplacé la boîte (par sa barre de titre).
@@ -441,7 +452,7 @@ impl DialogView {
     /// est ramenée dedans. Plus grande que la zone, elle s'y cale en haut à gauche (barre de titre en vue).
     pub fn keep_inside(&mut self, bounds: Rect) {
         if self.moved {
-            self.rect = self.rect.clamp_inside(&bounds);
+            self.move_to(self.rect.clamp_inside(&bounds));
         } else {
             self.center_in(bounds);
         }

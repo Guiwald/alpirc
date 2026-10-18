@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use alpirc_core::ConnState;
+use alpirc_core::i18n::Lang;
 use alpirc_net::{Net, NetEvent};
 use alpirc_shell::tr::t;
 use alpirc_shell::{LayoutKind, Shell, ShellConfig, ShellPlatform};
@@ -189,7 +190,12 @@ pub struct MobileApp {
     pending: Vec<SysEvent>,
     /// Dernier état envoyé au champ natif, au clavier, au service.
     input_state: Option<(bool, String)>,
+    /// Langue des boutons du champ natif.
+    input_labels: Option<Lang>,
     keyboard: bool,
+    /// Le doigt vient de se lever : si un champ de texte a le focus, le clavier est redemandé (il a pu être fermé
+    /// par Retour, ou refusé par Android pendant qu'une autre fenêtre avait le focus).
+    keyboard_tap: bool,
     service: Option<ServiceState>,
     foreground: bool,
     service_running: bool,
@@ -201,6 +207,9 @@ pub struct MobileApp {
     note_shown: bool,
     /// Le shell doit relire les marges.
     insets_dirty: bool,
+    /// Marges du système à gauche et à droite (encoche de la caméra et barre de navigation en paysage), en pixels
+    /// de l'écran : l'interface de Rust est dessinée entre les deux (le champ natif les respecte déjà).
+    side: (u32, u32),
 }
 
 /// Démarre le shell : réglages dans le dossier des données, heure locale et langue du système (lues avant le
@@ -259,6 +268,8 @@ pub fn build(host: Box<dyn Host>, proxy: EventLoopProxy<UserEvent>) -> MobileApp
         pending: Vec::new(),
         input_state: None,
         keyboard: false,
+        keyboard_tap: false,
+        input_labels: None,
         service: None,
         foreground: true,
         service_running: false,
@@ -266,6 +277,7 @@ pub fn build(host: Box<dyn Host>, proxy: EventLoopProxy<UserEvent>) -> MobileApp
         bg_note: None,
         note_shown: false,
         insets_dirty: true,
+        side: (0, 0),
     }
 }
 
@@ -320,7 +332,8 @@ impl MobileApp {
     }
 
     fn update_insets(&mut self) {
-        let [_, top, _, bottom] = self.plat.host.insets();
+        let [left, top, right, bottom] = self.plat.host.insets();
+        self.side = (left.max(0) as u32, right.max(0) as u32);
         let s = self.plat.scale.max(0.5);
         self.shell.set_insets((top as f32 / s).ceil() as i32, (bottom as f32 / s).ceil() as i32);
         self.insets_dirty = false;
@@ -337,11 +350,15 @@ impl MobileApp {
             self.update_insets();
         }
         let scale = self.canvas_scale();
-        let logical = Size::new((size.width as f32 / scale).floor() as i32, (size.height as f32 / scale).floor() as i32);
+        // Marges de gauche et de droite : la toile est plus étroite que l'écran, les bandes restent noires.
+        let (left, right) = self.side;
+        let (left, right) = if left + right + 64 < size.width { (left, right) } else { (0, 0) };
+        let cw = size.width - left - right;
+        let logical = Size::new((cw as f32 / scale).floor() as i32, (size.height as f32 / scale).floor() as i32);
         self.shell.set_viewport(logical);
-        let reuse = self.canvas.as_ref().is_some_and(|c| c.width() == size.width && c.height() == size.height && (c.scale() - scale).abs() < 0.001);
+        let reuse = self.canvas.as_ref().is_some_and(|c| c.width() == cw && c.height() == size.height && (c.scale() - scale).abs() < 0.001);
         if !reuse {
-            self.canvas = Some(Canvas::new(size.width, size.height, scale));
+            self.canvas = Some(Canvas::new(cw, size.height, scale));
         }
         let Some(canvas) = self.canvas.as_mut() else { return };
         self.shell.paint(canvas);
@@ -350,8 +367,17 @@ impl MobileApp {
             return;
         }
         if let Ok(mut buf) = surface.buffer_mut() {
-            let n = buf.len().min(canvas.pixels.len());
-            buf[..n].copy_from_slice(&canvas.pixels[..n]);
+            if cw == size.width {
+                let n = buf.len().min(canvas.pixels.len());
+                buf[..n].copy_from_slice(&canvas.pixels[..n]);
+            } else {
+                let (sw, cw, left) = (size.width as usize, cw as usize, left as usize);
+                for (row, out) in canvas.pixels.chunks_exact(cw).zip(buf.chunks_exact_mut(sw)) {
+                    out[..left].fill(0);
+                    out[left..left + cw].copy_from_slice(row);
+                    out[left + cw..].fill(0);
+                }
+            }
             if let Err(e) = buf.present() {
                 log::warn!("affichage : {e}");
             }
@@ -360,6 +386,7 @@ impl MobileApp {
 
     fn to_logical(&self, x: f64, y: f64) -> Point {
         let s = self.canvas_scale() as f64;
+        let x = x - f64::from(self.side.0);
         Point::new((x / s).floor() as i32, (y / s).floor() as i32)
     }
 
@@ -444,11 +471,13 @@ impl MobileApp {
     fn sync_system(&mut self) {
         if self.plat.host.native_input() {
             let want = (self.shell.mobile_native_input_visible(), self.shell.mobile_input_hint());
+            // Boutons du champ natif dans la langue de l'interface (elle peut changer, dès la boîte de bienvenue).
+            let lang = self.shell.language();
+            if self.input_labels != Some(lang) {
+                self.plat.host.set_input_labels(&t(lang, "mobile.send"), &t(lang, "mobile.tab"), &t(lang, "mobile.history"));
+                self.input_labels = Some(lang);
+            }
             if self.input_state.as_ref() != Some(&want) {
-                let lang = self.shell.language();
-                if self.input_state.is_none() {
-                    self.plat.host.set_input_labels(&t(lang, "mobile.send"), &t(lang, "mobile.tab"), &t(lang, "mobile.history"));
-                }
                 self.plat.host.set_input(want.0, &want.1);
                 self.input_state = Some(want);
                 self.insets_dirty = true;
@@ -457,7 +486,8 @@ impl MobileApp {
                 self.plat.host.set_input_text(&text);
             }
             let kb = self.shell.mobile_text_focus();
-            if kb != self.keyboard {
+            let tapped = std::mem::take(&mut self.keyboard_tap);
+            if kb != self.keyboard || (kb && tapped) {
                 self.keyboard = kb;
                 self.plat.host.show_keyboard(kb);
             }
@@ -654,6 +684,7 @@ impl MobileApp {
                         if self.finger.is_some_and(|f| f.id == tch.id) {
                             self.finger = None;
                             self.send(Input::MouseUp { pos, button: MouseButton::Left, mods: Default::default() });
+                            self.keyboard_tap = true;
                         }
                     }
                     TouchPhase::Cancelled => {

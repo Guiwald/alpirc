@@ -69,6 +69,8 @@ public class AlpircActivity extends NativeActivity {
     EditText edit;
     Button tabButton, sendButton, historyButton;
     boolean panelWanted, panelAttached, resumed;
+    /** Rust veut le clavier du système (champ de texte d'une boîte). */
+    boolean keyboardWanted;
     int panelHeight;
 
     // Couleurs de Windows 98.
@@ -139,6 +141,15 @@ public class AlpircActivity extends NativeActivity {
         resumed = true;
         Bridge.post("fg\t1");
         if (panelWanted) attachPanel();
+    }
+
+    /** Clavier demandé pendant qu'une autre fenêtre avait le focus (demande d'autorisation…) : on le redemande. */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && keyboardWanted && !panelAttached) {
+            getWindow().getDecorView().postDelayed(() -> { if (keyboardWanted) showNativeKeyboard(true, 0); }, 100);
+        }
     }
 
     @Override
@@ -489,12 +500,14 @@ public class AlpircActivity extends NativeActivity {
     void showNativeKeyboard(boolean show, int attempt) {
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (imm == null) return;
+        if (attempt == 0) keyboardWanted = show;
         View v = getCurrentFocus();
         if (v == null) v = getWindow().getDecorView();
         if (show) {
+            if (!keyboardWanted) return;
             if (panelAttached) return;
             boolean ok = imm.showSoftInput(v, 0);
-            if (!ok && attempt < 3) {
+            if (!ok && attempt < 5) {
                 // Le focus revient à la fenêtre de Rust juste après le retrait du champ natif : on réessaie.
                 getWindow().getDecorView().postDelayed(() -> showNativeKeyboard(true, attempt + 1), 150);
             }

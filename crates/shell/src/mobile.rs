@@ -41,6 +41,7 @@ pub const TR: crate::tr::Table = &[
         "mobile.users",
         ["{n} users", "{n} personnes", "{n} usuarios", "{n} Nutzer", "{n} utenti", "{n} usuaris", "{n} úsáideoir"],
     ),
+    ("mobile.users.one", ["1 user", "1 personne", "1 usuario", "1 Nutzer", "1 utente", "1 usuari", "1 úsáideoir"]),
     (
         "mobile.join",
         [
@@ -2110,7 +2111,7 @@ impl Shell {
         let Some(v) = active.and_then(|a| self.views.get(&a)) else { return };
         let entries = v.nicks.entries();
         let selected = v.nicks.selected_nicks();
-        self.paint_drawer_frame(canvas, r, &name, &tf(lang, "mobile.users", &[("n", &entries.len().to_string())]));
+        self.paint_drawer_frame(canvas, r, &name, &if entries.len() == 1 { crate::tr::t(lang, "mobile.users.one") } else { tf(lang, "mobile.users", &[("n", &entries.len().to_string())]) });
         let rows_r = self.drawer_rows_rect(d).inset_sides(3, 0, 3, 3);
         canvas.fill(rows_r, t.color(t.nicklist_bg));
         canvas.with_clip(rows_r, |c| {
