@@ -176,7 +176,15 @@ public class AlpircActivity extends NativeActivity {
 
     /** Liens irc:// et ircs:// ouverts avec AlpIRC. */
     void handle(Intent i) {
-        if (i == null || !Intent.ACTION_VIEW.equals(i.getAction())) return;
+        if (i == null) return;
+        String notif = i.getStringExtra(Bridge.EXTRA_NOTIF);
+        if (notif != null) {
+            Bridge.post("notif\t" + notif);
+            // Une demande n'est traitée qu'une fois.
+            setIntent(new Intent(Intent.ACTION_MAIN));
+            return;
+        }
+        if (!Intent.ACTION_VIEW.equals(i.getAction())) return;
         Uri u = i.getData();
         if (u == null || u.getScheme() == null) return;
         String s = u.getScheme().toLowerCase(java.util.Locale.ROOT);

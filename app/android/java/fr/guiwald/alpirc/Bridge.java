@@ -100,6 +100,9 @@ public final class Bridge {
         return id != 0 ? id : c.getApplicationInfo().icon;
     }
 
+    /** Titre de la notification touchée (extra de l'intention qui ouvre l'activité). */
+    static final String EXTRA_NOTIF = "fr.guiwald.alpirc.NOTIF";
+
     static PendingIntent openApp(Context c, int code) {
         Intent open = new Intent(c, AlpircActivity.class).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -118,6 +121,13 @@ public final class Bridge {
                 ch.enableVibration(true);
                 nm.createNotificationChannel(ch);
             }
+            // Une notification par conversation (même titre) : la dernière remplace la précédente.
+            int id = 1000 + (title.hashCode() & 0xffff);
+            // La toucher ouvre AlpIRC sur la fenêtre de la conversation (Rust retrouve la fenêtre par le titre).
+            Intent open = new Intent(c, AlpircActivity.class).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+            open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            open.putExtra(EXTRA_NOTIF, title);
+            PendingIntent pi = PendingIntent.getActivity(c, id, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
             Notification n = new Notification.Builder(c, CHANNEL)
                     .setSmallIcon(smallIcon(c))
                     .setContentTitle(title)
@@ -125,10 +135,9 @@ public final class Bridge {
                     .setStyle(new Notification.BigTextStyle().bigText(body))
                     .setCategory(Notification.CATEGORY_MESSAGE)
                     .setAutoCancel(true)
-                    .setContentIntent(openApp(c, 2))
+                    .setContentIntent(pi)
                     .build();
-            // Une notification par conversation (même titre) : la dernière remplace la précédente.
-            nm.notify(1000 + (title.hashCode() & 0xffff), n);
+            nm.notify(id, n);
         } catch (Exception e) {
             post("log\tnotification : " + e);
         }

@@ -11,6 +11,7 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 - Interface : Affichage › Thème liste aussi tes thèmes ; Alt+lettre choisit un onglet dans les boîtes ; le nom
   complet d'une fenêtre s'affiche en info-bulle quand son bouton de la switchbar est réduit.
 - Sons : `/splay stop` arrête le son en cours (Mac, Linux, Android).
+- Android : toucher la notification d'une mention ou d'un message privé ouvre la fenêtre de la conversation.
 
 ### Modifié
 - Langues : les erreurs de connexion, de certificat, de DCC et les messages des scripts suivent la langue de

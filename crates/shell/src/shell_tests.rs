@@ -21,6 +21,8 @@ struct P {
     opened: Vec<PathBuf>,
     /// `/splay stop` reçus.
     stops: usize,
+    /// Titres des notifications envoyées.
+    notes: Vec<String>,
 }
 
 impl Platform for P {
@@ -37,7 +39,9 @@ impl Platform for P {
 }
 
 impl ShellPlatform for P {
-    fn notify(&mut self, _title: &str, _body: &str) {}
+    fn notify(&mut self, title: &str, _body: &str) {
+        self.notes.push(title.to_string());
+    }
     fn beep(&mut self) {}
     fn play_sound(&mut self, _path: &Path) {}
     fn stop_sound(&mut self) {
@@ -768,4 +772,30 @@ mod all_dialogs {
         }
         assert!(short.is_empty(), "{} textes coupés :\n{}", short.len(), short.join("\n"));
     }
+}
+
+#[test]
+fn toucher_une_notification_ouvre_sa_fenetre() {
+    let d = dir("notif");
+    let mut p = P::default();
+    let mut s = shell(&d, &mut p);
+    let conn = connect(&mut s, &mut p);
+    up(&mut s, &mut p, conn);
+    feed(&mut s, &mut p, conn, ":Guiwald!u@h JOIN #a");
+    feed(&mut s, &mut p, conn, ":Guiwald!u@h JOIN #b");
+    let a = s.client.find_window(Some(conn), "#a").unwrap();
+    let b = s.client.find_window(Some(conn), "#b").unwrap();
+    assert_eq!(s.client.active(), Some(b));
+    // Appli derrière : on nous nomme dans #a.
+    s.set_app_focused(false, &mut p);
+    feed(&mut s, &mut p, conn, ":bob!u@h PRIVMSG #a :Guiwald: coucou");
+    let title = p.notes.last().cloned().expect("notification");
+    // On la touche : #a passe devant.
+    s.set_app_focused(true, &mut p);
+    s.mobile_show_notified(&title, &mut p);
+    assert_eq!(s.client.active(), Some(a));
+    // Un titre inconnu ne change rien.
+    s.mobile_show_notified("rien", &mut p);
+    assert_eq!(s.client.active(), Some(a));
+    let _ = std::fs::remove_dir_all(&d);
 }

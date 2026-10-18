@@ -11,6 +11,7 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 - Interface: View › Theme also lists your own themes; Alt+letter picks a tab in dialogs; a window's full name
   shows in a tooltip when its switchbar button is shortened.
 - Sounds: `/splay stop` stops the current sound (Mac, Linux, Android).
+- Android: touching the notification of a mention or private message opens that conversation's window.
 
 ### Changed
 - Languages: connection, certificate and DCC errors and script messages follow the interface language; on first

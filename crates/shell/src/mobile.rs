@@ -524,6 +524,8 @@ pub struct MobileState {
     history: Option<(WinId, usize, String)>,
     /// Texte à mettre dans le champ natif (historique choisi).
     native_text: Option<String>,
+    /// Notifications envoyées (titre → fenêtre), pour ouvrir la bonne fenêtre quand on en touche une.
+    pub(crate) notified: Vec<(String, WinId)>,
 }
 
 /// Ligne du tiroir des fenêtres.
@@ -1260,6 +1262,22 @@ impl Shell {
 
     /// Bouton Retour d'Android : ferme le menu, la boîte, le tiroir ouverts. `false` : rien à fermer (la
     /// plateforme passe alors l'appli en arrière-plan, connexions gardées).
+    /// On a touché la notification `title` : sa fenêtre passe au premier plan (tiroirs et menus fermés).
+    pub fn mobile_show_notified(&mut self, title: &str, p: &mut dyn ShellPlatform) {
+        let Some(win) = self.mobile.notified.iter().rev().find(|(t, _)| t == title).map(|(_, w)| *w) else { return };
+        if self.client.window(win).is_none() {
+            return;
+        }
+        self.mobile.drawer = None;
+        self.mobile.menu = None;
+        self.activate(win, p.now_ms());
+        if let Some(v) = self.views.get_mut(&win) {
+            v.chat.scroll_to_bottom();
+        }
+        self.after(p);
+        p.request_repaint();
+    }
+
     pub fn mobile_back(&mut self, p: &mut dyn ShellPlatform) -> bool {
         self.mobile.touch = None;
         self.mobile.fling = None;

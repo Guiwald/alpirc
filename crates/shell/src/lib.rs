@@ -449,6 +449,12 @@ impl Shell {
             Effect::Notify { win, title, body } => {
                 if !self.app_focused || self.client.active() != Some(win) {
                     p.notify(&title, &body);
+                    let n = &mut self.mobile.notified;
+                    n.retain(|(t, _)| *t != title);
+                    n.push((title, win));
+                    if n.len() > 32 {
+                        n.remove(0);
+                    }
                 }
             }
             Effect::Beep => p.beep(),

@@ -452,6 +452,7 @@ impl MobileApp {
                 }
             }
             SysEvent::HistoryMenu => self.shell.mobile_history_menu(&mut self.plat),
+            SysEvent::Notified(title) => self.shell.mobile_show_notified(&title, &mut self.plat),
             SysEvent::Quit => self.shell.exit_now(&mut self.plat),
             SysEvent::Destroyed { config } => {
                 // La boucle doit rendre la main pour que l'activité se termine, et ne pourra pas être recréée dans

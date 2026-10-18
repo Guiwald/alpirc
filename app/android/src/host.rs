@@ -32,6 +32,8 @@ pub enum SysEvent {
     History { older: bool, text: String },
     /// Bouton Historique du champ natif : la liste des dernières lignes.
     HistoryMenu,
+    /// Notification touchée (son titre) : ouvrir sa fenêtre.
+    Notified(String),
     Log(String),
 }
 
@@ -64,6 +66,7 @@ pub fn parse_event(raw: &str) -> Option<SysEvent> {
             SysEvent::History { older, text: text.to_string() }
         }
         "histmenu" => SysEvent::HistoryMenu,
+        "notif" if !rest.is_empty() => SysEvent::Notified(rest.to_string()),
         "log" => SysEvent::Log(rest.to_string()),
         _ => return None,
     })
