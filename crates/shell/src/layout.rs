@@ -524,6 +524,10 @@ impl Shell {
                     self.open_notify_popup(win, nick, pos);
                 }
             }
+            ListViewMsg::RightClicked(row, pos) if matches!(kind, WinKind::ChanList | WinKind::Urls) => {
+                let value = row.and_then(|i| self.views.get(&win).and_then(|v| v.list.rows.get(i)).and_then(|r| r.cells.first().cloned()));
+                self.open_list_popup(win, kind, value, pos);
+            }
             ListViewMsg::RightClicked(_, pos) if kind == WinKind::Custom => {
                 self.open_script_popup(PopupKind::Custom, win, Vec::new(), pos);
             }

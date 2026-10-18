@@ -1167,6 +1167,36 @@ impl Client {
         &self.st.urls
     }
 
+    /// Enregistre le texte d'une fenêtre (sans les codes de couleur) dans un fichier choisi par l'utilisateur (menu
+    /// de la fenêtre, « Enregistrer le texte ») et le dit dans la fenêtre.
+    pub fn save_buffer(&mut self, win: WinId, path: &std::path::Path, now_ms: i64) {
+        self.st.now = now_ms;
+        let Some(w) = self.st.win(win) else { return };
+        let lines: Vec<String> = w.lines.iter().map(|l| alpirc_proto::format::strip(&l.text)).collect();
+        let mut text = lines.join("\n");
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        let file = path.display().to_string();
+        let t = match std::fs::write(path, text) {
+            Ok(()) => self.st.t(Key::BufferSaved, &[("n", &lines.len().to_string()), ("file", &file)]),
+            Err(_) => format!("* {}", self.st.t(Key::ScrCannotWrite, &[("cmd", "savebuf"), ("file", &file)])),
+        };
+        self.st.print(win, LineKind::Info, t);
+        self.finish();
+    }
+
+    /// Retire une adresse du capteur d'URL (`None` : toutes).
+    pub fn remove_url(&mut self, url: Option<&str>) {
+        match url {
+            Some(u) => self.st.urls.retain(|x| x.url != u),
+            None => self.st.urls.clear(),
+        }
+        if let Some(w) = self.st.windows.iter_mut().find(|w| w.kind == WinKind::Urls) {
+            w.touch();
+        }
+    }
+
     /// Complétion Tab : pseudos du canal (les plus récemment actifs d'abord), canaux (`#`), commandes (`/`).
     /// `cycle_index` : 0 pour la première proposition, 1 pour la suivante…
     pub fn tab_complete(&self, win: WinId, word: &str, cycle_index: usize) -> Option<String> {

@@ -12,6 +12,7 @@ pub mod dialogs;
 mod keys;
 mod layout;
 pub mod menus;
+mod lists;
 mod mobile;
 pub use mobile::service_text;
 mod notify;
@@ -104,6 +105,8 @@ enum PopupSrc {
     Window(WinId),
     /// Menu d'un pseudo de la fenêtre Notify (voir `notify.rs`).
     Notify { win: WinId, nick: String },
+    /// Menu de la liste des canaux ou du capteur d'URL (voir `lists.rs`) : la première colonne de la ligne visée.
+    List { win: WinId, kind: WinKind, value: Option<String> },
 }
 
 /// Ids des entrées du menu d'une fenêtre (switchbar, icône).
@@ -114,6 +117,7 @@ mod win_menu {
     pub const RESTORE: u32 = 4;
     pub const CLEAR: u32 = 5;
     pub const LOG: u32 = 6;
+    pub const SAVE: u32 = 7;
 }
 
 /// L'application.
@@ -1121,7 +1125,11 @@ impl Shell {
 
     /// Réponse de la plateforme à [`ShellPlatform::pick_file`].
     pub fn file_picked(&mut self, request: u64, path: Option<PathBuf>, p: &mut dyn ShellPlatform) {
-        if dcc::is_dcc_pick(request) {
+        if let Some(win) = lists::buffer_window(request) {
+            if let Some(path) = path {
+                self.client.save_buffer(win, &path, p.now_ms());
+            }
+        } else if dcc::is_dcc_pick(request) {
             self.dcc_file_picked(request, path, p);
         } else if dialogs::is_pick_request(request) {
             self.dialog_file_picked(request, path, p);
@@ -1275,6 +1283,7 @@ impl Shell {
             MenuItem::new(win_menu::MAXIMIZE, &t(lang, "swb.maximize")),
             MenuItem::separator(),
             MenuItem::new(win_menu::CLEAR, &t(lang, "swb.clear")),
+            MenuItem::new(win_menu::SAVE, &t(lang, "swb.save")),
             MenuItem::new(win_menu::LOG, &t(lang, "swb.log")),
             MenuItem::separator(),
             MenuItem::new(win_menu::CLOSE, &t(lang, "swb.close")).shortcut("Ctrl+F4"),
@@ -1309,11 +1318,17 @@ impl Shell {
                         self.client.command(win, "/log", now);
                         Vec::new()
                     }
+                    win_menu::SAVE => {
+                        let name = self.client.window(win).map(|w| w.name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")).unwrap_or_default();
+                        p.pick_file(lists::buffer_request(win), true, Some(&format!("{name}.txt")));
+                        Vec::new()
+                    }
                     _ => Vec::new(),
                 };
                 self.mdi_responses(r, p);
             }
             PopupSrc::Notify { win, nick } => self.notify_popup_run(id, win, &nick, p),
+            PopupSrc::List { win, value, .. } => self.list_popup_run(id, win, value, p),
         }
         self.after(p);
     }

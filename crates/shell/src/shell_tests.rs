@@ -835,3 +835,53 @@ fn whois_dans_la_fenetre_active_coche_sur_le_telephone() {
         let _ = std::fs::remove_dir_all(&x);
     }
 }
+
+#[test]
+fn menus_des_listes_et_texte_enregistre() {
+    use crate::lists::ids as lid;
+    use crate::{PopupSrc, win_menu};
+    use alpirc_core::WinKind;
+    let d = dir("listes");
+    let mut p = P::default();
+    let mut s = shell(&d, &mut p);
+    let conn = connect(&mut s, &mut p);
+    up(&mut s, &mut p, conn);
+    let st = s.client.windows()[0].id;
+    // Liste des canaux : rejoindre, ajouter aux favoris.
+    s.client.command(st, "/list", p.now);
+    feed(&mut s, &mut p, conn, ":srv 321 Guiwald Channel :Users Name");
+    feed(&mut s, &mut p, conn, ":srv 322 Guiwald #lyon 42 :Bienvenue");
+    feed(&mut s, &mut p, conn, ":srv 323 Guiwald :End of /LIST");
+    let list = s.client.windows().iter().find(|w| w.kind == WinKind::ChanList).map(|w| w.id).unwrap();
+    assert_eq!(s.list_menu_items(WinKind::ChanList, true).len(), 5);
+    assert!(!s.list_menu_items(WinKind::ChanList, false)[0].enabled, "hors d'une ligne : pas de Rejoindre");
+    // Les lignes envoyées se voient avec /debug.
+    s.client.command(st, "/debug @raw", p.now);
+    s.popup_activated(lid::JOIN, PopupSrc::List { win: list, kind: WinKind::ChanList, value: Some("#lyon".into()) }, &mut p);
+    let raw = s.client.find_window(Some(conn), "@raw").unwrap();
+    assert!(s.client.window(raw).unwrap().lines.iter().any(|l| l.text.ends_with("-> JOIN #lyon")));
+    let n = s.client.settings().favorites.len();
+    s.popup_activated(lid::FAVORITE, PopupSrc::List { win: list, kind: WinKind::ChanList, value: Some("#lyon".into()) }, &mut p);
+    s.popup_activated(lid::FAVORITE, PopupSrc::List { win: list, kind: WinKind::ChanList, value: Some("#lyon".into()) }, &mut p);
+    assert_eq!(s.client.settings().favorites.len(), n + 1, "une seule fois");
+    // Capteur d'URL : retirer, tout effacer.
+    feed(&mut s, &mut p, conn, ":Guiwald!u@h JOIN #a");
+    feed(&mut s, &mut p, conn, ":bob!u@h PRIVMSG #a :https://a.example et https://b.example");
+    assert_eq!(s.client.urls().len(), 2);
+    let urls = st;
+    s.popup_activated(lid::REMOVE, PopupSrc::List { win: urls, kind: WinKind::Urls, value: Some("https://a.example".into()) }, &mut p);
+    assert_eq!(s.client.urls().iter().map(|u| u.url.as_str()).collect::<Vec<_>>(), vec!["https://b.example"]);
+    s.popup_activated(lid::CLEAR, PopupSrc::List { win: urls, kind: WinKind::Urls, value: None }, &mut p);
+    assert!(s.client.urls().is_empty());
+    // Enregistrer le texte de #a.
+    let a = s.client.find_window(Some(conn), "#a").unwrap();
+    s.popup_activated(win_menu::SAVE, PopupSrc::Window(a), &mut p);
+    let (req, save) = *p.picks.last().expect("choix du fichier demandé");
+    assert!(save);
+    let path = d.join("a.txt");
+    s.file_picked(req, Some(path.clone()), &mut p);
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("<bob> https://a.example et https://b.example"), "{text}");
+    assert!(s.client.window(a).unwrap().lines.back().unwrap().text.contains("a.txt"));
+    let _ = std::fs::remove_dir_all(&d);
+}

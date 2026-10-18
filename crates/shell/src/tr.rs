@@ -371,6 +371,18 @@ pub(crate) const TABLE: &[(&str, [&str; 7])] = &[
     ),
     ("swb.log", ["&Logging", "&Journal", "Re&gistro", "L&ogging", "&Log", "Re&gistre", "&Logáil"]),
     ("swb.clear", ["Cl&ear", "&Effacer", "&Limpiar", "&Leeren", "&Svuota", "Ne&tejar", "&Glan"]),
+    (
+        "swb.save",
+        [
+            "&Save Buffer...",
+            "Enre&gistrer le texte...",
+            "Guar&dar el texto...",
+            "Text s&peichern...",
+            "Sal&va il testo...",
+            "Guar&dar el text...",
+            "Sá&bháil an téacs...",
+        ],
+    ),
     ("swb.copy", ["&Copy", "&Copier", "&Copiar", "&Kopieren", "&Copia", "&Copiar", "&Cóipeáil"]),
     (
         "swb.select_all",
@@ -716,7 +728,7 @@ fn column(lang: Lang) -> usize {
 pub type Table = &'static [(&'static str, [&'static str; 7])];
 
 /// Toutes les tables : celle-ci, puis celles des modules (boîtes de dialogue, DCC, téléphone).
-pub(crate) const TABLES: &[Table] = &[TABLE, crate::dialogs::TR, crate::dcc::TR, crate::mobile::TR, crate::notify::TR];
+pub(crate) const TABLES: &[Table] = &[TABLE, crate::dialogs::TR, crate::dcc::TR, crate::mobile::TR, crate::notify::TR, crate::lists::TR];
 
 fn find(key: &str) -> Option<&'static [&'static str; 7]> {
     TABLES.iter().flat_map(|t| t.iter()).find(|(k, _)| *k == key).map(|(_, v)| v)

@@ -7,6 +7,16 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-19
+
+> Rollout: nothing to do, install over 0.13.0 (settings are kept).
+
+### Added
+- Interface: a right-click menu (long press on the phone) in the channel list (join, add to favorites, copy the
+  name, list again) and in the URL catcher (open, copy, remove, clear all), as in mIRC.
+- Interface: "Save Buffer..." in a window's menu (mIRC's Buffer › Save): all the window's text, without colors,
+  into a file; on Android, into the received files folder.
+
 ## [0.13.0] - 2026-10-19
 
 > Rollout: nothing to do, install over 0.12.0 (settings are kept).

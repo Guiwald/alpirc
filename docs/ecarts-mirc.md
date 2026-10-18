@@ -51,9 +51,9 @@ Ce qui demande un vrai choix est dans [Questions pour Guillaume](#questions-pour
 | Canal | Modes du canal (`/channel`)… | Modes du canal, Dossier des canaux, Quitter le canal | présent |
 | Privé | Info (`/uwho`), Whois, Query, Ignorer, CTCP, DCC | Info faisait un `/whois` ; pas de CTCP | **fait** : Info → User Central (0.11.0), sous-menu CTCP (0.12.0) |
 | Liste des pseudos | Info (`/uwho`), Whois, Query, Control (Ignore, Unignore, Op, Deop, Voice, Devoice, Kick, Kick (why), Ban, Ban Kick, Ban Kick (why)), CTCP, DCC, Slap! | Info faisait un `/whois` ; Ignorer hors de Control, pas de « Ne plus ignorer » | **fait** : Info → User Central (0.11.0) ; Ignorer et Ne plus ignorer en tête de Control (0.12.0) |
-| Menu de la fenêtre (icône en haut à gauche) | Background, Beeping, Buffer (effacer, enregistrer), Desktop, Editbox, Events, Flashing, Font, Logging, Nicklist, Position, Spacing, Timestamp, Track URLs | Restaurer, Réduire, Agrandir, Effacer, Journal, Fermer | différent : voir « Fenêtres » |
-| Liste des canaux | un menu (rejoindre…) | pas de menu ; double-clic pour rejoindre | absent |
-| Liste des URL | un menu (ouvrir, copier, effacer…) | pas de menu ; double-clic pour ouvrir | absent |
+| Menu de la fenêtre (icône en haut à gauche) | Background, Beeping, Buffer (effacer, enregistrer), Desktop, Editbox, Events, Flashing, Font, Logging, Nicklist, Position, Spacing, Timestamp, Track URLs | Restaurer, Réduire, Agrandir, Effacer, Enregistrer le texte (0.14.0), Journal, Fermer | différent : voir « Fenêtres » |
+| Liste des canaux | un menu (rejoindre…) | pas de menu ; double-clic pour rejoindre | **fait (0.14.0)** : Rejoindre, Ajouter aux favoris, Copier, Lister les canaux |
+| Liste des URL | un menu (ouvrir, copier, effacer…) | pas de menu ; double-clic pour ouvrir | **fait (0.14.0)** : Ouvrir, Copier, Retirer, Tout effacer |
 
 ## Commandes
 
@@ -122,7 +122,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 |---|---|---|---|
 | Boîte de recherche (texte, nombre de personnes, tri) | | « Liste des canaux » | présent |
 | Fenêtre de la liste, tri par colonne, double-clic pour rejoindre | | idem | présent |
-| Menu du clic droit | rejoindre… | aucun | absent → lot « fenêtres et DCC » |
+| Menu du clic droit | rejoindre… | Rejoindre, Ajouter aux favoris, Copier, Lister les canaux | **fait (0.14.0)** |
 | Liste gardée d'une fois sur l'autre | oui | le temps de la session | différent, peu gênant |
 
 ## Capteur d'URL
@@ -131,7 +131,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 |---|---|---|---|
 | Liste des adresses vues, avec qui et où | | fenêtre URL | présent |
 | Ouvrir (double-clic) | | idem | présent |
-| Menu : ouvrir, copier, retirer, tout effacer | | aucun | absent → lot « fenêtres et DCC » |
+| Menu : ouvrir, copier, retirer, tout effacer | | idem | **fait (0.14.0)** |
 
 ## DCC
 
@@ -148,7 +148,7 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 | Élément du menu de la fenêtre (mIRC) | AlpIRC | État |
 |---|---|---|
 | Buffer › Effacer | Effacer | présent |
-| Buffer › Enregistrer | rien | absent → lot « fenêtres et DCC » (avec `/savebuf`) |
+| Buffer › Enregistrer | « Enregistrer le texte... » (fichier choisi ; sur Android, dans le dossier des téléchargements) | **fait (0.14.0)** ; `/savebuf` en 0.13.0 |
 | Logging | Journal | présent |
 | Timestamp, Beeping, Flashing, Font, Events (réglages propres à une fenêtre) | réglages communs à toutes les fenêtres | différent → question 8 |
 | Background, Desktop, Position, Spacing, Editbox (seconde ligne de saisie), Nicklist (position), Track URLs | | absent, peu utiles |
@@ -162,6 +162,8 @@ qu'AlpIRC ne connaissait pas (les autres sont présentes, ou envoyées au serveu
 - **0.13.0** : `/anick`, `/mnick`, `/tnick`, `/fullname`, `/ajinvite`, `/aop`, `/avoice`, `/protect` (et les cases
   « Listes actives »), `/creq`, `/sreq`, `/remote`, `/toolbar`, `/switchbar`, `/treebar`, `/qmsg`, `/qme`,
   `/clipboard`, `/savebuf`, `/dns`, `/debug`.
+- **0.14.0** : menus de la liste des canaux et du capteur d'URL, « Enregistrer le texte » dans le menu d'une
+  fenêtre.
 
 ## Questions pour Guillaume
 

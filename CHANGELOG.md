@@ -7,6 +7,17 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.14.0] - 2026-10-19
+
+> Mise en service : rien à faire, installer par-dessus la 0.13.0 (réglages conservés).
+
+### Ajouté
+- Interface : un menu au clic droit (appui long sur le téléphone) dans la liste des canaux (rejoindre, ajouter aux
+  favoris, copier le nom, refaire la liste) et dans le capteur d'URL (ouvrir, copier, retirer, tout effacer), comme
+  dans mIRC.
+- Interface : « Enregistrer le texte... » dans le menu d'une fenêtre (Buffer › Save de mIRC) : tout le texte de la
+  fenêtre, sans les couleurs, dans un fichier ; sur Android, dans le dossier des fichiers reçus.
+
 ## [0.13.0] - 2026-10-19
 
 > Mise en service : rien à faire, installer par-dessus la 0.12.0 (réglages conservés).

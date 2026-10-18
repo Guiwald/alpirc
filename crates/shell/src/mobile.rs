@@ -953,6 +953,7 @@ impl Shell {
         let _ = win;
         vec![
             MenuItem::new(win_menu::CLEAR, &t(lang, "swb.clear")),
+            MenuItem::new(win_menu::SAVE, &t(lang, "swb.save")),
             MenuItem::new(win_menu::LOG, &t(lang, "swb.log")),
             MenuItem::separator(),
             MenuItem::new(win_menu::CLOSE, &t(lang, "swb.close")),
@@ -969,6 +970,7 @@ impl Shell {
             PopupSrc::Script { tree, win, .. } => (menus::from_script(tree, 0), label(*win)),
             PopupSrc::Window(w) => (self.window_menu_items(*w), label(*w)),
             PopupSrc::Notify { nick, .. } => (self.notify_menu_items(), Some(nick.clone())),
+            PopupSrc::List { kind, value, .. } => (self.list_menu_items(*kind, value.is_some()), value.clone()),
         };
         if !items.is_empty() {
             self.mobile.menu = Some(TouchMenu::new(MenuOrigin::Popup(src), items, at, false).with_caption(caption));
