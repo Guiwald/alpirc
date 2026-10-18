@@ -179,7 +179,11 @@ impl Shell {
         // Sons fournis dans `<données>/sounds` (ceux qui manquent : jamais d'écrasement), avant que les réglages et
         // `/splay` s'y réfèrent.
         assets::install_sounds(&cfg.data_dir);
-        let settings = Settings::load(&cfg.settings_path);
+        let mut settings = Settings::load(&cfg.settings_path);
+        let new_install = !cfg.settings_path.exists();
+        if settings.upgrade(cfg.layout == LayoutKind::Mobile, new_install) && !new_install {
+            let _ = settings.save(&cfg.settings_path);
+        }
         // La langue du système dès la création : les scripts par défaut du premier démarrage sont dans cette langue.
         let mut client = Client::new_localized(settings, cfg.data_dir.clone(), cfg.now_ms, cfg.locale.as_deref());
         client.set_utc_offset(Some(cfg.utc_offset));
@@ -187,7 +191,7 @@ impl Shell {
             client.set_system_locale(l);
         }
         // Premier lancement : nom complet et message d'absence par défaut dans la langue de l'interface.
-        if !cfg.settings_path.exists() {
+        if new_install {
             client.localize_new_install();
         }
         let fonts = assets::fonts();
@@ -1061,6 +1065,7 @@ impl Shell {
                 Action::PickFile { kind, save, suggested } => p.pick_file(dialogs::pick_request(&kind), save, suggested.as_deref()),
                 Action::OpenPath(path) => p.open_path(&path),
                 Action::ListChannels(q) => self.list_channels(q, now),
+                Action::CopyText(text) => p.clipboard_set(&text),
             }
         }
     }

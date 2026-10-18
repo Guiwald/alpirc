@@ -9,13 +9,13 @@ pub const HELP: &[(&str, [&str; 7])] = &[
     (
         "abook",
         [
-            "/abook — open the Address Book (Notify, Ignore, Control)",
-            "/abook — ouvrir le carnet d'adresses (Notify, Ignore, Control)",
-            "/abook — abrir la libreta de direcciones (Notify, Ignore, Control)",
-            "/abook — das Adressbuch öffnen (Notify, Ignore, Control)",
-            "/abook — apri la rubrica (Notify, Ignore, Control)",
-            "/abook — obrir la llibreta d'adreces (Notify, Ignore, Control)",
-            "/abook — oscail an leabhar seoltaí (Notify, Ignore, Control)",
+            "/abook — open the Address Book (Info, Notify, Ignore, Control)",
+            "/abook — ouvrir le carnet d'adresses (Infos, Notify, Ignore, Control)",
+            "/abook — abrir la libreta de direcciones (Info, Notify, Ignore, Control)",
+            "/abook — das Adressbuch öffnen (Info, Notify, Ignore, Control)",
+            "/abook — apri la rubrica (Info, Notify, Ignore, Control)",
+            "/abook — obrir la llibreta d'adreces (Info, Notify, Ignore, Control)",
+            "/abook — oscail an leabhar seoltaí (Eolas, Notify, Ignore, Control)",
         ],
     ),
     (
@@ -1228,6 +1228,18 @@ pub const HELP: &[(&str, [&str; 7])] = &[
             "/who mask — chi si nasconde dietro una maschera",
             "/who mask — qui s'amaga darrere d'una màscara",
             "/who mask — cé atá taobh thiar de mhasc",
+        ],
+    ),
+    (
+        "uwho",
+        [
+            "/uwho nick — User Central: someone's whois, and your notes about them",
+            "/uwho pseudo — User Central : le whois de quelqu'un, et vos notes sur lui",
+            "/uwho nick — User Central: el whois de alguien y tus notas sobre esa persona",
+            "/uwho nick — User Central: Whois einer Person und Ihre Notizen zu ihr",
+            "/uwho nick — User Central: il whois di qualcuno e le tue note su di lui",
+            "/uwho nick — User Central: el whois d'algú i les vostres notes sobre ell",
+            "/uwho nick — User Central: whois duine agus do nótaí faoi",
         ],
     ),
     (

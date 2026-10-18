@@ -64,7 +64,9 @@ impl super::state::State {
         for e in events {
             self.on_event(conn, msg, e, time);
         }
-        if n::is_numeric(&msg.command) && !suppress {
+        // Les réponses d'un `/uwho` remplissent la fiche de User Central sans s'afficher.
+        let quiet = n::is_numeric(&msg.command) && self.record_whois(conn, msg);
+        if n::is_numeric(&msg.command) && !suppress && !quiet {
             self.show_numeric(conn, msg, time);
         }
         self.cur_halted = false;

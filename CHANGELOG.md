@@ -7,6 +7,33 @@ le composant concerné (« Scripts : … »). La traduction anglaise, section pa
 
 ## [Non publié]
 
+## [0.11.0] - 2026-10-19
+
+> Mise en service : rien à faire, installer par-dessus la 0.10.0 (réglages conservés). Mac : ouvrir le `.dmg` et
+> remplacer AlpIRC dans Applications. Android : installer l'`.apk` par-dessus. Linux : `sudo apt update && sudo apt
+> upgrade`. Si tu avais modifié les menus par défaut (`popups.mrc`, éditeur de scripts › Popups), ils ne sont pas
+> touchés et « Infos » y fait encore un `/whois` : remplace `whois $$1` par `uwho $$1` sur les lignes « Infos »
+> pour avoir User Central.
+
+### Ajouté
+- Interface : la boîte **User Central**, comme dans mIRC. « Infos » dans le menu d'un pseudo (liste des pseudos,
+  fenêtre privée) ou `/uwho pseudo` montre la fiche whois de la personne (adresse, nom, serveur, canaux, compte,
+  inactivité, heure de connexion, absence), sans rien écrire dans les fenêtres, et ce que ton carnet d'adresses
+  garde sur elle : nom réel, e-mail, site, notes. Boutons Actualiser, Copier tout et Privé.
+- Carnet d'adresses : un onglet **Infos**, la liste des personnes et de leurs notes (les mêmes que dans User
+  Central).
+
+### Modifié
+- Android : « Whois dans la fenêtre active » (Options › IRC) est cochée d'office, la réponse d'un whois s'affiche
+  dans la fenêtre où tu es au lieu de Status. Sur un téléphone où AlpIRC est déjà installé, elle est cochée une
+  fois à la mise à jour ; si tu la décoches ensuite, elle le reste. Mac et Linux : rien ne change (décochée, comme
+  dans mIRC).
+
+### Corrigé
+- Scripts : les menus du clic droit restaient dans la langue du premier lancement quand on changeait de langue
+  (boîte de bienvenue, Options). Ceux que tu n'as pas modifiés suivent maintenant la langue de l'interface, et
+  prennent les nouveautés de la version (« Infos » ouvre User Central).
+
 ## [0.10.0] - 2026-10-18
 
 > Mise en service : rien à faire de particulier, installer par-dessus la 0.9.0 (réglages conservés). Mac : ouvrir

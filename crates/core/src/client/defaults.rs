@@ -1,8 +1,14 @@
 //! Scripts écrits au premier démarrage dans `<données>/scripts` : popups à la manière de mIRC 6 et quelques alias
 //! classiques. Ce sont des fichiers « remote » ordinaires : l'utilisateur peut les modifier.
 //!
-//! Les libellés des menus et les questions viennent de [`TEXTS`], dans la langue de l'interface au moment de la
-//! création (les fichiers déjà là ne sont jamais réécrits).
+//! Les libellés des menus et les questions viennent de [`TEXTS`], dans la langue de l'interface. Un fichier que
+//! l'utilisateur n'a pas modifié (identique à celui qu'une version d'AlpIRC a écrit, dans l'une des sept langues)
+//! suit la langue de l'interface et les menus de la version en cours ([`is_generated`]) ; un fichier modifié n'est
+//! jamais réécrit.
+//!
+//! Garder les anciens modèles dans [`OLD_POPUPS`] et [`OLD_ALIASES`] quand on change un modèle ; ne pas changer le
+//! texte d'une clé de [`TEXTS`] déjà publiée (en ajouter une autre), sinon les fichiers écrits avant ne seraient
+//! plus reconnus.
 
 use crate::i18n::Lang;
 
@@ -247,7 +253,7 @@ menu channel {
 }
 
 menu query {
-  {info}:whois $$1
+  {info}:uwho $$1
   {whois}:whois $$1
   {query}:query $$1
   -
@@ -260,7 +266,7 @@ menu query {
 }
 
 menu nicklist {
-  {info}:whois $$1
+  {info}:uwho $$1
   {whois}:whois $$1
   {query}:query $$1
   -
@@ -303,6 +309,85 @@ alias chat dcc chat $1-
 alias ping ctcp $1 ping
 "#;
 
+/// Modèles de `popups.mrc` des versions précédentes (0.9.0 et 0.10.0 : « Infos » faisait un `/whois`).
+const OLD_POPUPS: &[&str] = &[POPUPS_0_9];
+
+/// Modèles de `aliases.mrc` des versions précédentes.
+const OLD_ALIASES: &[&str] = &[];
+
+const POPUPS_0_9: &str = r#"; {popups.comment}
+menu status {
+  {lusers}:lusers
+  {motd}:motd
+  {time}:time
+  -
+  {join}:join $$?="{join.ask}"
+  -
+  {quit}:quit
+}
+
+menu channel {
+  {modes}:channel
+  {folder}:folder
+  -
+  {part}:part #
+}
+
+menu query {
+  {info}:whois $$1
+  {whois}:whois $$1
+  {query}:query $$1
+  -
+  {dcc}
+  .{dcc.send}:dcc send $$1
+  .{dcc.chat}:dcc chat $$1
+  -
+  {ignore}:ignore $$1 1 | close -m $$1
+  {close}:close -m $$1
+}
+
+menu nicklist {
+  {info}:whois $$1
+  {whois}:whois $$1
+  {query}:query $$1
+  -
+  {control}
+  .{op}:op $$1-
+  .{deop}:deop $$1-
+  .{voice}:voice $$1-
+  .{devoice}:devoice $$1-
+  .-
+  .{kick}:kick # $$1
+  .{kick.why}:kick # $$1 $$?="{reason.ask}"
+  .{ban}:ban # $$1 2
+  .{ban.kick}:ban -k # $$1 2
+  .{ban.kick.why}:ban -k # $$1 2 $$?="{reason.ask}"
+  {ctcp}
+  .{ping}:ctcp $$1 ping
+  .{ctcp.time}:ctcp $$1 time
+  .{version}:ctcp $$1 version
+  {dcc}
+  .{dcc.send}:dcc send $$1
+  .{dcc.chat}:dcc chat $$1
+  -
+  {slap}:me {slap.text}
+  -
+  {ignore}:ignore $$1 1
+}
+"#;
+
+/// Vrai si `text` est le fichier par défaut `name` tel qu'une version d'AlpIRC l'a écrit (modèle actuel ou ancien,
+/// dans n'importe laquelle des sept langues) : l'utilisateur ne l'a pas modifié, on peut le remplacer.
+pub fn is_generated(name: &str, text: &str) -> bool {
+    let (current, old) = match name {
+        n if n == NAMES[0] => (ALIASES, OLD_ALIASES),
+        n if n == NAMES[1] => (POPUPS, OLD_POPUPS),
+        _ => return false,
+    };
+    let text = text.replace("\r\n", "\n");
+    std::iter::once(current).chain(old.iter().copied()).any(|tpl| Lang::ALL.iter().any(|&l| fill(tpl, l) == text))
+}
+
 /// Noms des fichiers par défaut, dans l'ordre de chargement.
 pub const NAMES: [&str; 2] = ["aliases.mrc", "popups.mrc"];
 
@@ -343,6 +428,21 @@ mod tests {
                 assert_eq!(v[0].matches('$').count(), s.matches('$').count(), "{k} : « {s} »");
             }
         }
+    }
+
+    #[test]
+    fn generated_files_are_recognised_in_every_language_and_version() {
+        for l in Lang::ALL {
+            let [(an, a), (pn, p)] = files(l);
+            assert!(is_generated(an, &a) && is_generated(pn, &p), "{l:?}");
+            assert!(is_generated(pn, &p.replace('\n', "\r\n")), "fins de ligne Windows");
+            // Le fichier des versions 0.9 et 0.10 (Infos faisait un /whois).
+            assert!(is_generated(pn, &fill(POPUPS_0_9, l)), "{l:?}");
+            assert!(p.contains(":uwho $$1") && !p.contains(&format!("{}:whois", tx(l, "info"))));
+        }
+        let [_, (pn, p)] = files(Lang::Fr);
+        assert!(!is_generated(pn, &p.replace("Claque", "Baffe")), "modifié par l'utilisateur");
+        assert!(!is_generated("autre.mrc", &p));
     }
 
     /// Libellés qui restent ceux de l'anglais dans toutes les langues (commandes IRC).

@@ -53,6 +53,7 @@ Les termes anglais entre parenthèses sont ceux de mIRC et d'IRC, souvent gardé
 | **Boîte Options** | La grande boîte de réglages de mIRC, avec son arbre de catégories (Connexion, IRC, Affichage, Sons…). |
 | **Channels Folder** | Les favoris : canaux à rejoindre d'un clic ou automatiquement (**auto-join**), avec leur clé. |
 | **Channel Central** | La boîte d'un canal (double-clic dans le canal) : sujet, modes, listes de bans, d'exceptions et d'invitations. |
+| **User Central** | La boîte d'une personne (« Infos » dans le menu d'un pseudo, `/uwho`) : sa fiche whois et ce que le carnet d'adresses garde sur elle (nom réel, e-mail, site, notes). |
 | **Liste des canaux** | La fenêtre de `/list` : tous les canaux d'un réseau, avec leur nombre d'utilisateurs et leur sujet, filtrables. |
 | **URL catcher** | La fenêtre qui collecte les adresses web passées dans les discussions. |
 | **Journaux** (logs) | Les fichiers texte où chaque fenêtre est enregistrée, relisibles depuis AlpIRC. |
@@ -61,6 +62,7 @@ Les termes anglais entre parenthèses sont ceux de mIRC et d'IRC, souvent gardé
 
 | Terme | Sens |
 |---|---|
+| **Infos** (Info) | L'onglet du carnet d'adresses qui garde ce qu'on sait des gens : nom réel, e-mail, site, notes (montré aussi par User Central). |
 | **Notify** | La liste des amis dont AlpIRC signale l'arrivée et le départ (par `MONITOR` quand le serveur sait faire). |
 | **Ignore** | La liste des masques dont on ne veut plus voir les messages (par type : privés, canaux, CTCP, DCC…). |
 | **Control** | Les listes d'auto-op, d'auto-voice et de protection : AlpIRC donne le rang tout seul à ceux qu'il reconnaît. |

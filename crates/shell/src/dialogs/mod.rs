@@ -3,8 +3,8 @@
 //!
 //! Les grandes boîtes vivent chacune dans leur module : Options ([`options`]), éditeur de réseau
 //! ([`network`]), choix du serveur ([`connect`]), carnet d'adresses ([`abook`]), dossier des canaux
-//! ([`folder`]), Channel Central ([`central`]), éditeur de scripts ([`editor`]), couleurs ([`colors`]),
-//! certificat refusé ([`cert`]) et la petite boîte de saisie commune ([`form`]). Ici : le cadre commun (mesures
+//! ([`folder`]), Channel Central ([`central`]), User Central ([`user`]), éditeur de scripts ([`editor`]),
+//! couleurs ([`colors`]), certificat refusé ([`cert`]) et la petite boîte de saisie commune ([`form`]). Ici : le cadre commun (mesures
 //! façon Windows 98, raccourcis de construction), les petites boîtes (message, collage de plusieurs lignes,
 //! rejoindre un canal, rechercher, à propos, quitter) ; le pont avec les dialogues des scripts mSL est dans
 //! [`script`].
@@ -28,6 +28,7 @@ pub mod network;
 pub mod options;
 pub mod script;
 mod text;
+pub mod user;
 pub mod welcome;
 
 /// Textes des boîtes de dialogue (voir [`crate::tr`]).
@@ -46,6 +47,7 @@ pub fn build(d: UiDialog, client: &Client) -> Box<dyn DialogCtl> {
                 Box::new(MessageBox::info("Channel Central", &t(lang, "cc.not_channel"), lang))
             }
         },
+        UiDialog::UserCentral { conn, nick } => Box::new(user::UserCentral::new(conn, &nick)),
         UiDialog::ScriptEditor => Box::new(editor::ScriptEditor::new(client)),
         UiDialog::Colors => Box::new(colors::Colors::new(client)),
         UiDialog::Connect => Box::new(connect::SelectServer::new(client)),
@@ -106,6 +108,8 @@ pub enum Action {
     OpenPath(PathBuf),
     /// `/list` sur la connexion active, avec les choix de la boîte « Liste des canaux ».
     ListChannels(chanlist::ListQuery),
+    /// Copier un texte dans le presse-papiers.
+    CopyText(String),
 }
 
 /// Contexte donné aux contrôleurs.
@@ -714,7 +718,7 @@ pub(crate) mod testkit {
                 texts.extend(c.text.split('\t').map(str::to_string));
             }
             for t in texts {
-                const PREFIXES: [&str; 11] = ["opt.", "net.", "ab.", "fold.", "cc.", "se.", "col.", "srv.", "cert.", "form.", "dlg."];
+                const PREFIXES: [&str; 12] = ["opt.", "net.", "ab.", "fold.", "cc.", "uc.", "se.", "col.", "srv.", "cert.", "form.", "dlg."];
                 let looks_like_key = PREFIXES.iter().any(|p| t.starts_with(p))
                     && !t.contains(' ')
                     && t.chars().all(|c| c.is_ascii_lowercase() || c == '.' || c == '_' || c.is_ascii_digit());

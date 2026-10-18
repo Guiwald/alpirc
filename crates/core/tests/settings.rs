@@ -13,7 +13,7 @@ use common::*;
 #[test]
 fn defaults() {
     let s = Settings::default();
-    assert_eq!(s.version, 1);
+    assert_eq!(s.version, settings::SETTINGS_VERSION);
     let names: Vec<&str> = s.networks.iter().map(|n| n.name.as_str()).collect();
     assert_eq!(names, vec!["Undernet", "Libera.Chat", "OFTC", "IRCnet", "EFnet", "DALnet", "QuakeNet", "Rizon", "EpiKnet"]);
     let u = &s.networks[0].servers[0];
@@ -213,7 +213,7 @@ fn rich() -> Settings {
 fn toml_roundtrip() {
     let s = rich();
     let text = s.to_toml().unwrap();
-    assert!(text.contains("version = 1"), "{text}");
+    assert!(text.contains("version = 2"), "{text}");
     let back = Settings::from_toml(&text).unwrap();
     assert_eq!(back, s);
 }
@@ -226,7 +226,7 @@ fn partial_file_keeps_defaults() {
     assert!(!s.irc.timestamps);
     assert!(s.irc.show_quits);
     assert_eq!(s.networks.len(), 9);
-    assert_eq!(s.version, 1);
+    assert_eq!(s.version, settings::SETTINGS_VERSION);
 }
 
 #[test]
@@ -376,4 +376,29 @@ fn log_reload_lines() {
     assert_eq!(l[0].text, "[08:01] <Pat> ancien 2");
     assert!(l[0].from_history);
     assert_eq!(l[1].text, "* Now talking in #lyon");
+}
+
+#[test]
+fn upgrade_checks_whois_in_active_once_on_the_phone() {
+    // Téléphone, réglages d'une version précédente : la case est cochée une fois.
+    let mut s = Settings::from_toml("version = 1\n[irc]\nwhois_in_active = false\n").unwrap();
+    assert!(s.upgrade(true, false));
+    assert!(s.irc.whois_in_active);
+    assert_eq!(s.version, settings::SETTINGS_VERSION);
+    // Décochée ensuite par l'utilisateur : on n'y revient pas.
+    s.irc.whois_in_active = false;
+    let mut back = Settings::from_toml(&s.to_toml().unwrap()).unwrap();
+    assert!(!back.upgrade(true, false));
+    assert!(!back.irc.whois_in_active);
+    // Nouvelle installation sur le téléphone : cochée ; sur l'ordinateur : décochée (défaut de mIRC).
+    let mut phone = Settings::default();
+    assert!(phone.upgrade(true, true));
+    assert!(phone.irc.whois_in_active);
+    let mut desk = Settings::default();
+    assert!(!desk.upgrade(false, true));
+    assert!(!desk.irc.whois_in_active);
+    // Ordinateur, ancienne version : le numéro change, la case non.
+    let mut old = Settings::from_toml("version = 1\n").unwrap();
+    assert!(old.upgrade(false, false));
+    assert!(!old.irc.whois_in_active);
 }

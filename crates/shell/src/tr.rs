@@ -831,6 +831,8 @@ mod tests {
         "ab.ign.ctcp",
         "ab.ign.dcc",
         "cc.title",
+        "uc.title",
+        "uc.whois",
         "se.tab.aliases",
         "se.tab.popups",
         "se.tab.remote",

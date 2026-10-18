@@ -1,8 +1,8 @@
 //! Planche des grandes boîtes de dialogue : chaque boîte (et chaque page des Options, chaque onglet) ouverte dans
 //! l'application sans écran, dessinée dans un PNG.
 //!
-//! `cargo run -p alpirc-shell --example dialogs -- /tmp/dialogs [fr|es|de|it|va|ga] [dark] [largeur hauteur]`
-//! écrit `/tmp/dialogs/<nom>.png`.
+//! `cargo run -p alpirc-shell --example dialogs -- /tmp/dialogs [fr|es|de|it|va|ga] [dark] [mobile] [largeur
+//! hauteur]` écrit `/tmp/dialogs/<nom>.png` (`mobile` : disposition du téléphone, 360 × 800 par défaut).
 
 use std::path::Path;
 
@@ -76,8 +76,13 @@ fn main() {
     // Langue de l'interface : fr, es, de, it, va ou ga (anglais sinon).
     let lang = args.iter().skip(2).find(|a| ["fr", "es", "de", "it", "va", "ga"].contains(&a.as_str())).cloned();
     let dark = args.iter().any(|a| a == "dark");
+    let mobile = args.iter().any(|a| a == "mobile");
     let nums: Vec<i32> = args.iter().skip(2).filter_map(|a| a.parse().ok()).collect();
-    let (w, h) = if nums.len() >= 2 { (nums[0], nums[1]) } else { (800, 600) };
+    let (w, h) = match (nums.len() >= 2, mobile) {
+        (true, _) => (nums[0], nums[1]),
+        (false, true) => (360, 800),
+        (false, false) => (800, 600),
+    };
     std::fs::create_dir_all(&out).unwrap();
     let dir = std::env::temp_dir().join(format!("alpirc-dialogs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -87,7 +92,7 @@ fn main() {
     let cfg = ShellConfig {
         settings_path: dir.join("settings.toml"),
         data_dir: dir.clone(),
-        layout: LayoutKind::Desktop,
+        layout: if mobile { LayoutKind::Mobile } else { LayoutKind::Desktop },
         utc_offset: 7200,
         locale: Some(lang.unwrap_or_else(|| "en-US".into())),
         now_ms: p.now,
@@ -100,6 +105,13 @@ fn main() {
         }
         s.networks.insert(0, Network::new("Local", vec![Server::new("127.0.0.1", 16667, false), Server::new("localhost", 16697, true)]));
         s.address_book.notify.push(NotifyEntry { nick: "Elisa".into(), note: "de Lyon".into(), network: None });
+        s.address_book.people.push(alpirc_core::settings::PersonEntry {
+            nick: "Elisa".into(),
+            name: "Élisa Dumas".into(),
+            email: "elisa@example.org".into(),
+            website: "elisa.example.org".into(),
+            notes: "Rencontrée sur #lyon en 2003.\nFan de ski, monte à Chamrousse l'hiver.".into(),
+        });
         s.address_book.notify.push(NotifyEntry { nick: "Kaelis".into(), note: String::new(), network: Some("Undernet".into()) });
         s.address_book.ignore.push(IgnoreEntry {
             mask: "*!*@spam.example".into(),
@@ -175,7 +187,7 @@ fn main() {
     close(&mut shell, &mut p);
     // Carnet d'adresses.
     shell.open_ui_dialog(UiDialog::AddressBook, &mut p);
-    shots_with_tabs(&mut shell, &mut p, &out, "abook", &["notify", "ignore", "control"]);
+    shots_with_tabs(&mut shell, &mut p, &out, "abook", &["info", "notify", "ignore", "control"]);
     // Dossier des canaux.
     shell.open_ui_dialog(UiDialog::ChannelsFolder, &mut p);
     shot(&mut shell, &out, "folder");
@@ -183,6 +195,22 @@ fn main() {
     // Channel Central.
     shell.open_ui_dialog(UiDialog::ChannelCentral(chan), &mut p);
     shots_with_tabs(&mut shell, &mut p, &out, "central", &["bans", "excepts", "invites"]);
+    // User Central (/uwho), remplie par les réponses du serveur.
+    shell.client.command(chan, "/uwho Elisa", p.now);
+    shell.tick(&mut p);
+    for l in [
+        ":irc.undernet.org 311 Guiwald Elisa ~elisa lyon.fr * :Élisa D.",
+        ":irc.undernet.org 319 Guiwald Elisa :+#lyon #grenoble #chambery",
+        ":irc.undernet.org 312 Guiwald Elisa Lyon.FR.EU.Undernet.org :The Undernet Underworld",
+        ":irc.undernet.org 330 Guiwald Elisa elisa :is logged in as",
+        ":irc.undernet.org 317 Guiwald Elisa 754 1792250000 :seconds idle, signon time",
+        ":irc.undernet.org 318 Guiwald Elisa :End of /WHOIS list.",
+    ] {
+        p.now += 100;
+        shell.on_net(NetEvent::Line { conn, bytes: l.as_bytes().to_vec() }, &mut p);
+    }
+    shot(&mut shell, &out, "user-central");
+    close(&mut shell, &mut p);
     // Éditeur de scripts.
     shell.open_ui_dialog(UiDialog::ScriptEditor, &mut p);
     shot(&mut shell, &out, "scripts-remote");

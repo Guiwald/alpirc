@@ -22,8 +22,8 @@ pub const BUILTINS: &[&str] = &[
     "hop", "ial", "ignore", "iline", "info", "invite", "join", "kick", "lag", "linesep", "links", "list", "log",
     "lusers", "me", "mode", "motd", "msg", "names", "nick", "notice", "notify", "omsg", "onotice", "op", "options",
     "part", "partall", "ping", "query", "quit", "quote", "raw", "rline", "run", "say", "scripts", "server", "setname",
-    "sline", "sound", "splay", "stats", "time", "timestamp", "topic", "url", "version", "voice", "who", "whois",
-    "whowas", "window",
+    "sline", "sound", "splay", "stats", "time", "timestamp", "topic", "url", "uwho", "version", "voice", "who",
+    "whois", "whowas", "window",
 ];
 
 /// `PRIVMSG cible :texte` : le texte toujours en dernier paramètre, comme le font les clients IRC.
@@ -486,7 +486,14 @@ impl State {
                 // Une absence choisie (ou un retour) n'est plus l'affaire de l'absence automatique.
                 self.auto_away.retain(|x| *x != c);
             }
-            "whois" | "uwho" => {
+            "uwho" => {
+                if args.is_empty() {
+                    return Err(self.insufficient(&name));
+                }
+                let c = self.need_conn(conn)?;
+                self.uwho(c, args);
+            }
+            "whois" => {
                 if args.is_empty() {
                     return Err(self.insufficient(&name));
                 }

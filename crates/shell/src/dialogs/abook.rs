@@ -1,5 +1,6 @@
-//! Carnet d'adresses (Alt+B) : onglets Notify (amis dont on suit l'arrivée), Ignore (masques ignorés, par
-//! sorte de message) et Control (auto-op, auto-voice, protection). Ajouter et modifier passent par la petite
+//! Carnet d'adresses (Alt+B) : onglets Infos (ce qu'on sait des gens : nom réel, e-mail, site, notes — ce que montre
+//! aussi User Central), Notify (amis dont on suit l'arrivée), Ignore (masques ignorés, par sorte de message) et
+//! Control (auto-op, auto-voice, protection). Ajouter et modifier passent par la petite
 //! boîte de saisie ; OK écrit le carnet dans les réglages et resynchronise la liste Notify des connexions
 //! ouvertes sans rien afficher (`Client::notify_changed` : `MONITOR` ou `ISON`).
 
@@ -7,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use alpirc_core::i18n::Lang;
-use alpirc_core::settings::{AddressBook as Book, ControlEntry, ControlKind as CtlKind, IgnoreEntry, NotifyEntry};
+use alpirc_core::settings::{AddressBook as Book, ControlEntry, ControlKind as CtlKind, IgnoreEntry, NotifyEntry, PersonEntry};
 use alpirc_ui::{ControlKind, ControlSpec, DialogMsg, DialogSpec, DialogView};
 
 use super::form::{Field, Form, Val};
@@ -21,10 +22,15 @@ const CANCEL: u32 = 2;
 const TAB_NOTIFY: u32 = 10;
 const TAB_IGNORE: u32 = 11;
 const TAB_CONTROL: u32 = 12;
+const TAB_INFO: u32 = 13;
 
-/// Les trois listes : (onglet, liste, ajouter, modifier, retirer, note).
-const LISTS: [(u32, u32, u32, u32, u32, u32); 3] =
-    [(TAB_NOTIFY, 110, 111, 112, 113, 114), (TAB_IGNORE, 120, 121, 122, 123, 124), (TAB_CONTROL, 130, 131, 132, 133, 134)];
+/// Les quatre listes : (onglet, liste, ajouter, modifier, retirer, note).
+const LISTS: [(u32, u32, u32, u32, u32, u32); 4] = [
+    (TAB_INFO, 140, 141, 142, 143, 144),
+    (TAB_NOTIFY, 110, 111, 112, 113, 114),
+    (TAB_IGNORE, 120, 121, 122, 123, 124),
+    (TAB_CONTROL, 130, 131, 132, 133, 134),
+];
 
 #[derive(Default)]
 struct Shared {
@@ -69,6 +75,12 @@ impl AddressBook {
         let all = t(lang, "ab.all");
         let net = |n: &Option<String>| n.clone().unwrap_or_else(|| all.clone());
         match list {
+            140 => st
+                .book
+                .people
+                .iter()
+                .map(|e| row(&[e.nick.clone(), e.name.clone(), e.notes.lines().next().unwrap_or("").to_string()]))
+                .collect(),
             110 => st.book.notify.iter().map(|e| row(&[e.nick.clone(), e.note.clone(), net(&e.network)])).collect(),
             120 => st
                 .book
@@ -112,6 +124,38 @@ impl AddressBook {
         let st = self.st.clone();
         let add = i.is_none();
         let form = match list {
+            140 => {
+                let e = i.and_then(|i| self.st.borrow().book.people.get(i).cloned()).unwrap_or_default();
+                let fields = vec![
+                    Field::text(&t(lang, "ab.nick"), &e.nick),
+                    Field::text(&t(lang, "uc.realname"), &e.name),
+                    Field::text(&t(lang, "uc.email"), &e.email),
+                    Field::text(&t(lang, "uc.website"), &e.website),
+                    Field::notes(&t(lang, "uc.notes"), &e.notes),
+                ];
+                Form::new(
+                    &t(lang, if add { "ab.info.add" } else { "ab.info.edit" }),
+                    "abook-info",
+                    fields,
+                    Box::new(move |v: &[Val], _cx| {
+                        let nick = v[0].text();
+                        if nick.is_empty() || nick.contains(' ') {
+                            return Err(t(lang, "ab.err_nick"));
+                        }
+                        let e = PersonEntry { nick, name: v[1].text(), email: v[2].text(), website: v[3].text(), notes: v[4].text() };
+                        let mut s = st.borrow_mut();
+                        if s.book.people.iter().enumerate().any(|(k, x)| Some(k) != i && x.nick.eq_ignore_ascii_case(&e.nick)) {
+                            return Err(t(lang, "ab.err_exists"));
+                        }
+                        match i {
+                            Some(i) if i < s.book.people.len() => s.book.people[i] = e,
+                            _ => s.book.people.push(e),
+                        }
+                        s.version += 1;
+                        Ok(())
+                    }),
+                )
+            }
             110 => {
                 let e = i.and_then(|i| self.st.borrow().book.notify.get(i).cloned()).unwrap_or_default();
                 let fields = vec![
@@ -236,6 +280,10 @@ impl AddressBook {
     fn remove(&self, list: u32, i: usize) {
         let mut s = self.st.borrow_mut();
         let removed = match list {
+            140 if i < s.book.people.len() => {
+                s.book.people.remove(i);
+                true
+            }
             110 if i < s.book.notify.len() => {
                 s.book.notify.remove(i);
                 true
@@ -280,6 +328,7 @@ impl DialogCtl for AddressBook {
         let tr = |k: &str| t(lang, k);
         let page = (MARGIN, MARGIN, W - 2 * MARGIN, H - 2 * MARGIN - BTN_H - 8);
         let mut c: Vec<ControlSpec> = vec![
+            ControlSpec::new(TAB_INFO, ControlKind::Tab, page, &tr("ab.tab.info")),
             ControlSpec::new(TAB_NOTIFY, ControlKind::Tab, page, &tr("ab.tab.notify")),
             ControlSpec::new(TAB_IGNORE, ControlKind::Tab, page, &tr("ab.tab.ignore")),
             ControlSpec::new(TAB_CONTROL, ControlKind::Tab, page, &tr("ab.tab.control")),
@@ -287,12 +336,13 @@ impl DialogCtl for AddressBook {
         let x0 = 20;
         let bx = W - MARGIN - 12 - 96;
         let lw = bx - 8 - x0;
-        let cols: [Vec<String>; 3] = [
+        let cols: [Vec<String>; 4] = [
+            vec![tr("ab.col.nick"), tr("ab.col.name"), tr("ab.col.notes")],
             vec![tr("ab.col.nick"), tr("ab.col.note"), tr("ab.col.network")],
             vec![tr("ab.col.mask"), tr("ab.col.ignored"), tr("ab.col.network")],
             vec![tr("ab.col.kind"), tr("ab.col.mask"), tr("ab.col.channels"), tr("ab.col.network")],
         ];
-        let notes = ["ab.note.notify", "ab.note.ignore", "ab.note.control"];
+        let notes = ["ab.note.info", "ab.note.notify", "ab.note.ignore", "ab.note.control"];
         for (k, (tab, list, add, edit_id, rem, note)) in LISTS.into_iter().enumerate() {
             c.push(list_view(list, (x0, 40, lw, 250), &cols[k]).in_tab(tab));
             c.push(button(add, (bx, 40, 96, BTN_H), &tr("dlg.add_dots")).in_tab(tab));
@@ -307,6 +357,7 @@ impl DialogCtl for AddressBook {
     fn init(&mut self, view: &mut DialogView, cx: &mut Cx) {
         let lang = cx.lang;
         let tr = |k: &str| t(lang, k);
+        view.set_columns(140, &[(tr("ab.col.nick"), 100), (tr("ab.col.name"), 120), (tr("ab.col.notes"), 148)]);
         view.set_columns(110, &[(tr("ab.col.nick"), 110), (tr("ab.col.note"), 160), (tr("ab.col.network"), 98)]);
         view.set_columns(120, &[(tr("ab.col.mask"), 140), (tr("ab.col.ignored"), 150), (tr("ab.col.network"), 78)]);
         view.set_columns(130, &[(tr("ab.col.kind"), 86), (tr("ab.col.mask"), 124), (tr("ab.col.channels"), 90), (tr("ab.col.network"), 68)]);
@@ -427,5 +478,29 @@ mod tests {
         k.client.tick(k.now + 1);
         let sent = k.sent();
         assert!(sent.iter().any(|l| l.starts_with("ISON") && l.contains("Elisa") && !l.contains("Zaza")), "{sent:?}");
+    }
+
+    #[test]
+    fn info_tab_keeps_people_and_their_notes() {
+        let mut k = Kit::new("abook-info");
+        let mut ab = AddressBook::new(&k.client);
+        let (mut v, _) = k.open(&mut ab);
+        assert_eq!(v.items(140).len(), 0);
+        add(&mut k, &mut ab, &mut v, 141, |f| {
+            f.set_text(11, "Elisa");
+            f.set_text(13, "Élisa Dumas");
+            f.set_text(19, "Rencontrée sur #lyon.\nFan de ski.");
+        });
+        assert_eq!(v.items(140), vec!["Elisa\tÉlisa Dumas\tRencontrée sur #lyon.".to_string()]);
+        // Pas deux fois le même pseudo.
+        let (_, mut a) = k.send(&mut ab, &mut v, DialogMsg::Clicked(141));
+        let Some(Action::Open(mut f)) = a.pop() else { panic!() };
+        let (mut fv, _) = k.open(f.as_mut());
+        fv.set_text(11, "ELISA");
+        let (o, _) = k.send(f.as_mut(), &mut fv, DialogMsg::Ok(1));
+        assert_eq!(o, Outcome::Keep);
+        k.send(&mut ab, &mut v, DialogMsg::Ok(OK));
+        let p = k.client.settings().address_book.person("elisa").cloned().unwrap();
+        assert_eq!((p.name.as_str(), p.notes.as_str()), ("Élisa Dumas", "Rencontrée sur #lyon.\nFan de ski."));
     }
 }

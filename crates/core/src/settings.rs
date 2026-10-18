@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::LineKind;
 
-/// Version du format du fichier.
-pub const SETTINGS_VERSION: u32 = 1;
+/// Version du format du fichier (voir [`Settings::upgrade`]).
+pub const SETTINGS_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1100,12 +1100,55 @@ pub struct ControlEntry {
     pub network: Option<String>,
 }
 
+/// Une personne du carnet d'adresses (section « Info » de mIRC) : ce qu'on sait d'elle, gardé d'une session à
+/// l'autre et montré par User Central (`/uwho`). Rangée par pseudo, comme dans mIRC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct PersonEntry {
+    pub nick: String,
+    /// Nom réel.
+    pub name: String,
+    pub email: String,
+    pub website: String,
+    /// Notes libres (plusieurs lignes).
+    pub notes: String,
+}
+
+impl PersonEntry {
+    /// Vrai si rien d'autre que le pseudo n'est rempli.
+    pub fn is_blank(&self) -> bool {
+        self.name.trim().is_empty() && self.email.trim().is_empty() && self.website.trim().is_empty() && self.notes.trim().is_empty()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct AddressBook {
+    /// Les personnes (onglet « Infos »).
+    pub people: Vec<PersonEntry>,
     pub notify: Vec<NotifyEntry>,
     pub ignore: Vec<IgnoreEntry>,
     pub control: Vec<ControlEntry>,
+}
+
+impl AddressBook {
+    /// La fiche d'une personne, par son pseudo (sans tenir compte de la casse).
+    pub fn person(&self, nick: &str) -> Option<&PersonEntry> {
+        self.people.iter().find(|p| p.nick.eq_ignore_ascii_case(nick))
+    }
+
+    /// Enregistre la fiche d'une personne (la remplace si le pseudo y est déjà) ; une fiche vide la retire.
+    pub fn set_person(&mut self, e: PersonEntry) {
+        let i = self.people.iter().position(|p| p.nick.eq_ignore_ascii_case(&e.nick));
+        match (i, e.is_blank()) {
+            (Some(i), true) => {
+                self.people.remove(i);
+            }
+            (Some(i), false) => self.people[i] = e,
+            (None, false) => self.people.push(e),
+            (None, true) => {}
+        }
+    }
 }
 
 /// Que faire d'une offre d'envoi de fichier (DCC SEND) reçue.
@@ -1226,6 +1269,21 @@ impl Settings {
             s.version = SETTINGS_VERSION;
         }
         Ok(s)
+    }
+
+    /// Mises à jour des réglages d'une version précédente, faites une seule fois (le numéro de version enregistré
+    /// dit lesquelles sont faites) ; `mobile` : sur le téléphone ; `new_install` : pas encore de fichier de
+    /// réglages. Rend vrai si quelque chose a changé (à enregistrer).
+    ///
+    /// - 2 : « Whois dans la fenêtre active » cochée sur le téléphone (une seule fenêtre visible à la fois : la
+    ///   réponse dans Status passerait inaperçue). Sur l'ordinateur, la case reste décochée, comme dans mIRC.
+    pub fn upgrade(&mut self, mobile: bool, new_install: bool) -> bool {
+        let old = self.version;
+        if mobile && (new_install || old < 2) {
+            self.irc.whois_in_active = true;
+        }
+        self.version = self.version.max(SETTINGS_VERSION);
+        self.version != old || (mobile && new_install)
     }
 
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {

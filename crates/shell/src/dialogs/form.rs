@@ -19,6 +19,8 @@ pub enum FieldKind {
     Choice(Vec<String>),
     /// Liste déroulante modifiable (propositions).
     Combo(Vec<String>),
+    /// Texte de plusieurs lignes (notes).
+    Notes,
 }
 
 /// Valeur d'un champ.
@@ -88,7 +90,15 @@ impl Field {
     pub fn combo(label: &str, items: Vec<String>, value: &str) -> Field {
         Field { label: label.into(), kind: FieldKind::Combo(items), value: Val::Text(value.into()) }
     }
+
+    /// Texte de plusieurs lignes.
+    pub fn notes(label: &str, value: &str) -> Field {
+        Field { label: label.into(), kind: FieldKind::Notes, value: Val::Text(value.into()) }
+    }
 }
+
+/// Hauteur d'un champ de notes.
+const NOTES_H: i32 = 5 * 16 + 6;
 
 /// Validation : reçoit les valeurs dans l'ordre des champs ; `Err(message)` garde la boîte ouverte.
 pub type OnOk = Box<dyn FnMut(&[Val], &mut Cx) -> Result<(), String>>;
@@ -173,9 +183,10 @@ impl DialogCtl for Form {
                         FieldKind::Number => edit(id, (fx, y, fw.min(90), EDIT_H), &v),
                         FieldKind::Choice(items) => drop_list(id, (fx, y, fw, EDIT_H + 8 * 16), items),
                         FieldKind::Combo(items) => combo_edit(id, (fx, y, fw, EDIT_H + 8 * 16), items, &v),
+                        FieldKind::Notes => edit(id, (fx, y, fw, NOTES_H), &v).style("multi limit 4000"),
                         _ => edit(id, (fx, y, fw, EDIT_H), &v),
                     });
-                    y += ROW;
+                    y += if *kind == FieldKind::Notes { NOTES_H + 6 } else { ROW };
                 }
             }
         }

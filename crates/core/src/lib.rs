@@ -24,8 +24,8 @@ pub mod timeutil;
 
 pub use client::{
     Activity, CaughtUrl, ChanEntry, ChanList, Client, ConnId, ConnInfo, ConnState, DccAnswer, DccId, DccPrompt, DccType,
-    DccUi, Effect, Line, LineKind, NickEntry, NotifyStatus, TlsVerify, Transfer, TransferState, UiDialog, WinId, WinKind,
-    WinState, Window,
+    DccUi, Effect, Line, LineKind, NickEntry, NotifyStatus, TlsVerify, Transfer, TransferState, UiDialog, WhoisInfo, WhoisState,
+    WinId, WinKind, WinState, Window,
 };
 pub use settings::Settings;
 /// Description des échecs du réseau, rédigée par [`net_text`].

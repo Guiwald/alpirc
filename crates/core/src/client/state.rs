@@ -155,6 +155,8 @@ pub(crate) struct Conn {
     pub timed_unbans: Vec<(i64, String, String)>,
     /// Fenêtre où va la réponse WHOIS en cours.
     pub whois_win: Option<WinId>,
+    /// Fiches whois (pseudo replié → fiche), pour User Central.
+    pub whois: HashMap<String, super::whois::WhoisInfo>,
     pub list_win: Option<WinId>,
     /// Réponse STS à appliquer : reconnexion chiffrée sur ce port.
     pub sts_upgrade: Option<u16>,
@@ -210,6 +212,7 @@ impl Conn {
             pending_modes: Vec::new(),
             timed_unbans: Vec::new(),
             whois_win: None,
+            whois: HashMap::new(),
             list_win: None,
             sts_upgrade: None,
             ready: false,

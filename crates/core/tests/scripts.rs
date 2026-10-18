@@ -214,9 +214,49 @@ fn status_channel_query_popups() {
     assert_eq!(labels(&m), vec!["Info", "Whois", "Query", "-", "DCC", "-", "Ignore", "Close"]);
     h.c.popup_run(q, &[], find(&m, "Whois").action.unwrap(), h.now);
     assert_eq!(h.sends(), vec!["WHOIS Bob"]);
+    // Info : la boîte User Central (/uwho), comme dans mIRC.
+    let m = h.c.popup(PopupKind::Query, q, &[]);
+    h.c.popup_run(q, &[], find(&m, "Info").action.unwrap(), h.now);
+    let fx = h.effects();
+    assert!(fx.iter().any(|e| matches!(e, Effect::OpenDialog(alpirc_core::UiDialog::UserCentral { nick, .. }) if nick == "Bob")), "{fx:?}");
+    assert_eq!(h.sends(), vec!["WHOIS Bob"]);
     let m = h.c.popup(PopupKind::Query, q, &[]);
     h.c.popup_run(q, &[], find(&m, "Close").action.unwrap(), h.now);
     assert!(!h.has_win("Bob"));
+}
+
+#[test]
+fn default_popups_follow_the_language_and_old_files_are_upgraded() {
+    let with_lang = |code: &str| {
+        let mut s = settings();
+        s.language = Some(code.into());
+        s
+    };
+    let dir = tmpdir();
+    drop(H::with_dir(with_lang("fr"), dir.clone()));
+    let path = dir.join("scripts/popups.mrc");
+    let fr = std::fs::read_to_string(&path).unwrap();
+    assert!(fr.contains("  Infos:uwho $$1"), "{fr}");
+    // Le fichier écrit par les versions 0.9 et 0.10 (« Infos » faisait un /whois) est mis à jour au démarrage.
+    std::fs::write(&path, fr.replace("Infos:uwho", "Infos:whois")).unwrap();
+    let mut h = H::with_dir(with_lang("fr"), dir.clone());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), fr);
+    // Changement de langue (boîte de bienvenue, Options) : les menus non modifiés suivent.
+    h.c.settings_mut().language = Some("es".into());
+    h.c.settings_changed(h.now);
+    h.up();
+    let w = h.join("#lyon", "Guiwald Bob");
+    let m = h.c.popup(PopupKind::Nicklist, w, &["Bob".to_string()]);
+    assert_eq!(labels(&m)[..3], ["Info", "Whois", "Privado"]);
+    let m = h.c.popup(PopupKind::Channel, w, &[]);
+    assert_eq!(labels(&m), vec!["Modos del canal", "Carpeta de canales", "-", "Salir del canal"]);
+    // Un fichier modifié par l'utilisateur ne bouge plus.
+    let es = std::fs::read_to_string(&path).unwrap();
+    let mine = es.replace("Privado", "Charla");
+    std::fs::write(&path, &mine).unwrap();
+    h.c.settings_mut().language = Some("fr".into());
+    h.c.settings_changed(h.now);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), mine);
 }
 
 #[test]

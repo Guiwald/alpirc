@@ -24,6 +24,7 @@ pub mod prompt;
 mod sounds;
 mod state;
 mod util;
+mod whois;
 mod window;
 
 use std::path::{Path, PathBuf};
@@ -40,6 +41,7 @@ pub use self::dcc::{DccAnswer, DccId, DccPrompt, DccType, DccUi, Transfer, Trans
 pub use self::irc::{HOMEPAGE, VERSION, version_reply};
 pub use self::logging::{FileSink, LogSink};
 pub use self::util::{contains_word, find_urls};
+pub use self::whois::{WhoisInfo, WhoisState};
 pub use self::window::{Activity, Line, LineKind, NickEntry, WinKind, Window};
 use self::commands::{script_kind_from_name, script_kind_name};
 use self::state::{Deferred, State};
@@ -69,6 +71,8 @@ pub enum UiDialog {
     AddressBook,
     ChannelsFolder,
     ChannelCentral(WinId),
+    /// User Central (`/uwho`, entrée « Infos ») : la fiche whois d'un pseudo et ce que le carnet d'adresses en dit.
+    UserCentral { conn: ConnId, nick: String },
     ScriptEditor,
     Colors,
     About,
@@ -290,16 +294,46 @@ impl Client {
         c
     }
 
+    /// Réécrit les scripts par défaut que l'utilisateur n'a pas modifiés (voir [`defaults::is_generated`]) dans la
+    /// langue de l'interface et avec les menus de cette version. Rend les noms des fichiers réécrits.
+    fn update_default_files(&mut self) -> Vec<&'static str> {
+        let dir = self.engine.root().to_path_buf();
+        let mut done = Vec::new();
+        for (n, text) in defaults::files(self.st.lang) {
+            let path = dir.join(n);
+            let Ok(old) = std::fs::read_to_string(&path) else { continue };
+            if old.replace("\r\n", "\n") != text && defaults::is_generated(n, &old) && std::fs::write(&path, &text).is_ok() {
+                done.push(n);
+            }
+        }
+        done
+    }
+
+    /// La langue a changé : les scripts par défaut non modifiés sont réécrits dans la nouvelle langue et rechargés
+    /// (les menus du clic droit suivent).
+    fn relocalize_default_scripts(&mut self) {
+        let dir = self.engine.root().to_path_buf();
+        for n in self.update_default_files() {
+            let kind = self.engine.scripts().iter().find(|s| s.name == n).map(|s| s.kind);
+            if let Some(k) = kind {
+                let _ = self.engine.restore_file_as(&dir.join(n), true, k);
+            }
+        }
+    }
+
     fn load_scripts(&mut self) {
         let dir = self.engine.root().to_path_buf();
         let _ = std::fs::create_dir_all(&dir);
         let order_file = dir.join("order.txt");
         let first = !order_file.exists() && defaults::NAMES.iter().all(|n| !dir.join(n).exists());
         if first {
-            // Premier démarrage : scripts par défaut dans la langue de l'interface (jamais réécrits ensuite).
+            // Premier démarrage : scripts par défaut dans la langue de l'interface.
             for (n, text) in defaults::files(self.st.lang) {
                 let _ = std::fs::write(dir.join(n), text);
             }
+        } else {
+            // Ceux que l'utilisateur n'a pas modifiés suivent la langue et les menus de cette version.
+            self.update_default_files();
         }
         let order: Vec<String> = match std::fs::read_to_string(&order_file) {
             Ok(t) => t.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect(),
@@ -839,6 +873,12 @@ impl Client {
         self.st.conns.get(&conn).map(|c| &c.session)
     }
 
+    /// Fiche whois d'un pseudo sur une connexion (User Central), si une recherche a eu lieu.
+    pub fn whois_info(&self, conn: ConnId, nick: &str) -> Option<&WhoisInfo> {
+        let c = self.st.conns.get(&conn)?;
+        c.whois.get(&c.session.fold(nick))
+    }
+
     // ---------------------------------------------------------------------------------------------------------
     // Réglages
     // ---------------------------------------------------------------------------------------------------------
@@ -854,7 +894,11 @@ impl Client {
     /// Les réglages ont été modifiés : langue, encodages, titres ; demande leur enregistrement.
     pub fn settings_changed(&mut self, now_ms: i64) {
         self.st.now = now_ms;
+        let lang = self.st.lang;
         self.st.apply_language();
+        if self.st.lang != lang {
+            self.relocalize_default_scripts();
+        }
         let ids: Vec<ConnId> = self.st.conns.keys().copied().collect();
         for id in ids {
             let enc = self
@@ -885,7 +929,11 @@ impl Client {
     /// Langue du système (`fr_FR.UTF-8`…), utilisée si les réglages n'en imposent pas.
     pub fn set_system_locale(&mut self, locale: &str) {
         self.st.system_locale = Some(locale.to_string());
+        let lang = self.st.lang;
         self.st.apply_language();
+        if self.st.lang != lang {
+            self.relocalize_default_scripts();
+        }
         let ids: Vec<ConnId> = self.st.conns.keys().copied().collect();
         for id in ids {
             self.st.update_titles(id);

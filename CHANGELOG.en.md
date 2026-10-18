@@ -7,6 +7,30 @@ project (see `docs/versions.md`). Each entry starts with the part of the app it 
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+> Rollout: nothing to do, install over 0.10.0 (settings are kept). Mac: open the `.dmg` and replace AlpIRC in
+> Applications. Android: install the `.apk` over the old one. Linux: `sudo apt update && sudo apt upgrade`. If you
+> had modified the default menus (`popups.mrc`, Scripts Editor › Popups), they are left alone and "Info" still runs
+> `/whois` there: replace `whois $$1` with `uwho $$1` on the "Info" lines to get User Central.
+
+### Added
+- Interface: the **User Central** dialog, as in mIRC. "Info" in a nickname's menu (nick list, private window) or
+  `/uwho nick` shows the person's whois (address, name, server, channels, account, idle time, sign-on time, away
+  message) without writing anything in the windows, and what your Address Book keeps about them: real name,
+  e-mail, website, notes. Update, Copy all and Query buttons.
+- Address Book: an **Info** tab, the list of people and their notes (the same as in User Central).
+
+### Changed
+- Android: "Whois in active window" (Options › IRC) is checked by default, so a whois reply shows in the window
+  you are in instead of Status. On a phone where AlpIRC is already installed, it is checked once by the update; if
+  you uncheck it afterwards, it stays unchecked. Mac and Linux: no change (unchecked, as in mIRC).
+
+### Fixed
+- Scripts: right-click menus stayed in the language of the first run when you changed language (welcome dialog,
+  Options). The ones you haven't modified now follow the interface language, and pick up the version's changes
+  ("Info" opens User Central).
+
 ## [0.10.0] - 2026-10-18
 
 > Rollout: nothing special to do, install over 0.9.0 (settings are kept). Mac: open the `.dmg` and replace AlpIRC

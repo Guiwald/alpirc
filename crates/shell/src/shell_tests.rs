@@ -560,6 +560,7 @@ mod all_dialogs {
             Box::new(ui(UiDialog::About)),
             Box::new(ui(UiDialog::Find(chan))),
             Box::new(ui(UiDialog::ChannelCentral(chan))),
+            Box::new(ui(UiDialog::UserCentral { conn, nick: "Elisa".into() })),
             Box::new(|s: &mut Shell, p: &mut P| s.menu_action(ids::CHANLIST, p)),
             Box::new(|s: &mut Shell, p: &mut P| s.menu_action(ids::LOGS, p)),
             Box::new(|s: &mut Shell, p: &mut P| s.menu_action(ids::DCC_SEND, p)),
@@ -798,4 +799,39 @@ fn toucher_une_notification_ouvre_sa_fenetre() {
     s.mobile_show_notified("rien", &mut p);
     assert_eq!(s.client.active(), Some(a));
     let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn whois_dans_la_fenetre_active_coche_sur_le_telephone() {
+    let start = |d: &Path, layout: LayoutKind| {
+        let cfg = ShellConfig {
+            settings_path: d.join("settings.toml"),
+            data_dir: d.to_path_buf(),
+            layout,
+            utc_offset: 0,
+            locale: Some("fr-FR".into()),
+            now_ms: 1_792_260_000_000,
+        };
+        Shell::new(cfg, Net::new(Box::new(|_e: NetEvent| {})))
+    };
+    // Nouvelle installation : cochée sur le téléphone, décochée sur l'ordinateur (défaut de mIRC).
+    let d = dir("whois-tel");
+    assert!(start(&d, LayoutKind::Mobile).client.settings().irc.whois_in_active);
+    let d2 = dir("whois-bureau");
+    assert!(!start(&d2, LayoutKind::Desktop).client.settings().irc.whois_in_active);
+    // Téléphone déjà installé (réglages de la 0.10) : cochée une fois, et c'est enregistré.
+    let d3 = dir("whois-tel-ancien");
+    let old = alpirc_core::Settings { version: 1, ..Default::default() };
+    old.save(&d3.join("settings.toml")).unwrap();
+    let mut s = start(&d3, LayoutKind::Mobile);
+    assert!(s.client.settings().irc.whois_in_active);
+    let saved = alpirc_core::Settings::load(&d3.join("settings.toml"));
+    assert!(saved.irc.whois_in_active && saved.version == alpirc_core::settings::SETTINGS_VERSION);
+    // Décochée ensuite : elle le reste au lancement suivant.
+    s.client.settings_mut().irc.whois_in_active = false;
+    s.client.settings().save(&d3.join("settings.toml")).unwrap();
+    assert!(!start(&d3, LayoutKind::Mobile).client.settings().irc.whois_in_active);
+    for x in [d, d2, d3] {
+        let _ = std::fs::remove_dir_all(&x);
+    }
 }
